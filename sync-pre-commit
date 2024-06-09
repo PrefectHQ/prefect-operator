@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+import os
+import re
+from typing import Any
+
+import yaml
+
+
+def pinned_development_requirements() -> dict[str, str]:
+    """Gets a dictionary of all the pinned packages (keys) and their version
+    specifiers (values)"""
+    pinned: dict[str, str] = {}
+
+    with open("requirements.txt", "r") as dev_requirements:
+        for line in dev_requirements:
+            line = line.strip()
+            if line.startswith("#") or line.startswith("-e"):
+                continue
+
+            package = re.split("[ =<>]", line)[0]
+            specifier = line[len(package) :]
+            pinned[package] = specifier
+
+    return pinned
+
+
+def precommit_config() -> dict:
+    """Return the full pre-commit configuration, and also the mypy hook config"""
+    with open(".pre-commit-config.yaml", "r") as pre_commit_file:
+        return yaml.load(pre_commit_file, yaml.SafeLoader)
+
+
+def find_repo(precommit: dict[str, Any], hook_id: str) -> dict[str, Any]:
+    for repo in precommit["repos"]:
+        for hook in repo["hooks"]:
+            if hook["id"] == hook_id:
+                return repo
+
+    raise Exception("Where did it go?!")
+
+
+def find_hook(precommit: dict[str, Any], hook_id: str) -> dict[str, Any]:
+    for repo in precommit["repos"]:
+        for hook in repo["hooks"]:
+            if hook["id"] == hook_id:
+                return hook
+
+    raise Exception("Where did it go?!")
+
+
+def requested_mypy_requirements() -> set[str]:
+    """Gets the currently declared packages from the pre-commit configuration for
+    mypy, without their version specifiers"""
+    hook = find_hook(precommit_config(), "mypy")
+    mypy_dependencies = hook["additional_dependencies"]
+    return {re.split("[ =<>]", dep)[0] for dep in mypy_dependencies}
+
+
+def resolve_repo_versions(pinned: dict[str, str]) -> dict[str, str]:
+    def version_only(specifier: str):
+        return specifier.lstrip("=")
+
+    return {
+        "ruff": "v" + version_only(pinned["ruff"]),
+        "mypy": "v" + version_only(pinned["mypy"]),
+    }
+
+
+def resolve_mypy_dependencies(pinned: dict[str, str], mypy: set[str]) -> list[str]:
+    """Given the pinned development dependencies and the requsted mypy dependencies,
+    resolve them into pip version specifiers (like "mypackage>=1.2.3")"""
+    resolved = {f"{dep}{pinned[dep]}" for dep in mypy if dep in pinned}
+
+    # weave in any other types-* packages, assuming they are type stubs
+    for dep, specifier in pinned.items():
+        if dep.startswith("types-"):
+            resolved.add(f"{dep}{specifier}")
+
+    return sorted(resolved)
+
+
+def update_pre_commit(hook_versions: dict[str, str], mypy_requirements: list[str]):
+    precommit = precommit_config()
+
+    for hook_id, version in hook_versions.items():
+        hook = find_repo(precommit, hook_id)
+        hook["rev"] = version
+
+    mypy = find_hook(precommit, "mypy")
+    mypy["additional_dependencies"] = sorted(mypy_requirements)
+
+    with open(".pre-commit-config.yaml", "w") as pre_commit_file:
+        yaml.dump(precommit, pre_commit_file, sort_keys=False, explicit_start=True)
+
+
+if __name__ == "__main__":
+    pinned = pinned_development_requirements()
+    update_pre_commit(
+        resolve_repo_versions(pinned),
+        resolve_mypy_dependencies(
+            pinned,
+            requested_mypy_requirements(),
+        ),
+    )
+    os.system("yamlfix .pre-commit-config.yaml")

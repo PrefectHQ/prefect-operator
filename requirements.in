@@ -1,0 +1,9 @@
+ipython
+mypy
+pre-commit
+pytest
+pyyaml
+ruff
+types-pyyaml
+yamlfix
+uv
