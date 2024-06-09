@@ -1,8 +1,13 @@
+kopf
+kubernetes
+pydantic
+pyyaml
+
+# development
 ipython
 mypy
 pre-commit
 pytest
-pyyaml
 ruff
 types-pyyaml
 yamlfix

@@ -1,0 +1,16 @@
+apiVersion: prefect.io/v3
+kind: PrefectServer
+metadata:
+  namespace: pop
+  name: my-server
+spec:
+  sqlite:
+    storageClassName: rook-block
+    size: 1Gi
+  settings:
+    - name: PREFECT_SERVER_ANALYTICS_ENABLED
+      value: "false"
+    - name: ANOTHER_ONE
+      value: hi
+    - name: ANOTHER_nother_ONE
+      value: hi
