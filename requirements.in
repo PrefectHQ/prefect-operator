@@ -1,5 +1,6 @@
 kopf
 kubernetes
+prefect==3.0.0rc2
 pydantic
 pyyaml
 

@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pop
+---
 apiVersion: prefect.io/v3
 kind: PrefectServer
 metadata:
@@ -8,9 +13,18 @@ spec:
     storageClassName: rook-block
     size: 1Gi
   settings:
+    - name: PREFECT_LOGGING_SERVER_LEVEL
+      value: INFO
     - name: PREFECT_SERVER_ANALYTICS_ENABLED
       value: "false"
-    - name: ANOTHER_ONE
-      value: hi
-    - name: ANOTHER_nother_ONE
-      value: hi
+---
+apiVersion: prefect.io/v3
+kind: PrefectWorkPool
+metadata:
+  namespace: pop
+  name: my-work-pool
+spec:
+  server:
+    namespace: pop
+    name: my-server
+  workers: 2
