@@ -1,5 +1,7 @@
-from typing import Any, Optional, Self
+from contextlib import contextmanager
+from typing import Any, Generator, Optional, Self
 
+import httpx
 import kopf
 import kubernetes
 from pydantic import BaseModel, Field, PrivateAttr, ValidationInfo, model_validator
@@ -269,6 +271,11 @@ class PrefectServerReference(BaseModel):
     @property
     def in_cluster_api_url(self) -> str:
         return f"http://{self.name}.{self.namespace}.svc:4200/api"
+
+    @contextmanager
+    def client(self) -> Generator[httpx.Client, None, None]:
+        with httpx.Client(base_url=self.in_cluster_api_url) as c:
+            yield c
 
 
 class PrefectWorkPool(NamedResource):
