@@ -22,8 +22,6 @@ asgi-lifespan==2.1.0
     # via prefect
 asttokens==2.4.1
     # via stack-data
-async-timeout==4.0.3
-    # via asyncpg
 asyncpg==0.29.0
     # via prefect
 attrs==23.2.0
@@ -223,7 +221,7 @@ pre-commit==3.7.1
     # via -r requirements.in
 prefect==3.0.0rc2
     # via -r requirements.in
-prompt-toolkit==3.0.46
+prompt-toolkit==3.0.47
     # via ipython
 ptyprocess==0.7.0
     # via pexpect
@@ -376,7 +374,6 @@ typing-extensions==4.12.2
     #   aiosqlite
     #   alembic
     #   fastapi
-    #   ipython
     #   kopf
     #   mypy
     #   prefect

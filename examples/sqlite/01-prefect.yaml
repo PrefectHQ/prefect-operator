@@ -1,0 +1,25 @@
+apiVersion: prefect.io/v3
+kind: PrefectServer
+metadata:
+  namespace: pop-sl
+  name: my-server
+spec:
+  sqlite:
+    storageClassName: standard
+    size: 256Mi
+  settings:
+    - name: PREFECT_LOGGING_SERVER_LEVEL
+      value: INFO
+    - name: PREFECT_SERVER_ANALYTICS_ENABLED
+      value: "false"
+---
+apiVersion: prefect.io/v3
+kind: PrefectWorkPool
+metadata:
+  namespace: pop-sl
+  name: my-work-pool
+spec:
+  server:
+    namespace: pop-sl
+    name: my-server
+  workers: 2

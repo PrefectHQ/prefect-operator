@@ -1,0 +1,6 @@
+#!/bin/bash
+kubectl apply -f crds.yaml
+
+for f in examples/$1/*.yaml; do
+  kubectl apply -f $f
+done

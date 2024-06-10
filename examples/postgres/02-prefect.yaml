@@ -1,0 +1,30 @@
+apiVersion: prefect.io/v3
+kind: PrefectServer
+metadata:
+  namespace: pop-pg
+  name: my-server
+spec:
+  postgres:
+    host: postgres
+    port: 5432
+    user: prefect
+    passwordSecretKeyRef:
+      name: postgres-secrets
+      key: password
+    database: prefect
+  settings:
+    - name: PREFECT_LOGGING_SERVER_LEVEL
+      value: INFO
+    - name: PREFECT_SERVER_ANALYTICS_ENABLED
+      value: "false"
+---
+apiVersion: prefect.io/v3
+kind: PrefectWorkPool
+metadata:
+  namespace: pop-pg
+  name: my-work-pool
+spec:
+  server:
+    namespace: pop-pg
+    name: my-server
+  workers: 2
