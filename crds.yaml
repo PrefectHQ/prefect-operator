@@ -32,6 +32,22 @@ spec:
                     - size
                 postgres:
                   type: object
+                  properties:
+                    host:
+                      type: string
+                    port:
+                      type: number
+                    user:
+                      type: string
+                    passwordSecretKeyRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                    database:
+                      type: string
                 settings:
                   type: array
                   items:

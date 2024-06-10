@@ -29,9 +29,70 @@ class PrefectSqliteDatabase(BaseModel):
     storageClassName: str
     size: str
 
+    def configure_prefect_server(
+        self,
+        prefect_server_stateful_set: dict[str, Any],
+        prefect_server_container: dict[str, Any],
+    ) -> None:
+        prefect_server_container["volumeMounts"] = [
+            {
+                "name": "database",
+                "mountPath": "/var/lib/prefect/",
+            }
+        ]
+        prefect_server_stateful_set["volumeClaimTemplates"] = [
+            {
+                "metadata": {"name": "database"},
+                "spec": {
+                    "accessModes": ["ReadWriteOnce"],
+                    "storageClassName": self.storageClassName,
+                    "resources": {"requests": {"storage": self.size}},
+                },
+            }
+        ]
+
+
+class SecretKeyReference(BaseModel):
+    name: str
+    key: str
+
 
 class PrefectPostgresDatabase(BaseModel):
-    connectionUrlSecretRef: str
+    host: str
+    port: int
+    user: str
+    passwordSecretKeyRef: SecretKeyReference
+    database: str
+
+    def configure_prefect_server(
+        self,
+        prefect_server_stateful_set: dict[str, Any],
+        prefect_server_container: dict[str, Any],
+    ) -> None:
+        prefect_server_container["env"].extend(
+            [
+                {
+                    "name": "PREFECT_API_DATABASE_CONNECTION_URL",
+                    "value": (
+                        "postgresql+asyncpg://"
+                        f"{ self.user }:${{PREFECT_API_DATABASE_PASSWORD}}"
+                        "@"
+                        f"{ self.host }:{ self.port }"
+                        "/"
+                        f"{self.database}"
+                    ),
+                },
+                {
+                    "name": "PREFECT_API_DATABASE_PASSWORD",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": self.passwordSecretKeyRef.name,
+                            "key": self.passwordSecretKeyRef.key,
+                        }
+                    },
+                },
+            ]
+        )
 
 
 class PrefectSetting(BaseModel):
@@ -91,25 +152,11 @@ class PrefectServer(NamedResource):
             "template": pod_template,
         }
 
-        if self.sqlite:
-            container_template["volumeMounts"] = [
-                {
-                    "name": "database",
-                    "mountPath": "/var/lib/prefect/",
-                }
-            ]
-            stateful_set_spec["volumeClaimTemplates"] = [
-                {
-                    "metadata": {"name": "database"},
-                    "spec": {
-                        "accessModes": ["ReadWriteOnce"],
-                        "storageClassName": self.sqlite.storageClassName,
-                        "resources": {"requests": {"storage": self.sqlite.size}},
-                    },
-                }
-            ]
-        else:
-            raise NotImplementedError("TODO: implement PG")
+        database = self.postgres or self.sqlite
+        if not database:
+            raise NotImplementedError("No database defined")
+
+        database.configure_prefect_server(stateful_set_spec, container_template)
 
         return {
             "apiVersion": "apps/v1",
