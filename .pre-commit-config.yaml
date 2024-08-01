@@ -7,13 +7,13 @@ repos:
       - id: end-of-file-fixer
       - id: check-toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.8
+    rev: v0.5.5
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.11.1
     hooks:
       - id: mypy
-        additional_dependencies: [pytest==8.2.2, types-pyyaml==6.0.12.20240311]
+        additional_dependencies: [pytest==8.3.2, types-pyyaml==6.0.12.20240724]
