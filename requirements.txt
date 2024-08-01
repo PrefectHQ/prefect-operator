@@ -33,7 +33,7 @@ cachetools==5.3.3
     # via
     #   google-auth
     #   prefect
-certifi==2024.6.2
+certifi==2024.7.4
     # via
     #   apprise
     #   httpcore
@@ -117,7 +117,7 @@ httpcore==1.0.5
     #   prefect
 httptools==0.6.1
     # via uvicorn
-httpx==0.27.0
+httpx[http2]==0.27.0
     # via
     #   fastapi
     #   prefect
@@ -327,8 +327,6 @@ ruff==0.4.8
     # via -r requirements.in
 ruyaml==0.91.0
     # via yamlfix
-setuptools==70.0.0
-    # via ruyaml
 shellingham==1.5.4
     # via typer
 six==1.16.0
@@ -343,7 +341,7 @@ sniffio==1.3.1
     #   asgi-lifespan
     #   httpx
     #   prefect
-sqlalchemy==2.0.30
+sqlalchemy[asyncio]==2.0.30
     # via
     #   alembic
     #   prefect
@@ -396,7 +394,7 @@ urllib3==2.2.1
     #   requests
 uv==0.2.9
     # via -r requirements.in
-uvicorn==0.28.1
+uvicorn[standard]==0.28.1
     # via
     #   fastapi
     #   prefect
