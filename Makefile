@@ -12,7 +12,7 @@ endif
 
 	mv .bookkeeping/uv.next .bookkeeping/uv
 
-.bookkeeping/development.txt: .bookkeeping/uv requirements.txt
+.bookkeeping/development.txt: .bookkeeping/uv requirements.txt pyproject.toml
 	mkdir -p .bookkeeping
 	cat requirements.txt > .bookkeeping/development.txt.next
 

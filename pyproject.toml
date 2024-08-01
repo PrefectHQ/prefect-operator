@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prefect-operator"
+requires-python = ">=3.11"
+
+dynamic = ["version"]
+
+[tool.setuptools_scm]
+version_file = "prefect_operator/_version.py"
+
+[project.scripts]
+prefect-operator = "prefect_operator.__main__:main"

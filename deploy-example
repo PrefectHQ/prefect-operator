@@ -1,4 +1,5 @@
 #!/bin/bash
+python -m prefect_operator generate-crds > crds.yaml
 kubectl apply -f crds.yaml
 
 for f in examples/$1/*.yaml; do
