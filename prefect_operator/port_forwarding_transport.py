@@ -117,7 +117,7 @@ def main():
     config.load_kube_config()
 
     with Client(transport=KubernetesPortForwardTransport()) as client:
-        response = client.get("http://my-server.pod-pg.svc:4200/api/health")
+        response = client.get("http://my-server.pop-pg.svc:4200/api/health")
         print(response)
 
 

@@ -20,6 +20,8 @@ spec:
             spec:
               type: object
               properties:
+                version:
+                  type: string
                 sqlite:
                   type: object
                   properties:
@@ -82,6 +84,8 @@ spec:
             spec:
               type: object
               properties:
+                version:
+                  type: string
                 server:
                   type: object
                   properties:

@@ -4,6 +4,7 @@ metadata:
   namespace: pop-pg
   name: my-server
 spec:
+  version: 3.0.0rc13
   postgres:
     host: postgres
     port: 5432
@@ -24,6 +25,7 @@ metadata:
   namespace: pop-pg
   name: my-work-pool
 spec:
+  version: 3.0.0rc13
   server:
     namespace: pop-pg
     name: my-server

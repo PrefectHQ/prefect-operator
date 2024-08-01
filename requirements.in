@@ -1,8 +1,10 @@
 kopf
 kubernetes
-prefect==3.0.0rc2
+prefect==3.0.0rc13
 pydantic
 pyyaml
+
+-e .
 
 # development
 ipython
