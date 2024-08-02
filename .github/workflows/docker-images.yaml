@@ -8,14 +8,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - .github/workflows/docker-images.yaml
-      - Dockerfile
-      - .dockerignore
-      - "src/**/*.py"
-      - requirements.txt
-      - requirements-dev.txt
-      - pyproject.toml
 
 permissions:
   contents: read
