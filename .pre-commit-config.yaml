@@ -17,3 +17,11 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pytest==8.3.2, types-pyyaml==6.0.12.20240724]
+  - repo: local
+    hooks:
+      - id: generate-crds
+        name: Generate CRD manifests
+        entry: bash -c 'python -m prefect_operator generate-crds > crds.yaml'
+        language: system
+        types: [python]
+        pass_filenames: false

@@ -4,63 +4,94 @@ metadata:
   name: prefectservers.prefect.io
 spec:
   group: prefect.io
-  scope: Namespaced
   names:
+    kind: PrefectServer
     plural: prefectservers
     singular: prefectserver
-    kind: PrefectServer
+  scope: Namespaced
   versions:
-    - name: v3
-      served: true
-      storage: true
-      schema:
-        openAPIV3Schema:
-          type: object
-          properties:
-            spec:
-              type: object
-              properties:
-                version:
-                  type: string
-                sqlite:
-                  type: object
+  - name: v3
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              postgres:
+                default: null
+                properties:
+                  database:
+                    title: Database
+                    type: string
+                  host:
+                    title: Host
+                    type: string
+                  passwordSecretKeyRef:
+                    properties:
+                      key:
+                        title: Key
+                        type: string
+                      name:
+                        title: Name
+                        type: string
+                    required:
+                    - name
+                    - key
+                    title: SecretKeyReference
+                    type: object
+                  port:
+                    title: Port
+                    type: integer
+                  user:
+                    title: User
+                    type: string
+                required:
+                - host
+                - port
+                - user
+                - passwordSecretKeyRef
+                - database
+                title: PrefectPostgresDatabase
+                type: object
+              settings:
+                default: []
+                items:
                   properties:
-                    storageClassName:
+                    name:
+                      title: Name
                       type: string
-                    size:
+                    value:
+                      title: Value
                       type: string
                   required:
-                    - storageClassName
-                    - size
-                postgres:
+                  - name
+                  - value
+                  title: PrefectSetting
                   type: object
-                  properties:
-                    host:
-                      type: string
-                    port:
-                      type: number
-                    user:
-                      type: string
-                    passwordSecretKeyRef:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                        key:
-                          type: string
-                    database:
-                      type: string
-                settings:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                      value:
-                        type: string
-          required:
-            - spec
+                title: Settings
+                type: array
+              sqlite:
+                default: null
+                properties:
+                  size:
+                    title: Size
+                    type: string
+                  storageClassName:
+                    title: Storageclassname
+                    type: string
+                required:
+                - storageClassName
+                - size
+                title: PrefectSqliteDatabase
+                type: object
+              version:
+                default: 3.0.0rc13
+                title: Version
+                type: string
+            title: PrefectServer
+            type: object
+        type: object
+    served: true
+    storage: true
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -68,34 +99,43 @@ metadata:
   name: prefectworkpools.prefect.io
 spec:
   group: prefect.io
-  scope: Namespaced
   names:
+    kind: PrefectWorkPool
     plural: prefectworkpools
     singular: prefectworkpool
-    kind: PrefectWorkPool
+  scope: Namespaced
   versions:
-    - name: v3
-      served: true
-      storage: true
-      schema:
-        openAPIV3Schema:
-          type: object
-          properties:
-            spec:
-              type: object
-              properties:
-                version:
-                  type: string
-                server:
-                  type: object
-                  properties:
-                    namespace:
-                      type: string
-                    name:
-                      type: string
-                  required:
-                    - name
-                workers:
-                  type: number
-          required:
-            - spec
+  - name: v3
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              server:
+                properties:
+                  name:
+                    title: Name
+                    type: string
+                  namespace:
+                    default: ''
+                    title: Namespace
+                    type: string
+                required:
+                - name
+                title: PrefectServerReference
+                type: object
+              version:
+                default: 3.0.0rc13
+                title: Version
+                type: string
+              workers:
+                default: 1
+                title: Workers
+                type: integer
+            required:
+            - server
+            title: PrefectWorkPool
+            type: object
+        type: object
+    served: true
+    storage: true
