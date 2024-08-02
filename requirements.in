@@ -3,6 +3,3 @@ kopf
 kubernetes
 pydantic
 pyyaml
-setuptools_scm
-
--e .
