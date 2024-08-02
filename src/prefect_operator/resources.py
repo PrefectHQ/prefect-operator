@@ -1,6 +1,6 @@
-from typing import Any, ClassVar, Iterable, Self
+from typing import Any, ClassVar, Iterable
 
-from pydantic import BaseModel, PrivateAttr, ValidationInfo, model_validator
+from pydantic import BaseModel, ValidationInfo, model_validator
 
 
 class CustomResource(BaseModel):
@@ -96,21 +96,29 @@ class CustomResource(BaseModel):
         return schema
 
 
-class NamedResource(BaseModel):
-    _name: str = PrivateAttr()
+class NamedResource(CustomResource):
+    name: str
+    namespace: str
 
-    @property
-    def name(self) -> str:
-        return self._name
+    @model_validator(mode="before")
+    @classmethod
+    def set_name_and_namespace(
+        cls, values: dict[str, Any], validation_info: ValidationInfo
+    ) -> dict[str, Any]:
+        if validation_info.context:
+            values = dict(values)
+            values.setdefault("name", validation_info.context.get("name"))
+            values.setdefault("namespace", validation_info.context.get("namespace"))
+        return values
 
-    _namespace: str = PrivateAttr()
-
-    @property
-    def namespace(self) -> str:
-        return self._namespace
-
-    @model_validator(mode="after")
-    def set_name_and_namespace(self, validation_info: ValidationInfo) -> Self:
-        self._name = validation_info.context["name"]
-        self._namespace = validation_info.context["namespace"]
-        return self
+    @classmethod
+    def model_json_schema_inlined(cls) -> dict[str, Any]:
+        schema = super().model_json_schema_inlined()
+        # The name and namespace attributes aren't actually part of the spec
+        schema["properties"].pop("name", None)
+        schema["properties"].pop("namespace", None)
+        schema["required"].remove("name")
+        schema["required"].remove("namespace")
+        if not schema["required"]:
+            schema.pop("required")
+        return schema

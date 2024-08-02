@@ -57,6 +57,8 @@ distlib==0.3.8
     # via virtualenv
 distro==1.9.0
     # via ruyaml
+execnet==2.1.1
+    # via pytest-xdist
 executing==2.0.1
     # via stack-data
 filelock==3.15.4
@@ -164,11 +166,14 @@ pytest==8.3.2
     # via
     #   -r requirements-dev.in
     #   pytest-cov
+    #   pytest-xdist
 pytest-cov==5.0.0
     # via pytest-cover
 pytest-cover==3.0.0
     # via pytest-coverage
 pytest-coverage==0.0
+    # via -r requirements-dev.in
+pytest-xdist==3.6.1
     # via -r requirements-dev.in
 python-dateutil==2.9.0.post0
     # via
