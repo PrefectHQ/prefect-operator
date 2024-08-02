@@ -100,7 +100,10 @@ def test_sqlite_server_forces_recreate(sqlite_server: PrefectServer):
 
 
 def test_sqlite_server_adds_volume(sqlite_server: PrefectServer):
+    assert sqlite_server.sqlite
     desired_pvc = sqlite_server.sqlite.desired_persistent_volume_claim(sqlite_server)
+
+    assert desired_pvc
     assert desired_pvc["kind"] == "PersistentVolumeClaim"
     assert desired_pvc["metadata"]["name"] == "my-prefect-database"
     assert desired_pvc["spec"]["storageClassName"] == "the-fast-stuff"
