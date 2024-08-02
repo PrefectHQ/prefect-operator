@@ -67,7 +67,7 @@ def resolve_repo_versions(pinned: dict[str, str]) -> dict[str, str]:
 
 
 def resolve_mypy_dependencies(pinned: dict[str, str], mypy: set[str]) -> list[str]:
-    """Given the pinned development dependencies and the requsted mypy dependencies,
+    """Given the pinned development dependencies and the requested mypy dependencies,
     resolve them into pip version specifiers (like "mypackage>=1.2.3")"""
     resolved = {f"{dep}{pinned[dep]}" for dep in mypy if dep in pinned}
 

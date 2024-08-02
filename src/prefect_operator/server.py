@@ -17,11 +17,32 @@ class PrefectSqliteDatabase(BaseModel):
     def is_file_based(self) -> bool:
         return True
 
+    def desired_persistent_volume_claim(
+        self, server: "PrefectServer"
+    ) -> dict[str, Any] | None:
+        return {
+            "apiVersion": "v1",
+            "kind": "PersistentVolumeClaim",
+            "metadata": {
+                "namespace": server.namespace,
+                "name": f"{server.name}-database",
+            },
+            "spec": {
+                "storageClassName": self.storageClassName,
+                "accessModes": ["ReadWriteOnce"],
+                "resources": {"requests": {"storage": self.size}},
+            },
+        }
+
     def configure_prefect_server(
         self,
+        server: "PrefectServer",
         prefect_server_workload_spec: dict[str, Any],
         prefect_server_container: dict[str, Any],
     ) -> None:
+        prefect_server_workload_spec["replicas"] = 1
+        prefect_server_workload_spec["strategy"] = {"type": "Recreate"}
+
         prefect_server_container["env"].extend(
             [
                 {
@@ -40,14 +61,10 @@ class PrefectSqliteDatabase(BaseModel):
                 "mountPath": "/var/lib/prefect/",
             }
         ]
-        prefect_server_workload_spec["volumeClaimTemplates"] = [
+        prefect_server_workload_spec["template"]["spec"]["volumes"] = [
             {
-                "metadata": {"name": "database"},
-                "spec": {
-                    "accessModes": ["ReadWriteOnce"],
-                    "storageClassName": self.storageClassName,
-                    "resources": {"requests": {"storage": self.size}},
-                },
+                "name": "database",
+                "persistentVolumeClaim": {"claimName": f"{server.name}-database"},
             }
         ]
 
@@ -73,8 +90,14 @@ class PrefectPostgresDatabase(BaseModel):
     def is_file_based(self) -> bool:
         return False
 
+    def desired_persistent_volume_claim(
+        self, server: "PrefectServer"
+    ) -> dict[str, Any] | None:
+        return None
+
     def configure_prefect_server(
         self,
+        server: "PrefectServer",
         prefect_server_workload_spec: dict[str, Any],
         prefect_server_container: dict[str, Any],
     ) -> None:
@@ -208,70 +231,13 @@ class PrefectServer(CustomResource, NamedResource):
         if not database:
             raise NotImplementedError("No database defined")
 
-        database.configure_prefect_server(deployment_spec, container_template)
+        database.configure_prefect_server(self, deployment_spec, container_template)
 
         return {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "metadata": {"namespace": self.namespace, "name": self.name},
             "spec": deployment_spec,
-        }
-
-    def desired_stateful_set(self) -> dict[str, Any]:
-        container_template = {
-            "name": "prefect-server",
-            "image": f"prefecthq/prefect:{self.version}-python3.12",
-            "env": [
-                {
-                    "name": "PREFECT_HOME",
-                    "value": "/var/lib/prefect/",
-                },
-                *[s.as_environment_variable() for s in self.settings],
-            ],
-            "command": ["prefect", "server", "start", "--host", "0.0.0.0"],
-            "ports": [{"containerPort": 4200}],
-            "readinessProbe": {
-                "httpGet": {"path": "/api/health", "port": 4200, "scheme": "HTTP"},
-                "initialDelaySeconds": 10,
-                "periodSeconds": 5,
-                "timeoutSeconds": 5,
-                "successThreshold": 1,
-                "failureThreshold": 30,
-            },
-            "livenessProbe": {
-                "httpGet": {"path": "/api/health", "port": 4200, "scheme": "HTTP"},
-                "initialDelaySeconds": 120,
-                "periodSeconds": 10,
-                "timeoutSeconds": 5,
-                "successThreshold": 1,
-                "failureThreshold": 2,
-            },
-        }
-
-        pod_template: dict[str, Any] = {
-            "metadata": {"labels": {"app": self.name}},
-            "spec": {
-                "containers": [container_template],
-            },
-        }
-
-        stateful_set_spec = {
-            "replicas": 1,
-            "selector": {"matchLabels": {"app": self.name}},
-            "template": pod_template,
-        }
-
-        database = self.postgres or self.sqlite
-        if not database:
-            raise NotImplementedError("No database defined")
-
-        database.configure_prefect_server(stateful_set_spec, container_template)
-
-        return {
-            "apiVersion": "apps/v1",
-            "kind": "StatefulSet",
-            "metadata": {"namespace": self.namespace, "name": self.name},
-            "spec": stateful_set_spec,
         }
 
     def desired_service(self) -> dict[str, Any]:
@@ -323,46 +289,34 @@ def reconcile_server(
                         continue
                     raise
 
+    desired_persistent_volume_claim = database.desired_persistent_volume_claim(server)
+    if desired_persistent_volume_claim:
+        api = kubernetes.client.CoreV1Api()
+        try:
+            api.create_namespaced_persistent_volume_claim(
+                server.namespace,
+                desired_persistent_volume_claim,
+            )
+            logger.info("Created persistent volume claim %s", name)
+        except kubernetes.client.ApiException as e:
+            if e.status != 409:
+                raise
+
     api = kubernetes.client.AppsV1Api()
+    desired_deployment = server.desired_deployment()
+    try:
+        api.create_namespaced_deployment(server.namespace, desired_deployment)
+        logger.info("Created deployment %s", name)
+    except kubernetes.client.ApiException as e:
+        if e.status != 409:
+            raise
 
-    if database.is_file_based:
-        desired_stateful_set = server.desired_stateful_set()
-
-        try:
-            api.create_namespaced_stateful_set(
-                server.namespace,
-                desired_stateful_set,
-            )
-            logger.info("Created stateful set %s", name)
-        except kubernetes.client.ApiException as e:
-            if e.status != 409:
-                raise
-
-            api.replace_namespaced_stateful_set(
-                desired_stateful_set["metadata"]["name"],
-                server.namespace,
-                desired_stateful_set,
-            )
-            logger.info("Updated stateful set %s", name)
-    else:
-        desired_deployment = server.desired_deployment()
-
-        try:
-            api.create_namespaced_deployment(
-                server.namespace,
-                desired_deployment,
-            )
-            logger.info("Created deployment %s", name)
-        except kubernetes.client.ApiException as e:
-            if e.status != 409:
-                raise
-
-            api.replace_namespaced_deployment(
-                desired_deployment["metadata"]["name"],
-                server.namespace,
-                desired_deployment,
-            )
-            logger.info("Updated deployment %s", name)
+        api.replace_namespaced_deployment(
+            desired_deployment["metadata"]["name"],
+            server.namespace,
+            desired_deployment,
+        )
+        logger.info("Updated deployment %s", name)
 
     desired_service = server.desired_service()
     api = kubernetes.client.CoreV1Api()
@@ -404,15 +358,6 @@ def delete_server(
             raise
 
     api = kubernetes.client.AppsV1Api()
-    try:
-        api.delete_namespaced_stateful_set(name, namespace)
-        logger.info("Deleted stateful set %s", name)
-    except kubernetes.client.ApiException as e:
-        if e.status == 404:
-            logger.info("Stateful set %s not found", name)
-        else:
-            raise
-
     try:
         api.delete_namespaced_deployment(name, namespace)
         logger.info("Deleted deployment %s", name)

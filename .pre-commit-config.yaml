@@ -17,6 +17,10 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pytest==8.3.2, types-pyyaml==6.0.12.20240724]
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.6
+    hooks:
+      - id: codespell
   - repo: local
     hooks:
       - id: generate-crds
