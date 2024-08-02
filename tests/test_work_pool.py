@@ -74,3 +74,49 @@ def test_work_pool_for_in_namespace_server():
             },
         },
     }
+
+
+def test_work_pool_for_cross_namespace_server():
+    work_pool = PrefectWorkPool(
+        name="my-pool",
+        namespace="my-app",
+        server=PrefectServerReference(namespace="some-other-app", name="my-prefect"),
+        workers=3,
+        version="3.0.0rc42",
+    )
+
+    assert work_pool.desired_deployment() == {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {"namespace": "my-app", "name": "my-pool"},
+        "spec": {
+            "replicas": 3,
+            "selector": {"matchLabels": {"app": "my-pool"}},
+            "template": {
+                "metadata": {"labels": {"app": "my-pool"}},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "prefect-worker",
+                            "image": "prefecthq/prefect:3.0.0rc42-python3.12-kubernetes",
+                            "env": [
+                                {
+                                    "name": "PREFECT_API_URL",
+                                    "value": "http://my-prefect.some-other-app.svc:4200/api",
+                                },
+                            ],
+                            "command": [
+                                "bash",
+                                "-c",
+                                (
+                                    "prefect worker start --type kubernetes "
+                                    "--pool 'my-app:my-pool' "
+                                    '--name "my-app:${HOSTNAME}"'
+                                ),
+                            ],
+                        },
+                    ],
+                },
+            },
+        },
+    }
