@@ -6,16 +6,12 @@ import kubernetes
 from pydantic import BaseModel, Field
 
 from . import DEFAULT_PREFECT_VERSION
-from .resources import CustomResource, NamedResource
+from .resources import NamedResource
 
 
 class PrefectSqliteDatabase(BaseModel):
     storageClassName: str
     size: str
-
-    @property
-    def is_file_based(self) -> bool:
-        return True
 
     def desired_persistent_volume_claim(
         self, server: "PrefectServer"
@@ -34,7 +30,7 @@ class PrefectSqliteDatabase(BaseModel):
             },
         }
 
-    def configure_prefect_server(
+    def configure_prefect_server_workload(
         self,
         server: "PrefectServer",
         prefect_server_workload_spec: dict[str, Any],
@@ -47,7 +43,7 @@ class PrefectSqliteDatabase(BaseModel):
             [
                 {
                     "name": "PREFECT_API_DATABASE_MIGRATE_ON_START",
-                    "value": "true",
+                    "value": "True",
                 },
                 {
                     "name": "PREFECT_API_DATABASE_CONNECTION_URL",
@@ -86,16 +82,12 @@ class PrefectPostgresDatabase(BaseModel):
     passwordSecretKeyRef: SecretKeyReference
     database: str
 
-    @property
-    def is_file_based(self) -> bool:
-        return False
-
     def desired_persistent_volume_claim(
         self, server: "PrefectServer"
     ) -> dict[str, Any] | None:
         return None
 
-    def configure_prefect_server(
+    def configure_prefect_server_workload(
         self,
         server: "PrefectServer",
         prefect_server_workload_spec: dict[str, Any],
@@ -125,12 +117,35 @@ class PrefectPostgresDatabase(BaseModel):
                 },
                 {
                     "name": "PREFECT_API_DATABASE_MIGRATE_ON_START",
-                    "value": "false",
+                    "value": "False",
                 },
             ]
         )
 
     def desired_database_migration_job(self, server: "PrefectServer") -> dict[str, Any]:
+        migration_container = {
+            "name": "migrate",
+            "image": f"prefecthq/prefect:{server.version}-python3.12",
+            "env": [s.as_environment_variable() for s in server.settings],
+            "command": [
+                "prefect",
+                "server",
+                "database",
+                "upgrade",
+                "--yes",
+            ],
+        }
+        job_spec = {
+            "template": {
+                "spec": {
+                    "containers": [migration_container],
+                    "restartPolicy": "OnFailure",
+                },
+            },
+        }
+
+        self.configure_prefect_server_workload(server, job_spec, migration_container)
+
         return {
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -138,30 +153,7 @@ class PrefectPostgresDatabase(BaseModel):
                 "namespace": server.namespace,
                 "name": f"{server.name}-migrate",
             },
-            "spec": {
-                "template": {
-                    "metadata": {"labels": {"app": server.name}},
-                    "spec": {
-                        "containers": [
-                            {
-                                "name": "migrate",
-                                "image": f"prefecthq/prefect:{server.version}-python3.12",
-                                "env": [
-                                    s.as_environment_variable() for s in server.settings
-                                ],
-                                "command": [
-                                    "prefect",
-                                    "server",
-                                    "database",
-                                    "upgrade",
-                                    "--yes",
-                                ],
-                            }
-                        ],
-                        "restartPolicy": "OnFailure",
-                    },
-                },
-            },
+            "spec": job_spec,
         }
 
 
@@ -173,7 +165,7 @@ class PrefectSetting(BaseModel):
         return {"name": self.name, "value": self.value}
 
 
-class PrefectServer(CustomResource, NamedResource):
+class PrefectServer(NamedResource):
     kind: ClassVar[str] = "PrefectServer"
     plural: ClassVar[str] = "prefectservers"
     singular: ClassVar[str] = "prefectserver"
@@ -231,7 +223,9 @@ class PrefectServer(CustomResource, NamedResource):
         if not database:
             raise NotImplementedError("No database defined")
 
-        database.configure_prefect_server(self, deployment_spec, container_template)
+        database.configure_prefect_server_workload(
+            self, deployment_spec, container_template
+        )
 
         return {
             "apiVersion": "apps/v1",

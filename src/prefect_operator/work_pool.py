@@ -7,7 +7,7 @@ import kubernetes
 from pydantic import BaseModel, Field
 
 from . import DEFAULT_PREFECT_VERSION
-from .resources import CustomResource, NamedResource
+from .resources import NamedResource
 
 
 class PrefectServerReference(BaseModel):
@@ -28,7 +28,7 @@ class PrefectServerReference(BaseModel):
             yield c
 
 
-class PrefectWorkPool(CustomResource, NamedResource):
+class PrefectWorkPool(NamedResource):
     kind: ClassVar[str] = "PrefectWorkPool"
     plural: ClassVar[str] = "prefectworkpools"
     singular: ClassVar[str] = "prefectworkpool"
