@@ -11,7 +11,7 @@ def pinned_development_requirements() -> dict[str, str]:
     specifiers (values)"""
     pinned: dict[str, str] = {}
 
-    with open("requirements.txt", "r") as dev_requirements:
+    with open("requirements-dev.txt", "r") as dev_requirements:
         for line in dev_requirements:
             line = line.strip()
             if line.startswith("#") or line.startswith("-e"):

@@ -12,9 +12,9 @@ endif
 
 	mv .bookkeeping/uv.next .bookkeeping/uv
 
-.bookkeeping/development.txt: .bookkeeping/uv requirements.txt pyproject.toml
+.bookkeeping/development.txt: .bookkeeping/uv requirements-dev.txt pyproject.toml
 	mkdir -p .bookkeeping
-	cat requirements.txt > .bookkeeping/development.txt.next
+	cat requirements-dev.txt > .bookkeeping/development.txt.next
 
 	uv pip sync .bookkeeping/development.txt.next
 
@@ -24,8 +24,11 @@ endif
 
 	mv .bookkeeping/development.txt.next .bookkeeping/development.txt
 
-%.txt: %.in .bookkeeping/uv
-	uv pip compile --resolver=backtracking --upgrade --output-file $@ $<
+requirements.txt: requirements.in .bookkeeping/uv
+	uv pip compile requirements.in --output-file $@
+
+requirements-dev.txt: requirements.txt requirements-dev.in .bookkeeping/uv
+	uv pip compile requirements.txt requirements-dev.in --output-file $@
 
 .git/hooks/pre-commit: .bookkeeping/development.txt
 	pre-commit install
