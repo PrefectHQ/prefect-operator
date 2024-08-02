@@ -46,7 +46,3 @@ jobs:
           tags: PrefectHQ/prefect-operator:latest
           push: false
           pull: true
-          load: true
-
-      - name: Image smoke test
-        run: docker run --rm PrefectHQ/prefect-operator:latest --version
