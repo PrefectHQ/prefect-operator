@@ -1,6 +1,21 @@
 #!/bin/bash
+kubectl apply -f - << NAMESPACE
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prefect-operator
+NAMESPACE
+
+make docker
+kubectl -n prefect-operator apply -f operator.yaml
+kubectl -n prefect-operator rollout restart deployment prefect-operator
+
 python -m prefect_operator generate-crds > crds.yaml
 kubectl apply -f crds.yaml
+
+if [ -z "$1" ]; then
+  exit 0
+fi
 
 for f in examples/$1/*.yaml; do
   kubectl apply -f $f

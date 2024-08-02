@@ -39,7 +39,7 @@ requirements-dev.txt: requirements.txt requirements-dev.in .bookkeeping/uv
 
 .PHONY: docker
 docker: Dockerfile .dockerignore requirements.txt
-	docker build -t prefect-operator:latest .
+	docker build -t PrefectHQ/prefect-operator:latest .
 
 .PHONY: install
 install: .bookkeeping/development.txt .git/hooks/pre-commit .pre-commit-config.yaml docker
