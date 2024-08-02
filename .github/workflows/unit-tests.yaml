@@ -25,7 +25,8 @@ concurrency:
 jobs:
   unit-tests:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on:
+      group: oss-larger-runners
 
     steps:
       - uses: actions/checkout@v4
