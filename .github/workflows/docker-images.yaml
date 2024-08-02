@@ -1,0 +1,48 @@
+name: Docker images
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/docker-images.yaml
+      - Dockerfile
+      - .dockerignore
+      - "src/**/*.py"
+      - requirements.txt
+      - requirements-dev.txt
+      - pyproject.toml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          tags: PrefectHQ/prefect-operator:latest
+          push: false
+          pull: true
+
+      - name: Image smoke test
+        run: docker run --rm PrefectHQ/prefect-operator:latest --version

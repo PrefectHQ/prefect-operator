@@ -17,6 +17,7 @@ endif
 	cat requirements-dev.txt > .bookkeeping/development.txt.next
 
 	uv pip sync .bookkeeping/development.txt.next
+	uv pip install -e .
 
 ifdef PYENV_VIRTUAL_ENV
 	pyenv rehash
@@ -36,8 +37,12 @@ requirements-dev.txt: requirements.txt requirements-dev.in .bookkeeping/uv
 .pre-commit-config.yaml: .bookkeeping/development.txt
 	./sync-pre-commit
 
+.PHONY: docker
+docker: Dockerfile .dockerignore requirements.txt
+	docker build -t prefect-operator:latest .
+
 .PHONY: install
-install: .bookkeeping/development.txt .git/hooks/pre-commit .pre-commit-config.yaml
+install: .bookkeeping/development.txt .git/hooks/pre-commit .pre-commit-config.yaml docker
 
 .PHONY: clean
 clean:

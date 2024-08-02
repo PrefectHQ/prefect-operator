@@ -1,0 +1,13 @@
+.bookkeeping
+.coverage
+.envrc*
+.github
+.mypy_cache
+.pre-commit-config.yaml
+.pytest_cache
+.python-version
+.vscode
+Dockerfile
+Makefile
+tests
+**/*.pyc

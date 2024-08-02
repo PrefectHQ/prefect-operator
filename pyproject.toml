@@ -8,6 +8,9 @@ requires-python = ">=3.11"
 
 dynamic = ["version"]
 
+[tool.setuptools_scm]
+version_file = "src/prefect_operator/_version.py"
+
 [project.scripts]
 prefect-operator = "prefect_operator.__main__:main"
 
