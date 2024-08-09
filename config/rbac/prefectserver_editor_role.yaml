@@ -1,0 +1,27 @@
+# permissions for end users to edit prefectservers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: prefectserver-editor-role
+rules:
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectservers/status
+  verbs:
+  - get

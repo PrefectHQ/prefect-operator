@@ -1,4 +1,0 @@
-query-filters:
-
-paths-ignore:
-  - tests/**/test_*.py

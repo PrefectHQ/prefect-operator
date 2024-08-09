@@ -1,0 +1,97 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectservers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectservers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectworkpools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectworkpools/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectworkpools/status
+  verbs:
+  - get
+  - patch
+  - update
