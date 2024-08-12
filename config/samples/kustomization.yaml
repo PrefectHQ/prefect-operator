@@ -1,0 +1,9 @@
+## Append samples of your project ##
+resources:
+  - v1_prefectserver_sqlite.yaml
+  - _v1_prefectserver_sqlite.yaml
+  - v1_prefectserver_postgres.yaml
+  - _v1_prefectserver_postgres.yaml
+  - v1_prefectworkpool.yaml
+  - _v1_prefectworkpool.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

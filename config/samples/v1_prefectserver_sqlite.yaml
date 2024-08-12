@@ -1,0 +1,11 @@
+apiVersion: prefect.io/v1
+kind: PrefectServer
+metadata:
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: prefect-sqlite
+spec:
+  sqlite:
+    storageClassName: standard
+    size: 1Gi
