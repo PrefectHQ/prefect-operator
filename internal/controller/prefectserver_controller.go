@@ -20,6 +20,7 @@ import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 )
@@ -50,15 +51,10 @@ type PrefectServerReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 //
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PrefectServer object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := ctrllog.FromContext(ctx)
 
 	server := &prefectiov1.PrefectServer{}
 	err := r.Get(ctx, req.NamespacedName, server)
@@ -68,40 +64,65 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	desiredDeployment, desiredPVC := r.prefectServerDeployment(server)
+	desiredDeployment, desiredPVC, desiredMigrationJob := r.prefectServerDeployment(server)
 	desiredService := r.prefectServerService(server)
+
+	serverNamespacedName := types.NamespacedName{
+		Namespace: server.Namespace,
+		Name:      server.Name,
+	}
 
 	// Reconcile the PVC, if one is required
 	if desiredPVC != nil {
 		foundPVC := &corev1.PersistentVolumeClaim{}
-		err = r.Get(ctx, types.NamespacedName{Name: desiredPVC.Name, Namespace: server.Namespace}, foundPVC)
+		err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredPVC.Name}, foundPVC)
 		if errors.IsNotFound(err) {
+			log.Info("Creating PersistentVolumeClaim", "name", desiredPVC.Name)
 			if err = r.Create(ctx, desiredPVC); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{Requeue: true}, nil
 		} else if err != nil {
 			return ctrl.Result{}, err
 		} else if !metav1.IsControlledBy(foundPVC, server) {
-			return ctrl.Result{}, errors.NewBadRequest("PVC already exists and is not controlled by PrefectServer")
+			return ctrl.Result{}, errors.NewBadRequest("PersistentVolumeClaim already exists and is not controlled by PrefectServer " + server.Name)
 		} else {
-			// TODO: handle patching the PVC if there are meaningful updates
+			// TODO: handle patching the PVC if there are meaningful updates that we can make,
+			// specifically the size request for a dynamically-provisioned PVC
+		}
+	}
+
+	// Reconcile the migration job, if one is required
+	if desiredMigrationJob != nil {
+		foundMigrationJob := &batchv1.Job{}
+		err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
+		if errors.IsNotFound(err) {
+			log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
+			if err = r.Create(ctx, desiredMigrationJob); err != nil {
+				return ctrl.Result{}, err
+			}
+		} else if err != nil {
+			return ctrl.Result{}, err
+		} else if !metav1.IsControlledBy(foundMigrationJob, server) {
+			return ctrl.Result{}, errors.NewBadRequest("Job already exists and is not controlled by PrefectServer " + server.Name)
+		} else {
+			// TODO: handle replacing the job
 		}
 	}
 
 	// Reconcile the Deployment
 	foundDeployment := &appsv1.Deployment{}
-	err = r.Get(ctx, types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, foundDeployment)
+	err = r.Get(ctx, serverNamespacedName, foundDeployment)
 	if errors.IsNotFound(err) {
+		log.Info("Creating Deployment", "name", desiredDeployment.Name)
 		if err = r.Create(ctx, &desiredDeployment); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
-		return ctrl.Result{}, errors.NewBadRequest("Deployment already exists and is not controlled by PrefectServer")
+		return ctrl.Result{}, errors.NewBadRequest("Deployment already exists and is not controlled by PrefectServer " + server.Name)
 	} else {
+		log.Info("Updating Deployment", "name", desiredDeployment.Name)
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -109,17 +130,18 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Reconcile the Service
 	foundService := &corev1.Service{}
-	err = r.Get(ctx, types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, foundService)
+	err = r.Get(ctx, serverNamespacedName, foundService)
 	if errors.IsNotFound(err) {
+		log.Info("Creating Service", "name", desiredService.Name)
 		if err = r.Create(ctx, &desiredService); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundService, server) {
-		return ctrl.Result{}, errors.NewBadRequest("Service already exists and is not controlled by PrefectServer")
+		return ctrl.Result{}, errors.NewBadRequest("Service already exists and is not controlled by PrefectServer " + server.Name)
 	} else {
+		log.Info("Updating Service", "name", desiredService.Name)
 		if err = r.Update(ctx, &desiredService); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -128,31 +150,16 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim) {
+func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job) {
 	var pvc *corev1.PersistentVolumeClaim
+	var migrationJob *batchv1.Job
 	var deploymentSpec appsv1.DeploymentSpec
 
 	if server.Spec.SQLite != nil {
-		pvc = &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: server.Namespace,
-				Name:      server.Name + "-data",
-			},
-			Spec: corev1.PersistentVolumeClaimSpec{
-				StorageClassName: &server.Spec.SQLite.StorageClassName,
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: server.Spec.SQLite.Size,
-					},
-				},
-			},
-		}
-
+		pvc = r.sqlitePersistentVolumeClaim(server)
 		deploymentSpec = r.sqliteDeploymentSpec(server, pvc)
 	} else if server.Spec.Postgres != nil {
+		migrationJob = r.postgresMigrationJob(server)
 		deploymentSpec = r.postgresDeploymentSpec(server)
 	} else {
 		if server.Spec.Ephemeral == nil {
@@ -174,7 +181,10 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 	if pvc != nil {
 		ctrl.SetControllerReference(server, pvc, r.Scheme)
 	}
-	return *dep, pvc
+	if migrationJob != nil {
+		ctrl.SetControllerReference(server, migrationJob, r.Scheme)
+	}
+	return *dep, pvc, migrationJob
 }
 
 func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
@@ -200,7 +210,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 				},
 				Containers: []corev1.Container{
 					{
-						Name:    server.Name,
+						Name:    "prefect-server",
 						Image:   server.Image(),
 						Command: server.Command(),
 						VolumeMounts: []corev1.VolumeMount{
@@ -231,6 +241,26 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 	}
 }
 
+func (r *PrefectServerReconciler) sqlitePersistentVolumeClaim(server *prefectiov1.PrefectServer) *corev1.PersistentVolumeClaim {
+	return &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: server.Namespace,
+			Name:      server.Name + "-data",
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &server.Spec.SQLite.StorageClassName,
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: server.Spec.SQLite.Size,
+				},
+			},
+		},
+	}
+}
+
 func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.PrefectServer, pvc *corev1.PersistentVolumeClaim) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
 		Strategy: appsv1.DeploymentStrategy{
@@ -246,7 +276,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 			Spec: corev1.PodSpec{
 				Volumes: []corev1.Volume{
 					{
-						Name: pvc.Name,
+						Name: "prefect-data",
 						VolumeSource: corev1.VolumeSource{
 							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 								ClaimName: pvc.Name,
@@ -256,12 +286,12 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 				},
 				Containers: []corev1.Container{
 					{
-						Name:    server.Name,
+						Name:    "prefect-server",
 						Image:   server.Image(),
 						Command: server.Command(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      pvc.Name,
+								Name:      "prefect-data",
 								MountPath: "/var/lib/prefect/",
 							},
 						},
@@ -302,7 +332,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name:    server.Name,
+						Name:    "prefect-server",
 						Image:   server.Image(),
 						Command: server.Command(),
 						Env: append(append([]corev1.EnvVar{
@@ -327,11 +357,43 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 	}
 }
 
+func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) *batchv1.Job {
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: server.Namespace,
+			Name:      server.Name + "-migration",
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: server.ServerLabels(),
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:    "prefect-server-migration",
+							Image:   server.Image(),
+							Command: []string{"prefect", "server", "database", "migrate", "--yes"},
+							Env: append(append([]corev1.EnvVar{
+								{
+									Name:  "PREFECT_HOME",
+									Value: "/var/lib/prefect/",
+								},
+							}, server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
+						},
+					},
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+				},
+			},
+		},
+	}
+}
+
 func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.PrefectServer) corev1.Service {
 	service := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      server.Name,
 			Namespace: server.Namespace,
+			Name:      server.Name,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{

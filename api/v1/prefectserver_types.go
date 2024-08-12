@@ -230,8 +230,8 @@ func (s *PrefectServer) Image() string {
 	if s.Spec.Image != nil && *s.Spec.Image != "" {
 		return *s.Spec.Image
 	}
-	if s.Spec.Version != nil && *s.Spec.Version == "" {
-		return "prefecthq/prefect:" + *s.Spec.Version + "-3.0.0rc15-python3.12"
+	if s.Spec.Version != nil && *s.Spec.Version != "" {
+		return "prefecthq/prefect:" + *s.Spec.Version + "-python3.12"
 	}
 	return DEFAULT_PREFECT_IMAGE
 }
