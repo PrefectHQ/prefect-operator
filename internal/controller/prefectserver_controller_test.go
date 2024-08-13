@@ -215,7 +215,7 @@ var _ = Describe("PrefectServer controller", func() {
 
 				It("should have appropriate labels", func() {
 					Expect(deployment.Spec.Selector.MatchLabels).To(Equal(map[string]string{
-						"app": "prefect-on-anything",
+						"prefect.io/server": "prefect-on-anything",
 					}))
 				})
 
@@ -263,7 +263,7 @@ var _ = Describe("PrefectServer controller", func() {
 
 				It("should have matching labels", func() {
 					Expect(service.Spec.Selector).To(Equal(map[string]string{
-						"app": "prefect-on-anything",
+						"prefect.io/server": "prefect-on-anything",
 					}))
 				})
 

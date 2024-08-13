@@ -20,10 +20,14 @@ import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 )
@@ -40,19 +44,111 @@ type PrefectWorkPoolReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PrefectWorkPool object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := ctrllog.FromContext(ctx)
 
-	// TODO(user): your logic here
+	log.Info("Reconciling PrefectWorkPool")
+
+	workPool := &prefectiov1.PrefectWorkPool{}
+	err := r.Get(ctx, req.NamespacedName, workPool)
+	if errors.IsNotFound(err) {
+		return ctrl.Result{}, nil
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	desiredDeployment := r.prefectWorkerDeployment(workPool)
+
+	workPoolNamespacedName := types.NamespacedName{
+		Namespace: workPool.Namespace,
+		Name:      workPool.Name,
+	}
+
+	// Reconcile the Deployment
+	foundDeployment := &appsv1.Deployment{}
+	err = r.Get(ctx, workPoolNamespacedName, foundDeployment)
+	if errors.IsNotFound(err) {
+		log.Info("Creating Deployment", "name", desiredDeployment.Name)
+		if err = r.Create(ctx, &desiredDeployment); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		return ctrl.Result{}, err
+	} else if !metav1.IsControlledBy(foundDeployment, workPool) {
+		return ctrl.Result{}, errors.NewBadRequest("Deployment already exists and is not controlled by PrefectWorkPool " + workPool.Name)
+	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
+		log.Info("Updating Deployment", "name", desiredDeployment.Name)
+		if err = r.Update(ctx, &desiredDeployment); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PrefectWorkPoolReconciler) prefectWorkerDeployment(workPool *prefectiov1.PrefectWorkPool) appsv1.Deployment {
+	dep := appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      workPool.Name,
+			Namespace: workPool.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &workPool.Spec.Workers,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: workPool.WorkerLabels(),
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: workPool.WorkerLabels(),
+				},
+				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "prefect-data",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name: "prefect-worker",
+
+							Image:           workPool.Image(),
+							ImagePullPolicy: corev1.PullIfNotPresent,
+
+							Command: workPool.Command(),
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "prefect-data",
+									MountPath: "/var/lib/prefect/",
+								},
+							},
+							Env: append(workPool.ToEnvVars(), workPool.Spec.Settings...),
+
+							// StartupProbe:   workPool.StartupProbe(),
+							// ReadinessProbe: workPool.ReadinessProbe(),
+							// LivenessProbe:  workPool.LivenessProbe(),
+
+							TerminationMessagePath:   "/dev/termination-log",
+							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Set PrefectWorkPool instance as the owner and controller
+	ctrl.SetControllerReference(workPool, &dep, r.Scheme)
+
+	return dep
 }
 
 // SetupWithManager sets up the controller with the Manager.

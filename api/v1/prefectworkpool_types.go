@@ -17,25 +17,31 @@ limitations under the License.
 package v1
 
 import (
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
 type PrefectWorkPoolSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Version defines the version of the Prefect Server to deploy
+	Version *string `json:"version,omitempty"`
 
-	// Version defines the version of Prefect the Work Pool will run
-	Version string `json:"version,omitempty"`
+	// Image defines the exact image to deploy for the Prefect Server, overriding Version
+	Image *string `json:"image,omitempty"`
 
 	// Server defines which Prefect Server to connect to
 	Server PrefectServerReference `json:"server,omitempty"`
 
+	// The type of the work pool, such as "kubernetes" or "process"
+	Type string `json:"type,omitempty"`
+
 	// Workers defines the number of workers to run in the Work Pool
 	Workers int32 `json:"workers,omitempty"`
+
+	// A list of environment variables to set on the Prefect Server
+	Settings []corev1.EnvVar `json:"settings,omitempty"`
 }
 
 type PrefectServerReference struct {
@@ -62,6 +68,52 @@ type PrefectWorkPool struct {
 
 	Spec   PrefectWorkPoolSpec   `json:"spec,omitempty"`
 	Status PrefectWorkPoolStatus `json:"status,omitempty"`
+}
+
+func (s *PrefectWorkPool) WorkerLabels() map[string]string {
+	return map[string]string{
+		"prefect.io/worker": s.Name,
+	}
+}
+
+func (s *PrefectWorkPool) Image() string {
+	suffix := ""
+	if s.Spec.Type == "kubernetes" {
+		suffix = "-kubernetes"
+	}
+
+	if s.Spec.Image != nil && *s.Spec.Image != "" {
+		return *s.Spec.Image
+	}
+	if s.Spec.Version != nil && *s.Spec.Version != "" {
+		return "prefecthq/prefect:" + *s.Spec.Version + "-python3.12" + suffix
+	}
+	return DEFAULT_PREFECT_IMAGE + suffix
+}
+
+func (s *PrefectWorkPool) Command() []string {
+	workPoolName := s.Name
+	if strings.HasPrefix(workPoolName, "prefect") {
+		workPoolName = "pool-" + workPoolName
+	}
+	return []string{"prefect", "worker", "start", "--pool", workPoolName, "--type", s.Spec.Type}
+}
+
+func (s *PrefectWorkPool) PrefectAPIURL() string {
+	return "http://" + s.Spec.Server.Name + "." + s.Spec.Server.Namespace + ".svc:4200/api"
+}
+
+func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "PREFECT_HOME",
+			Value: "/var/lib/prefect/",
+		},
+		{
+			Name:  "PREFECT_API_URL",
+			Value: s.PrefectAPIURL(),
+		},
+	}
 }
 
 //+kubebuilder:object:root=true
