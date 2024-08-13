@@ -1,4 +1,4 @@
-name: Go
+name: Unit tests
 on:
   pull_request:
   push:
@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  run-tests:
+  unit-tests:
+    name: Unit tests
     runs-on: ubuntu-latest
 
     steps:
