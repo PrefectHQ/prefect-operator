@@ -375,6 +375,61 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-anything"))
 			})
 		})
+
+		Context("When evaluating changes with any server", func() {
+			BeforeEach(func() {
+				name = types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-anything-no-changes",
+				}
+
+				prefectserver = &prefectiov1.PrefectServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespaceName,
+						Name:      "prefect-on-anything-no-changes",
+					},
+				}
+				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// Reconcile once to create the server
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not change a deployment if nothing has changed", func() {
+				before := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-anything-no-changes",
+				}, before)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				after := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-anything-no-changes",
+				}, after)).To(Succeed())
+
+				Expect(after.Generation).To(Equal(before.Generation))
+				Expect(after).To(Equal(before))
+			})
+		})
 	})
 
 	Context("for ephemeral servers", func() {
@@ -557,6 +612,61 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
+			})
+		})
+
+		Context("When evaluating changes with an ephemeral server", func() {
+			BeforeEach(func() {
+				name = types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-ephemeral-no-changes",
+				}
+
+				prefectserver = &prefectiov1.PrefectServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespaceName,
+						Name:      "prefect-on-ephemeral-no-changes",
+					},
+				}
+				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// Reconcile once to create the server
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not change a deployment if nothing has changed", func() {
+				before := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-ephemeral-no-changes",
+				}, before)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				after := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-ephemeral-no-changes",
+				}, after)).To(Succeed())
+
+				Expect(after.Generation).To(Equal(before.Generation))
+				Expect(after).To(Equal(before))
 			})
 		})
 	})
@@ -786,6 +896,67 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-sqlite"))
+			})
+		})
+
+		Context("When evaluating changes with a SQLite server", func() {
+			BeforeEach(func() {
+				name = types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-sqlite-no-changes",
+				}
+
+				prefectserver = &prefectiov1.PrefectServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespaceName,
+						Name:      "prefect-on-sqlite-no-changes",
+					},
+					Spec: prefectiov1.PrefectServerSpec{
+						SQLite: &prefectiov1.SQLiteConfiguration{
+							StorageClassName: "standard",
+							Size:             resource.MustParse("512Mi"),
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// Reconcile once to create the server
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not change a deployment if nothing has changed", func() {
+				before := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-sqlite-no-changes",
+				}, before)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				after := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-sqlite-no-changes",
+				}, after)).To(Succeed())
+
+				Expect(after.Generation).To(Equal(before.Generation))
+				Expect(after).To(Equal(before))
 			})
 		})
 	})
@@ -1177,6 +1348,70 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-postgres"))
+			})
+		})
+
+		Context("When evaluating changes with a PostgreSQL server", func() {
+			BeforeEach(func() {
+				name = types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-postgres-no-changes",
+				}
+
+				prefectserver = &prefectiov1.PrefectServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespaceName,
+						Name:      "prefect-on-postgres-no-changes",
+					},
+					Spec: prefectiov1.PrefectServerSpec{
+						Postgres: &prefectiov1.PostgresConfiguration{
+							Host:     ptr.To("some-postgres-server"),
+							Port:     ptr.To(15432),
+							User:     ptr.To("a-prefect-user"),
+							Password: ptr.To("this-is-a-bad-idea"),
+							Database: ptr.To("some-prefect"),
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				// Reconcile once to create the server
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not change a deployment if nothing has changed", func() {
+				before := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-postgres-no-changes",
+				}, before)).To(Succeed())
+
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				after := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "prefect-on-postgres-no-changes",
+				}, after)).To(Succeed())
+
+				Expect(after.Generation).To(Equal(before.Generation))
+				Expect(after).To(Equal(before))
 			})
 		})
 	})

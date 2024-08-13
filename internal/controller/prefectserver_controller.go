@@ -19,19 +19,23 @@ package controller
 import (
 	"context"
 
+	"dario.cat/mergo"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/go-logr/logr"
 )
 
 // PrefectServerReconciler reconciles a PrefectServer object
@@ -55,6 +59,8 @@ type PrefectServerReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
+
+	log.Info("Reconciling PrefectServer")
 
 	server := &prefectiov1.PrefectServer{}
 	err := r.Get(ctx, req.NamespacedName, server)
@@ -105,7 +111,7 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		} else if !metav1.IsControlledBy(foundMigrationJob, server) {
 			return ctrl.Result{}, errors.NewBadRequest("Job already exists and is not controlled by PrefectServer " + server.Name)
 		} else {
-			// TODO: handle replacing the job
+			// TODO: handle replacing the job if something has changed
 		}
 	}
 
@@ -121,8 +127,8 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
 		return ctrl.Result{}, errors.NewBadRequest("Deployment already exists and is not controlled by PrefectServer " + server.Name)
-	} else {
-		log.Info("Updating Deployment", "name", desiredDeployment.Name)
+	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
+		log.Info("Updating Deployment", "name", desiredService.Name)
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -140,7 +146,7 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundService, server) {
 		return ctrl.Result{}, errors.NewBadRequest("Service already exists and is not controlled by PrefectServer " + server.Name)
-	} else {
+	} else if serviceNeedsUpdate(&foundService.Spec, &desiredService.Spec, log) {
 		log.Info("Updating Service", "name", desiredService.Name)
 		if err = r.Update(ctx, &desiredService); err != nil {
 			return ctrl.Result{}, err
@@ -148,6 +154,25 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func deploymentNeedsUpdate(current, desired *appsv1.DeploymentSpec, log logr.Logger) bool {
+	merged := current.DeepCopy()
+	return needsUpdate(current, merged, desired, log)
+}
+
+func serviceNeedsUpdate(current, desired *corev1.ServiceSpec, log logr.Logger) bool {
+	merged := current.DeepCopy()
+	return needsUpdate(current, merged, desired, log)
+}
+
+func needsUpdate(current, merged, desired interface{}, log logr.Logger) bool {
+	err := mergo.Merge(merged, desired, mergo.WithOverride)
+	if err != nil {
+		log.Error(err, "Failed to merge objects", "current", current, "desired", desired)
+		return true
+	}
+	return !equality.Semantic.DeepEqual(current, merged)
 }
 
 func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job) {
@@ -189,6 +214,7 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 
 func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
+		Replicas: ptr.To(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 		},
@@ -210,8 +236,11 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 				},
 				Containers: []corev1.Container{
 					{
-						Name:    "prefect-server",
-						Image:   server.Image(),
+						Name: "prefect-server",
+
+						Image:           server.Image(),
+						ImagePullPolicy: corev1.PullIfNotPresent,
+
 						Command: server.Command(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
@@ -229,11 +258,15 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 							{
 								Name:          "api",
 								ContainerPort: 4200,
+								Protocol:      corev1.ProtocolTCP,
 							},
 						},
 						StartupProbe:   server.StartupProbe(),
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
+
+						TerminationMessagePath:   "/dev/termination-log",
+						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
 			},
@@ -263,6 +296,7 @@ func (r *PrefectServerReconciler) sqlitePersistentVolumeClaim(server *prefectiov
 
 func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.PrefectServer, pvc *corev1.PersistentVolumeClaim) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
+		Replicas: ptr.To(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RecreateDeploymentStrategyType,
 		},
@@ -286,8 +320,11 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 				},
 				Containers: []corev1.Container{
 					{
-						Name:    "prefect-server",
-						Image:   server.Image(),
+						Name: "prefect-server",
+
+						Image:           server.Image(),
+						ImagePullPolicy: corev1.PullIfNotPresent,
+
 						Command: server.Command(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
@@ -305,11 +342,15 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 							{
 								Name:          "api",
 								ContainerPort: 4200,
+								Protocol:      corev1.ProtocolTCP,
 							},
 						},
 						StartupProbe:   server.StartupProbe(),
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
+
+						TerminationMessagePath:   "/dev/termination-log",
+						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
 			},
@@ -319,6 +360,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 
 func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
+		Replicas: ptr.To(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 		},
@@ -332,8 +374,11 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name:    "prefect-server",
-						Image:   server.Image(),
+						Name: "prefect-server",
+
+						Image:           server.Image(),
+						ImagePullPolicy: corev1.PullIfNotPresent,
+
 						Command: server.Command(),
 						Env: append(append([]corev1.EnvVar{
 							{
@@ -345,11 +390,15 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 							{
 								Name:          "api",
 								ContainerPort: 4200,
+								Protocol:      corev1.ProtocolTCP,
 							},
 						},
 						StartupProbe:   server.StartupProbe(),
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
+
+						TerminationMessagePath:   "/dev/termination-log",
+						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
 			},
