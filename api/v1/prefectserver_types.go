@@ -222,7 +222,7 @@ type PrefectServer struct {
 
 func (s *PrefectServer) ServerLabels() map[string]string {
 	return map[string]string{
-		"app": s.Name,
+		"prefect.io/server": s.Name,
 	}
 }
 
@@ -238,6 +238,15 @@ func (s *PrefectServer) Image() string {
 
 func (s *PrefectServer) Command() []string {
 	return []string{"prefect", "server", "start", "--host", "0.0.0.0"}
+}
+
+func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "PREFECT_HOME",
+			Value: "/var/lib/prefect/",
+		},
+	}
 }
 
 func (s *PrefectServer) HealthProbe() corev1.ProbeHandler {

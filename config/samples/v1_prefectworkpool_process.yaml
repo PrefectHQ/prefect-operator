@@ -4,8 +4,10 @@ metadata:
   labels:
     app.kubernetes.io/name: prefect-operator
     app.kubernetes.io/managed-by: kustomize
-  name: prefectworkpool-sample
+  name: sample-pool
 spec:
+  type: process
   server:
     namespace: default
-    name: prefectserver-sqlite
+    name: prefect-ephemeral
+  workers: 3

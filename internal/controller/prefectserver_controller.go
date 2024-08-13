@@ -128,7 +128,7 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
 		return ctrl.Result{}, errors.NewBadRequest("Deployment already exists and is not controlled by PrefectServer " + server.Name)
 	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
-		log.Info("Updating Deployment", "name", desiredService.Name)
+		log.Info("Updating Deployment", "name", desiredDeployment.Name)
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -248,12 +248,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 								MountPath: "/var/lib/prefect/",
 							},
 						},
-						Env: append(append([]corev1.EnvVar{
-							{
-								Name:  "PREFECT_HOME",
-								Value: "/var/lib/prefect/",
-							},
-						}, server.Spec.Ephemeral.ToEnvVars()...), server.Spec.Settings...),
+						Env: append(append(server.ToEnvVars(), server.Spec.Ephemeral.ToEnvVars()...), server.Spec.Settings...),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -332,12 +327,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 								MountPath: "/var/lib/prefect/",
 							},
 						},
-						Env: append(append([]corev1.EnvVar{
-							{
-								Name:  "PREFECT_HOME",
-								Value: "/var/lib/prefect/",
-							},
-						}, server.Spec.SQLite.ToEnvVars()...), server.Spec.Settings...),
+						Env: append(append(server.ToEnvVars(), server.Spec.SQLite.ToEnvVars()...), server.Spec.Settings...),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -380,12 +370,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
 						Command: server.Command(),
-						Env: append(append([]corev1.EnvVar{
-							{
-								Name:  "PREFECT_HOME",
-								Value: "/var/lib/prefect/",
-							},
-						}, server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
+						Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -423,12 +408,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 							Name:    "prefect-server-migration",
 							Image:   server.Image(),
 							Command: []string{"prefect", "server", "database", "migrate", "--yes"},
-							Env: append(append([]corev1.EnvVar{
-								{
-									Name:  "PREFECT_HOME",
-									Value: "/var/lib/prefect/",
-								},
-							}, server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
+							Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyOnFailure,
@@ -445,9 +425,7 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 			Name:      server.Name,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app": server.Name,
-			},
+			Selector: server.ServerLabels(),
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "api",
