@@ -14,7 +14,12 @@ spec:
     singular: prefectserver
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - description: The version of this Prefect server
+      jsonPath: .status.version
+      name: Version
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         description: PrefectServer is the Schema for the prefectservers API
@@ -707,6 +712,10 @@ spec:
                   - type
                   type: object
                 type: array
+              version:
+                description: Version is the version of the Prefect Server that is
+                  currently running
+                type: string
             type: object
         type: object
     served: true

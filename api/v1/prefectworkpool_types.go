@@ -54,13 +54,23 @@ type PrefectServerReference struct {
 
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
 type PrefectWorkPoolStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Version is the version of the Prefect Worker that is currently running
+	Version string `json:"version,omitempty"`
+
+	// ReadyWorkers is the number of workers that are currently ready
+	ReadyWorkers int32 `json:"readyWorkers,omitempty"`
+
+	// Conditions store the status conditions of the PrefectWorkPool instances
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type",description="The type of this work pool"
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this work pool"
+// +kubebuilder:printcolumn:name="Desired Workers",type="integer",JSONPath=".spec.workers",description="How many workers are desired"
+// +kubebuilder:printcolumn:name="Ready Workers",type="integer",JSONPath=".status.readyWorkers",description="How many workers are ready"
 // PrefectWorkPool is the Schema for the prefectworkpools API
 type PrefectWorkPool struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -100,7 +110,11 @@ func (s *PrefectWorkPool) Command() []string {
 }
 
 func (s *PrefectWorkPool) PrefectAPIURL() string {
-	return "http://" + s.Spec.Server.Name + "." + s.Spec.Server.Namespace + ".svc:4200/api"
+	serverNamespace := s.Spec.Server.Namespace
+	if serverNamespace == "" {
+		serverNamespace = s.Namespace
+	}
+	return "http://" + s.Spec.Server.Name + "." + serverNamespace + ".svc:4200/api"
 }
 
 func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {

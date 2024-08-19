@@ -25,8 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const DEFAULT_PREFECT_IMAGE = "prefecthq/prefect:3.0.0rc15-python3.12"
-
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -195,14 +193,8 @@ func (p *PostgresConfiguration) DatabaseEnvVar() corev1.EnvVar {
 
 // PrefectServerStatus defines the observed state of PrefectServer
 type PrefectServerStatus struct {
-	// Represents the observations of a PrefectServer's current state.
-	// PrefectServer.status.conditions.type are: "Available", "Progressing", and "Degraded"
-	// PrefectServer.status.conditions.status are one of True, False, Unknown.
-	// PrefectServer.status.conditions.reason the value should be a CamelCase string and producers of specific
-	// condition types may define expected values and meanings for this field, and whether the values
-	// are considered a guaranteed API.
-	// PrefectServer.status.conditions.Message is a human readable message indicating details about the transition.
-	// For further information see: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// Version is the version of the Prefect Server that is currently running
+	Version string `json:"version,omitempty"`
 
 	// Conditions store the status conditions of the PrefectServer instances
 	// +operator-sdk:csv:customresourcedefinitions:type=status
@@ -211,6 +203,7 @@ type PrefectServerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this Prefect server"
 // PrefectServer is the Schema for the prefectservers API
 type PrefectServer struct {
 	metav1.TypeMeta   `json:",inline"`
