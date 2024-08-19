@@ -1,8 +1,7 @@
 # prefect-operator
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+The Prefect Operator is an application that can manage instances of Prefect.
+It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
 
 ## Getting Started
 
