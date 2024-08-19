@@ -11,6 +11,12 @@ It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
+Dependencies can be installed with [`mise`](https://mise.jdx.dev):
+
+```shell
+mise install
+```
+
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
 
