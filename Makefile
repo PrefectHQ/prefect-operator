@@ -75,11 +75,11 @@ OPM ?= opm
 
 .PHONY: tools
 tools:
-	mise install --yes
+	@mise install --yes
 
 .PHONY: tools-list
 tools-list:
-	mise list --current
+	@mise list --current
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.

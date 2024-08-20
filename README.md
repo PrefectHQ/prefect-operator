@@ -17,6 +17,8 @@ Dependencies can be installed with [`mise`](https://mise.jdx.dev):
 mise install
 ```
 
+This will be called automatically in the relevant `make` targets.
+
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
 
