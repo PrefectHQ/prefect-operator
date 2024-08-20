@@ -8,6 +8,5 @@ metadata:
 spec:
   type: process
   server:
-    namespace: default
     name: prefect-ephemeral
   workers: 3
