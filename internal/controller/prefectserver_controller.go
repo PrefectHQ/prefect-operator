@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"dario.cat/mergo"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -73,87 +75,419 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	desiredDeployment, desiredPVC, desiredMigrationJob := r.prefectServerDeployment(server)
 	desiredService := r.prefectServerService(server)
 
+	var result *ctrl.Result
+
+	// Reconcile the PVC, if one is required
+	result, err = r.reconcilePVC(ctx, server, desiredPVC, log)
+	if result != nil {
+		return *result, err
+	}
+
+	// Reconcile the migration job, if one is required
+	result, err = r.reconcileMigrationJob(ctx, server, desiredMigrationJob, log)
+	if result != nil {
+		return *result, err
+	}
+
+	// Reconcile the Deployment
+	result, err = r.reconcileDeployment(ctx, server, desiredDeployment, log)
+	if result != nil {
+		return *result, err
+	}
+
+	// Reconcile the Service
+	result, err = r.reconcileService(ctx, server, desiredService, log)
+	if result != nil {
+		return *result, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *prefectiov1.PrefectServer, desiredPVC *corev1.PersistentVolumeClaim, log logr.Logger) (*ctrl.Result, error) {
+	if desiredPVC == nil {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "PersistentVolumeClaimReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "PersistentVolumeClaimNotRequired",
+			Message: "PersistentVolumeClaim is not required",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return nil, nil
+	}
+
+	foundPVC := &corev1.PersistentVolumeClaim{}
+	err := r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredPVC.Name}, foundPVC)
+	if errors.IsNotFound(err) {
+		log.Info("Creating PersistentVolumeClaim", "name", desiredPVC.Name)
+		if err = r.Create(ctx, desiredPVC); err != nil {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "PersistentVolumeClaimReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "PersistentVolumeClaimNotCreated",
+				Message: "PersistentVolumeClaim was not created: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+
+			return &ctrl.Result{}, err
+		}
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "PersistentVolumeClaimReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "PersistentVolumeClaimCreated",
+			Message: "PersistentVolumeClaim was created",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+	} else if err != nil {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "PersistentVolumeClaimReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnknownError",
+			Message: "Unknown error: " + err.Error(),
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, err
+	} else if !metav1.IsControlledBy(foundPVC, server) {
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"PersistentVolumeClaim", desiredPVC.Name, server.Name,
+		)
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "PersistentVolumeClaimReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "PersistentVolumeClaimAlreadyExists",
+			Message: errorMessage,
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
+	} else if pvcNeedsUpdate(&foundPVC.Spec, &desiredPVC.Spec, log) {
+		// TODO: handle patching the PVC if there are meaningful updates that we can make,
+		// specifically the size request for a dynamically-provisioned PVC
+	} else {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "PersistentVolumeClaimReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "PersistentVolumeClaimUpdated",
+			Message: "PersistentVolumeClaim is in the correct state",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+	}
+
+	return nil, err
+}
+
+func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, server *prefectiov1.PrefectServer, desiredMigrationJob *batchv1.Job, log logr.Logger) (*ctrl.Result, error) {
+	if desiredMigrationJob == nil {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "MigrationJobReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "MigrationJobNotRequired",
+			Message: "MigrationJob is not required",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return nil, nil
+	}
+
+	foundMigrationJob := &batchv1.Job{}
+	err := r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
+	if errors.IsNotFound(err) {
+		log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
+		if err = r.Create(ctx, desiredMigrationJob); err != nil {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "MigrationJobReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "MigrationJobNotCreated",
+				Message: "MigrationJob was not created: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+
+			return &ctrl.Result{}, err
+		}
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "MigrationJobReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "MigrationJobCreated",
+			Message: "MigrationJob was created",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+	} else if err != nil {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "MigrationJobReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnknownError",
+			Message: "Unknown error: " + err.Error(),
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, err
+	} else if !metav1.IsControlledBy(foundMigrationJob, server) {
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"Job", desiredMigrationJob.Name, server.Name,
+		)
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "MigrationJobReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "MigrationJobAlreadyExists",
+			Message: errorMessage,
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
+	} else if jobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
+		// TODO: handle replacing the job if something has changed
+
+	} else {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "MigrationJobReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "MigrationJobUpdated",
+			Message: "MigrationJob is in the correct state",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+	}
+
+	return nil, err
+}
+
+func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, server *prefectiov1.PrefectServer, desiredDeployment appsv1.Deployment, log logr.Logger) (*ctrl.Result, error) {
 	serverNamespacedName := types.NamespacedName{
 		Namespace: server.Namespace,
 		Name:      server.Name,
 	}
 
-	// Reconcile the PVC, if one is required
-	if desiredPVC != nil {
-		foundPVC := &corev1.PersistentVolumeClaim{}
-		err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredPVC.Name}, foundPVC)
-		if errors.IsNotFound(err) {
-			log.Info("Creating PersistentVolumeClaim", "name", desiredPVC.Name)
-			if err = r.Create(ctx, desiredPVC); err != nil {
-				return ctrl.Result{}, err
-			}
-		} else if err != nil {
-			return ctrl.Result{}, err
-		} else if !metav1.IsControlledBy(foundPVC, server) {
-			return ctrl.Result{}, errors.NewBadRequest("PersistentVolumeClaim already exists and is not controlled by PrefectServer " + server.Name)
-		} else {
-			// TODO: handle patching the PVC if there are meaningful updates that we can make,
-			// specifically the size request for a dynamically-provisioned PVC
-		}
-	}
-
-	// Reconcile the migration job, if one is required
-	if desiredMigrationJob != nil {
-		foundMigrationJob := &batchv1.Job{}
-		err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
-		if errors.IsNotFound(err) {
-			log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
-			if err = r.Create(ctx, desiredMigrationJob); err != nil {
-				return ctrl.Result{}, err
-			}
-		} else if err != nil {
-			return ctrl.Result{}, err
-		} else if !metav1.IsControlledBy(foundMigrationJob, server) {
-			return ctrl.Result{}, errors.NewBadRequest("Job already exists and is not controlled by PrefectServer " + server.Name)
-		} else {
-			// TODO: handle replacing the job if something has changed
-		}
-	}
-
-	// Reconcile the Deployment
 	foundDeployment := &appsv1.Deployment{}
-	err = r.Get(ctx, serverNamespacedName, foundDeployment)
+	err := r.Get(ctx, serverNamespacedName, foundDeployment)
 	if errors.IsNotFound(err) {
 		log.Info("Creating Deployment", "name", desiredDeployment.Name)
 		if err = r.Create(ctx, &desiredDeployment); err != nil {
-			return ctrl.Result{}, err
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "DeploymentReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "DeploymentNotCreated",
+				Message: "Deployment was not created: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+
+			return &ctrl.Result{}, err
+		}
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "DeploymentReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "DeploymentCreated",
+			Message: "Deployment was created",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
-		return ctrl.Result{}, err
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "DeploymentReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnknownError",
+			Message: "Unknown error: " + err.Error(),
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
-		return ctrl.Result{}, errors.NewBadRequest("Deployment already exists and is not controlled by PrefectServer " + server.Name)
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"Deployment", desiredDeployment.Name, server.Name,
+		)
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "DeploymentReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "DeploymentAlreadyExists",
+			Message: errorMessage,
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
 		log.Info("Updating Deployment", "name", desiredDeployment.Name)
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "DeploymentReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "DeploymentNeedsUpdate",
+			Message: "Deployment needs to be updated",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
-			return ctrl.Result{}, err
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "DeploymentReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "DeploymentUpdateFailed",
+				Message: "Deployment update failed: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+			return &ctrl.Result{}, err
+		}
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "DeploymentReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "DeploymentUpdated",
+			Message: "Deployment was updated",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+	} else {
+		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "DeploymentReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "DeploymentUpdated",
+			Message: "Deployment is in the correct state",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	}
+	return nil, err
+}
 
-	// Reconcile the Service
+func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *prefectiov1.PrefectServer, desiredService corev1.Service, log logr.Logger) (*ctrl.Result, error) {
+	serverNamespacedName := types.NamespacedName{
+		Namespace: server.Namespace,
+		Name:      server.Name,
+	}
+
 	foundService := &corev1.Service{}
-	err = r.Get(ctx, serverNamespacedName, foundService)
+	err := r.Get(ctx, serverNamespacedName, foundService)
 	if errors.IsNotFound(err) {
 		log.Info("Creating Service", "name", desiredService.Name)
 		if err = r.Create(ctx, &desiredService); err != nil {
-			return ctrl.Result{}, err
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "ServiceReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "ServiceNotCreated",
+				Message: "Service was not created: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+
+			return &ctrl.Result{}, err
+		}
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "ServiceReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ServiceCreated",
+			Message: "Service was created",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
-		return ctrl.Result{}, err
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "ServiceReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "UnknownError",
+			Message: "Unknown error: " + err.Error(),
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundService, server) {
-		return ctrl.Result{}, errors.NewBadRequest("Service already exists and is not controlled by PrefectServer " + server.Name)
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"Service", desiredService.Name, server.Name,
+		)
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "ServiceReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "ServiceAlreadyExists",
+			Message: errorMessage,
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
+		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if serviceNeedsUpdate(&foundService.Spec, &desiredService.Spec, log) {
 		log.Info("Updating Service", "name", desiredService.Name)
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "ServiceReconciled",
+			Status:  metav1.ConditionFalse,
+			Reason:  "ServiceNeedsUpdate",
+			Message: "Service needs to be updated",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+
 		if err = r.Update(ctx, &desiredService); err != nil {
-			return ctrl.Result{}, err
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "ServiceReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "ServiceUpdateFailed",
+				Message: "Service update failed: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+
+			return &ctrl.Result{}, err
+		}
+
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "ServiceReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ServiceUpdated",
+			Message: "Service was updated",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
+		}
+	} else {
+		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+			Type:    "ServiceReconciled",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ServiceUpdated",
+			Message: "Service is in the correct state",
+		}); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return nil, nil
+}
+
+func (r *PrefectServerReconciler) updateCondition(ctx context.Context, server *prefectiov1.PrefectServer, condition metav1.Condition) error {
+	meta.SetStatusCondition(&server.Status.Conditions, condition)
+	return r.Status().Update(ctx, server)
+}
+
+func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr.Logger) bool {
+	// TODO: check for meaningful updates to the PVC spec
+	return false
+}
+
+func jobNeedsUpdate(current, desired *batchv1.JobSpec, log logr.Logger) bool {
+	// TODO: check for changes to the job spec that require an update
+	return false
 }
 
 func deploymentNeedsUpdate(current, desired *appsv1.DeploymentSpec, log logr.Logger) bool {

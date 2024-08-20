@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -165,7 +166,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					Name:      "example-work-pool",
 				},
 				Spec: prefectiov1.PrefectWorkPoolSpec{
-					Version: ptr.To("3.0.0rc15"),
+					Version: ptr.To("3.0.0rc18"),
 					Type:    "kubernetes",
 				},
 			}
@@ -180,6 +181,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				NamespacedName: name,
 			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, name, prefectworkpool)).To(Succeed())
 
 			deployment = &appsv1.Deployment{}
 			Eventually(func() error {
@@ -188,6 +190,16 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					Name:      "example-work-pool",
 				}, deployment)
 			}).Should(Succeed())
+		})
+
+		Describe("the PrefectWorkPool", func() {
+			It("should have the DeploymentReconciled condition", func() {
+				deploymentReconciled := meta.FindStatusCondition(prefectworkpool.Status.Conditions, "DeploymentReconciled")
+				Expect(deploymentReconciled).NotTo(BeNil())
+				Expect(deploymentReconciled.Status).To(Equal(metav1.ConditionTrue))
+				Expect(deploymentReconciled.Reason).To(Equal("DeploymentCreated"))
+				Expect(deploymentReconciled.Message).To(Equal("Deployment was created"))
+			})
 		})
 
 		Describe("the Deployment", func() {
@@ -215,7 +227,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				container := deployment.Spec.Template.Spec.Containers[0]
 
 				Expect(container.Name).To(Equal("prefect-worker"))
-				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc15-python3.12-kubernetes"))
+				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc18-python3.12-kubernetes"))
 				Expect(container.Command).To(Equal([]string{"prefect", "worker", "start", "--pool", "example-work-pool", "--type", "kubernetes"}))
 			})
 
@@ -262,6 +274,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				NamespacedName: name,
 			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, name, prefectworkpool)).To(Succeed())
 
 			prefectworkpool.Spec.Settings = []corev1.EnvVar{
 				{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
@@ -310,7 +323,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: name,
 			})
-			Expect(err).To(MatchError("Deployment already exists and is not controlled by PrefectWorkPool example-work-pool"))
+			Expect(err).To(MatchError("Deployment example-work-pool already exists and is not controlled by PrefectWorkPool example-work-pool"))
 		})
 	})
 

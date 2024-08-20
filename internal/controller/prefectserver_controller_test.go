@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -181,6 +182,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				deployment = &appsv1.Deployment{}
 				Eventually(func() error {
@@ -197,6 +199,40 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-anything",
 					}, service)
 				}).Should(Succeed())
+			})
+
+			Describe("the PrefectServer", func() {
+				It("should have the DeploymentReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "DeploymentReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("DeploymentCreated"))
+					Expect(condition.Message).To(Equal("Deployment was created"))
+				})
+
+				It("should have the ServiceReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "ServiceReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("ServiceCreated"))
+					Expect(condition.Message).To(Equal("Service was created"))
+				})
+
+				It("should have the PersistentVolumeClaimReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "PersistentVolumeClaimReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("PersistentVolumeClaimNotRequired"))
+					Expect(condition.Message).To(Equal("PersistentVolumeClaim is not required"))
+				})
+
+				It("should have the MigrationJobReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("MigrationJobNotRequired"))
+					Expect(condition.Message).To(Equal("MigrationJob is not required"))
+				})
 			})
 
 			Describe("the Deployment", func() {
@@ -224,7 +260,7 @@ var _ = Describe("PrefectServer controller", func() {
 					container := deployment.Spec.Template.Spec.Containers[0]
 
 					Expect(container.Name).To(Equal("prefect-server"))
-					Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc15-python3.12"))
+					Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc18-python3.12"))
 					Expect(container.Command).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
 				})
 
@@ -303,6 +339,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				prefectserver.Spec.Settings = []corev1.EnvVar{
 					{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
@@ -351,7 +388,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Deployment already exists and is not controlled by PrefectServer prefect-on-anything"))
+				Expect(err).To(MatchError("Deployment prefect-on-anything already exists and is not controlled by PrefectServer prefect-on-anything"))
 			})
 
 			It("should not attempt to update a service that it does not own", func() {
@@ -372,7 +409,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-anything"))
+				Expect(err).To(MatchError("Service prefect-on-anything already exists and is not controlled by PrefectServer prefect-on-anything"))
 			})
 		})
 
@@ -470,6 +507,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				deployment = &appsv1.Deployment{}
 				Eventually(func() error {
@@ -486,6 +524,40 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-ephemeral",
 					}, service)
 				}).Should(Succeed())
+			})
+
+			Describe("the PrefectServer", func() {
+				It("should have the DeploymentReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "DeploymentReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("DeploymentCreated"))
+					Expect(condition.Message).To(Equal("Deployment was created"))
+				})
+
+				It("should have the ServiceReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "ServiceReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("ServiceCreated"))
+					Expect(condition.Message).To(Equal("Service was created"))
+				})
+
+				It("should have the PersistentVolumeClaimReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "PersistentVolumeClaimReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("PersistentVolumeClaimNotRequired"))
+					Expect(condition.Message).To(Equal("PersistentVolumeClaim is not required"))
+				})
+
+				It("should have the MigrationJobReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("MigrationJobNotRequired"))
+					Expect(condition.Message).To(Equal("MigrationJob is not required"))
+				})
 			})
 
 			Describe("the Deployment", func() {
@@ -542,6 +614,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				prefectserver.Spec.Settings = []corev1.EnvVar{
 					{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
@@ -590,7 +663,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Deployment already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
+				Expect(err).To(MatchError("Deployment prefect-on-ephemeral already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
 			})
 
 			It("should not attempt to update a service that it does not own", func() {
@@ -611,7 +684,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
+				Expect(err).To(MatchError("Service prefect-on-ephemeral already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
 			})
 		})
 
@@ -716,6 +789,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				persistentVolumeClaim = &corev1.PersistentVolumeClaim{}
 				Eventually(func() error {
@@ -740,6 +814,40 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-sqlite",
 					}, service)
 				}).Should(Succeed())
+			})
+
+			Describe("the PrefectServer", func() {
+				It("should have the DeploymentReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "DeploymentReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("DeploymentCreated"))
+					Expect(condition.Message).To(Equal("Deployment was created"))
+				})
+
+				It("should have the ServiceReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "ServiceReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("ServiceCreated"))
+					Expect(condition.Message).To(Equal("Service was created"))
+				})
+
+				It("should have the PersistentVolumeClaimReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "PersistentVolumeClaimReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("PersistentVolumeClaimCreated"))
+					Expect(condition.Message).To(Equal("PersistentVolumeClaim was created"))
+				})
+
+				It("should have the MigrationJobReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("MigrationJobNotRequired"))
+					Expect(condition.Message).To(Equal("MigrationJob is not required"))
+				})
 			})
 
 			Describe("the Deployment", func() {
@@ -805,6 +913,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				prefectserver.Spec.Settings = []corev1.EnvVar{
 					{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
@@ -853,7 +962,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("PersistentVolumeClaim already exists and is not controlled by PrefectServer prefect-on-sqlite"))
+				Expect(err).To(MatchError("PersistentVolumeClaim prefect-on-sqlite-data already exists and is not controlled by PrefectServer prefect-on-sqlite"))
 			})
 
 			It("should not attempt to update a Deployment that it does not own", func() {
@@ -874,7 +983,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Deployment already exists and is not controlled by PrefectServer prefect-on-sqlite"))
+				Expect(err).To(MatchError("Deployment prefect-on-sqlite already exists and is not controlled by PrefectServer prefect-on-sqlite"))
 			})
 
 			It("should not attempt to update a service that it does not own", func() {
@@ -895,7 +1004,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-sqlite"))
+				Expect(err).To(MatchError("Service prefect-on-sqlite already exists and is not controlled by PrefectServer prefect-on-sqlite"))
 			})
 		})
 
@@ -1009,6 +1118,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
@@ -1033,6 +1143,40 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-postgres",
 					}, service)
 				}).Should(Succeed())
+			})
+
+			Describe("the PrefectServer", func() {
+				It("should have the DeploymentReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "DeploymentReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("DeploymentCreated"))
+					Expect(condition.Message).To(Equal("Deployment was created"))
+				})
+
+				It("should have the ServiceReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "ServiceReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("ServiceCreated"))
+					Expect(condition.Message).To(Equal("Service was created"))
+				})
+
+				It("should have the PersistentVolumeClaimReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "PersistentVolumeClaimReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("PersistentVolumeClaimNotRequired"))
+					Expect(condition.Message).To(Equal("PersistentVolumeClaim is not required"))
+				})
+
+				It("should have the MigrationJobReconciled condition", func() {
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					Expect(condition.Reason).To(Equal("MigrationJobCreated"))
+					Expect(condition.Message).To(Equal("MigrationJob was created"))
+				})
 			})
 
 			Describe("the Deployment", func() {
@@ -1257,6 +1401,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				prefectserver.Spec.Settings = []corev1.EnvVar{
 					{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
@@ -1305,7 +1450,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Job already exists and is not controlled by PrefectServer prefect-on-postgres"))
+				Expect(err).To(MatchError("Job prefect-on-postgres-migration already exists and is not controlled by PrefectServer prefect-on-postgres"))
 			})
 
 			It("should not attempt to update a Deployment that it does not own", func() {
@@ -1326,7 +1471,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Deployment already exists and is not controlled by PrefectServer prefect-on-postgres"))
+				Expect(err).To(MatchError("Deployment prefect-on-postgres already exists and is not controlled by PrefectServer prefect-on-postgres"))
 			})
 
 			It("should not attempt to update a service that it does not own", func() {
@@ -1347,7 +1492,7 @@ var _ = Describe("PrefectServer controller", func() {
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Service already exists and is not controlled by PrefectServer prefect-on-postgres"))
+				Expect(err).To(MatchError("Service prefect-on-postgres already exists and is not controlled by PrefectServer prefect-on-postgres"))
 			})
 		})
 

@@ -8,6 +8,5 @@ metadata:
 spec:
   type: kubernetes
   server:
-    namespace: default
     name: prefect-ephemeral
   workers: 3
