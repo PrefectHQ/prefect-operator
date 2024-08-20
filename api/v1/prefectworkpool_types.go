@@ -55,10 +55,10 @@ type PrefectServerReference struct {
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
 type PrefectWorkPoolStatus struct {
 	// Version is the version of the Prefect Worker that is currently running
-	Version string `json:"version,omitempty"`
+	Version string `json:"version"`
 
 	// ReadyWorkers is the number of workers that are currently ready
-	ReadyWorkers int32 `json:"readyWorkers,omitempty"`
+	ReadyWorkers int32 `json:"readyWorkers"`
 
 	// Conditions store the status conditions of the PrefectWorkPool instances
 	// +operator-sdk:csv:customresourcedefinitions:type=status

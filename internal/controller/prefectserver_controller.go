@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"dario.cat/mergo"
 	appsv1 "k8s.io/api/apps/v1"
@@ -156,7 +157,10 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundPVC, server) {
-		errorMessage := "PersistentVolumeClaim " + desiredPVC.Name + " already exists and is not controlled by PrefectServer " + server.Name
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"PersistentVolumeClaim", desiredPVC.Name, server.Name,
+		)
 
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
 			Type:    "PersistentVolumeClaimReconciled",
@@ -239,7 +243,10 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundMigrationJob, server) {
-		errorMessage := "Job " + desiredMigrationJob.Name + " already exists and is not controlled by PrefectServer " + server.Name
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"Job", desiredMigrationJob.Name, server.Name,
+		)
 
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
 			Type:    "MigrationJobReconciled",
@@ -313,7 +320,10 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		}
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
-		errorMessage := "Deployment " + server.Name + " already exists and is not controlled by PrefectServer " + server.Name
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"Deployment", desiredDeployment.Name, server.Name,
+		)
 
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
 			Type:    "DeploymentReconciled",
@@ -419,7 +429,10 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 		}
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundService, server) {
-		errorMessage := "Service " + server.Name + " already exists and is not controlled by PrefectServer " + server.Name
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectServer %s",
+			"Service", desiredService.Name, server.Name,
+		)
 
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
 			Type:    "ServiceReconciled",

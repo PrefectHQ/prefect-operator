@@ -194,7 +194,7 @@ func (p *PostgresConfiguration) DatabaseEnvVar() corev1.EnvVar {
 // PrefectServerStatus defines the observed state of PrefectServer
 type PrefectServerStatus struct {
 	// Version is the version of the Prefect Server that is currently running
-	Version string `json:"version,omitempty"`
+	Version string `json:"version"`
 
 	// Conditions store the status conditions of the PrefectServer instances
 	// +operator-sdk:csv:customresourcedefinitions:type=status

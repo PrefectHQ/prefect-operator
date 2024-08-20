@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -106,7 +107,10 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		return ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, workPool) {
-		errorMessage := "Deployment " + workPool.Name + " already exists and is not controlled by PrefectWorkPool " + workPool.Name
+		errorMessage := fmt.Sprintf(
+			"%s %s already exists and is not controlled by PrefectWorkPool %s",
+			"Deployment", desiredDeployment.Name, workPool.Name,
+		)
 
 		meta.SetStatusCondition(&workPool.Status.Conditions, metav1.Condition{
 			Type:    "DeploymentReconciled",
