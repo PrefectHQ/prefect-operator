@@ -6,4 +6,8 @@ kube-controller-tools = '0.14.0'
 kubectl = '1.31'
 kustomize = '5.3.0'
 operator-sdk = '1.36.1'
+opm = '1.46.0'
 setup-envtest = '0.17.0'
+
+[plugins]
+opm = 'https://gitlab.com/dmakovey/asdf-opm'
