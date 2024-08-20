@@ -1,8 +1,7 @@
 # prefect-operator
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+The Prefect Operator is an application that can manage instances of Prefect.
+It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
 
 ## Getting Started
 
@@ -11,6 +10,14 @@
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+
+Dependencies can be installed with [`mise`](https://mise.jdx.dev):
+
+```shell
+mise install
+```
+
+This will be called automatically in the relevant `make` targets.
 
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
@@ -90,8 +97,6 @@ kubectl apply -f https://raw.githubusercontent.com/<org>/prefect-operator/<tag o
 ```
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
