@@ -50,6 +50,7 @@ type PrefectServerReconciler struct {
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
