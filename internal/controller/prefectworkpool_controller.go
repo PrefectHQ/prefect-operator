@@ -152,17 +152,29 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, statusErr
 		}
 	} else {
-		workPool.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
-		workPool.Status.ReadyWorkers = foundDeployment.Status.ReadyReplicas
+		imageVersion := prefectiov1.VersionFromImage(foundDeployment.Spec.Template.Spec.Containers[0].Image)
 
-		if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "DeploymentUpdated",
-			Message: "Deployment is in the correct state",
-		}); statusErr != nil {
-			return ctrl.Result{}, statusErr
+		if workPool.Status.Version != imageVersion ||
+			!meta.IsStatusConditionTrue(workPool.Status.Conditions, "DeploymentReconciled") {
+
+			workPool.Status.Version = imageVersion
+			workPool.Status.ReadyWorkers = foundDeployment.Status.ReadyReplicas
+
+			if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
+				Type:    "DeploymentReconciled",
+				Status:  metav1.ConditionTrue,
+				Reason:  "DeploymentUpdated",
+				Message: "Deployment is in the correct state",
+			}); statusErr != nil {
+				return ctrl.Result{}, statusErr
+			}
+		} else if workPool.Status.ReadyWorkers != foundDeployment.Status.ReadyReplicas {
+			workPool.Status.ReadyWorkers = foundDeployment.Status.ReadyReplicas
+			if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+				return ctrl.Result{}, statusErr
+			}
 		}
+
 	}
 
 	return ctrl.Result{}, nil

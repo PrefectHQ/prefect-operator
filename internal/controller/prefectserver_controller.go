@@ -174,13 +174,15 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		// TODO: handle patching the PVC if there are meaningful updates that we can make,
 		// specifically the size request for a dynamically-provisioned PVC
 	} else {
-		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
-			Type:    "PersistentVolumeClaimReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "PersistentVolumeClaimUpdated",
-			Message: "PersistentVolumeClaim is in the correct state",
-		}); statusErr != nil {
-			return &ctrl.Result{}, statusErr
+		if !meta.IsStatusConditionTrue(server.Status.Conditions, "PersistentVolumeClaimReconciled") {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "PersistentVolumeClaimReconciled",
+				Status:  metav1.ConditionTrue,
+				Reason:  "PersistentVolumeClaimUpdated",
+				Message: "PersistentVolumeClaim is in the correct state",
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
 		}
 	}
 
@@ -256,13 +258,15 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 		// TODO: handle replacing the job if something has changed
 
 	} else {
-		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
-			Type:    "MigrationJobReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "MigrationJobUpdated",
-			Message: "MigrationJob is in the correct state",
-		}); statusErr != nil {
-			return &ctrl.Result{}, statusErr
+		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "MigrationJobReconciled",
+				Status:  metav1.ConditionTrue,
+				Reason:  "MigrationJobUpdated",
+				Message: "MigrationJob is in the correct state",
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
 		}
 	}
 
@@ -291,6 +295,9 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 
 			return &ctrl.Result{}, err
 		}
+
+		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+
 		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
 			Type:    "DeploymentReconciled",
 			Status:  metav1.ConditionTrue,
@@ -358,15 +365,20 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			return &ctrl.Result{}, statusErr
 		}
 	} else {
-		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+		imageVersion := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+		if server.Status.Version != imageVersion ||
+			!meta.IsStatusConditionTrue(server.Status.Conditions, "DeploymentReconciled") {
 
-		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "DeploymentUpdated",
-			Message: "Deployment is in the correct state",
-		}); statusErr != nil {
-			return &ctrl.Result{}, statusErr
+			server.Status.Version = imageVersion
+
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "DeploymentReconciled",
+				Status:  metav1.ConditionTrue,
+				Reason:  "DeploymentUpdated",
+				Message: "Deployment is in the correct state",
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
 		}
 	}
 	return nil, err
@@ -462,13 +474,15 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			return &ctrl.Result{}, statusErr
 		}
 	} else {
-		if statusErr := r.updateCondition(ctx, server, metav1.Condition{
-			Type:    "ServiceReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "ServiceUpdated",
-			Message: "Service is in the correct state",
-		}); statusErr != nil {
-			return &ctrl.Result{}, statusErr
+		if !meta.IsStatusConditionTrue(server.Status.Conditions, "ServiceReconciled") {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "ServiceReconciled",
+				Status:  metav1.ConditionTrue,
+				Reason:  "ServiceUpdated",
+				Message: "Service is in the correct state",
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
 		}
 	}
 
