@@ -129,8 +129,8 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 				Reason:  "PersistentVolumeClaimNotCreated",
 				Message: "PersistentVolumeClaim was not created: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, server); err != nil {
-				return &ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
 			}
 			return &ctrl.Result{}, err
 		}
@@ -141,8 +141,8 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 			Reason:  "PersistentVolumeClaimCreated",
 			Message: "PersistentVolumeClaim was created",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
@@ -151,8 +151,8 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 			Reason:  "UnknownError",
 			Message: "Unknown error: " + err.Error(),
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		return &ctrl.Result{}, err
@@ -168,8 +168,8 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 			Reason:  "PersistentVolumeClaimAlreadyExists",
 			Message: errorMessage,
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
@@ -183,8 +183,8 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 			Reason:  "PersistentVolumeClaimUpdated",
 			Message: "PersistentVolumeClaim is in the correct state",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	}
 
@@ -216,8 +216,8 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 				Reason:  "MigrationJobNotCreated",
 				Message: "MigrationJob was not created: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, server); err != nil {
-				return &ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
 			}
 			return &ctrl.Result{}, err
 		}
@@ -227,8 +227,8 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			Reason:  "MigrationJobCreated",
 			Message: "MigrationJob was created",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
@@ -237,8 +237,8 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			Reason:  "UnknownError",
 			Message: "Unknown error: " + err.Error(),
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		return &ctrl.Result{}, err
@@ -254,8 +254,8 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			Reason:  "MigrationJobAlreadyExists",
 			Message: errorMessage,
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
@@ -269,8 +269,8 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			Reason:  "MigrationJobUpdated",
 			Message: "MigrationJob is in the correct state",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	}
 
@@ -294,8 +294,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 				Reason:  "DeploymentNotCreated",
 				Message: "Deployment was not created: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, server); err != nil {
-				return &ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
 			}
 			return &ctrl.Result{}, err
 		}
@@ -305,8 +305,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			Reason:  "DeploymentCreated",
 			Message: "Deployment was created",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
@@ -315,8 +315,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			Reason:  "UnknownError",
 			Message: "Unknown error: " + err.Error(),
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
@@ -331,8 +331,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			Reason:  "DeploymentAlreadyExists",
 			Message: errorMessage,
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
@@ -344,8 +344,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			Reason:  "DeploymentNeedsUpdate",
 			Message: "Deployment needs to be updated",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
@@ -355,8 +355,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 				Reason:  "DeploymentUpdateFailed",
 				Message: "Deployment update failed: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, server); err != nil {
-				return &ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
 			}
 			return &ctrl.Result{}, err
 		}
@@ -367,8 +367,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			Reason:  "DeploymentUpdated",
 			Message: "Deployment was updated",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else {
 		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
@@ -379,8 +379,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			Reason:  "DeploymentUpdated",
 			Message: "Deployment is in the correct state",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	}
 	return nil, err
@@ -403,8 +403,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 				Reason:  "ServiceNotCreated",
 				Message: "Service was not created: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, server); err != nil {
-				return &ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
 			}
 			return &ctrl.Result{}, err
 		}
@@ -414,8 +414,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			Reason:  "ServiceCreated",
 			Message: "Service was created",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
@@ -424,8 +424,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			Reason:  "UnknownError",
 			Message: "Unknown error: " + err.Error(),
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundService, server) {
@@ -440,8 +440,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			Reason:  "ServiceAlreadyExists",
 			Message: errorMessage,
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
@@ -453,8 +453,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			Reason:  "ServiceNeedsUpdate",
 			Message: "Service needs to be updated",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 
 		if err = r.Update(ctx, &desiredService); err != nil {
@@ -464,8 +464,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 				Reason:  "ServiceUpdateFailed",
 				Message: "Service update failed: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, server); err != nil {
-				return &ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
 			}
 			return &ctrl.Result{}, err
 		}
@@ -476,8 +476,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			Reason:  "ServiceUpdated",
 			Message: "Service was updated",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	} else {
 		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
@@ -486,8 +486,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			Reason:  "ServiceUpdated",
 			Message: "Service is in the correct state",
 		})
-		if err = r.Status().Update(ctx, server); err != nil {
-			return &ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			return &ctrl.Result{}, statusErr
 		}
 	}
 	return nil, nil

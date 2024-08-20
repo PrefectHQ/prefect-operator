@@ -80,8 +80,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				Reason:  "DeploymentNotCreated",
 				Message: "Deployment was not created: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, workPool); err != nil {
-				return ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+				return ctrl.Result{}, statusErr
 			}
 			return ctrl.Result{}, err
 		}
@@ -91,8 +91,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Reason:  "DeploymentCreated",
 			Message: "Deployment was created",
 		})
-		if err = r.Status().Update(ctx, workPool); err != nil {
-			return ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+			return ctrl.Result{}, statusErr
 		}
 	} else if err != nil {
 		meta.SetStatusCondition(&workPool.Status.Conditions, metav1.Condition{
@@ -101,8 +101,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Reason:  "UnknownError",
 			Message: "Unknown error: " + err.Error(),
 		})
-		if err = r.Status().Update(ctx, workPool); err != nil {
-			return ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+			return ctrl.Result{}, statusErr
 		}
 
 		return ctrl.Result{}, err
@@ -118,8 +118,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Reason:  "DeploymentAlreadyExists",
 			Message: errorMessage,
 		})
-		if err = r.Status().Update(ctx, workPool); err != nil {
-			return ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+			return ctrl.Result{}, statusErr
 		}
 
 		return ctrl.Result{}, errors.NewBadRequest(errorMessage)
@@ -132,8 +132,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Reason:  "DeploymentNeedsUpdate",
 			Message: "Deployment needs to be updated",
 		})
-		if err = r.Status().Update(ctx, workPool); err != nil {
-			return ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+			return ctrl.Result{}, statusErr
 		}
 
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
@@ -143,8 +143,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				Reason:  "DeploymentUpdateFailed",
 				Message: "Deployment update failed: " + err.Error(),
 			})
-			if err = r.Status().Update(ctx, workPool); err != nil {
-				return ctrl.Result{}, err
+			if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+				return ctrl.Result{}, statusErr
 			}
 			return ctrl.Result{}, err
 		}
@@ -155,8 +155,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Reason:  "DeploymentUpdated",
 			Message: "Deployment was updated",
 		})
-		if err = r.Status().Update(ctx, workPool); err != nil {
-			return ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+			return ctrl.Result{}, statusErr
 		}
 	} else {
 		workPool.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
@@ -168,8 +168,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Reason:  "DeploymentUpdated",
 			Message: "Deployment is in the correct state",
 		})
-		if err = r.Status().Update(ctx, workPool); err != nil {
-			return ctrl.Result{}, err
+		if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
+			return ctrl.Result{}, statusErr
 		}
 	}
 
