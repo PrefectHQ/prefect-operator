@@ -38,6 +38,8 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/conditions"
+	"github.com/PrefectHQ/prefect-operator/internal/constants"
 	"github.com/go-logr/logr"
 )
 
@@ -116,8 +118,10 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		}
 	}()
 
+	objName := constants.PVC
+
 	if desiredPVC == nil {
-		condition = conditionPVCNotRequired
+		condition = conditions.NotRequired(objName)
 
 		return nil, nil
 	}
@@ -127,14 +131,14 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 	if errors.IsNotFound(err) {
 		log.Info("Creating PersistentVolumeClaim", "name", desiredPVC.Name)
 		if err = r.Create(ctx, desiredPVC); err != nil {
-			condition = conditionPVCNotCreated(err)
+			condition = conditions.NotCreated(objName, err)
 
 			return &ctrl.Result{}, err
 		}
 
-		condition = conditionPVCCreated
+		condition = conditions.Created(objName)
 	} else if err != nil {
-		condition = conditionPVCUnknownError(err)
+		condition = conditions.UnknownError(objName, err)
 
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundPVC, server) {
@@ -142,7 +146,7 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 			"%s %s already exists and is not controlled by PrefectServer %s",
 			"PersistentVolumeClaim", desiredPVC.Name, server.Name,
 		)
-		condition = conditionPVCAlreadyExists(errorMessage)
+		condition = conditions.AlreadyExists(objName, errorMessage)
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if pvcNeedsUpdate(&foundPVC.Spec, &desiredPVC.Spec, log) {
@@ -150,7 +154,7 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		// specifically the size request for a dynamically-provisioned PVC
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "PersistentVolumeClaimReconciled") {
-			condition = conditionPVCUpdated
+			condition = conditions.Updated(objName)
 		}
 	}
 
@@ -167,8 +171,10 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 		}
 	}()
 
+	objName := constants.MigrationJob
+
 	if desiredMigrationJob == nil {
-		condition = conditionMigrationJobNotRequired
+		condition = conditions.NotRequired(objName)
 
 		return nil, nil
 	}
@@ -178,14 +184,14 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 	if errors.IsNotFound(err) {
 		log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
 		if err = r.Create(ctx, desiredMigrationJob); err != nil {
-			condition = notCreated("MigrationJob", err)
+			condition = conditions.NotCreated(objName, err)
 
 			return &ctrl.Result{}, err
 		}
 
-		condition = created("MigrationJob")
+		condition = conditions.Created(objName)
 	} else if err != nil {
-		condition = conditionUnknownError("MigrationJob", err)
+		condition = conditions.UnknownError(objName, err)
 
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundMigrationJob, server) {
@@ -194,7 +200,7 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			"Job", desiredMigrationJob.Name, server.Name,
 		)
 
-		condition = conditionAlreadyExists("MigrationJob", errorMessage)
+		condition = conditions.AlreadyExists(objName, errorMessage)
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if jobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
@@ -202,7 +208,7 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
-			condition = conditionUpdated("MigrationJob")
+			condition = conditions.Updated(objName)
 		}
 	}
 
@@ -219,6 +225,8 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		}
 	}()
 
+	objName := constants.Deployment
+
 	serverNamespacedName := types.NamespacedName{
 		Namespace: server.Namespace,
 		Name:      server.Name,
@@ -229,16 +237,16 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 	if errors.IsNotFound(err) {
 		log.Info("Creating Deployment", "name", desiredDeployment.Name)
 		if err = r.Create(ctx, &desiredDeployment); err != nil {
-			condition = notCreated("Deployment", err)
+			condition = conditions.NotCreated(objName, err)
 
 			return &ctrl.Result{}, err
 		}
 
 		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
 
-		condition = created("Deployment")
+		condition = conditions.Created(objName)
 	} else if err != nil {
-		condition = conditionUnknownError("Deployment", err)
+		condition = conditions.UnknownError(objName, err)
 
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, server) {
@@ -247,20 +255,20 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			"Deployment", desiredDeployment.Name, server.Name,
 		)
 
-		condition = conditionAlreadyExists("Deployment", errorMessage)
+		condition = conditions.AlreadyExists(objName, errorMessage)
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
 		log.Info("Updating Deployment", "name", desiredDeployment.Name)
-		condition = conditionNeedsUpdate("Deployment")
+		condition = conditions.NeedsUpdate(objName)
 
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
-			condition = conditionUpdateFailed("Deployment", err)
+			condition = conditions.UpdateFailed(objName, err)
 
 			return &ctrl.Result{}, err
 		}
 
-		condition = conditionUpdated("Deployment")
+		condition = conditions.Updated(objName)
 	} else {
 		imageVersion := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
 		if server.Status.Version != imageVersion ||
@@ -268,7 +276,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 
 			server.Status.Version = imageVersion
 
-			condition = conditionUpdated("Deployment")
+			condition = conditions.Updated(objName)
 		}
 	}
 	return nil, err
@@ -284,6 +292,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 		}
 	}()
 
+	objName := constants.Service
+
 	serverNamespacedName := types.NamespacedName{
 		Namespace: server.Namespace,
 		Name:      server.Name,
@@ -294,14 +304,14 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 	if errors.IsNotFound(err) {
 		log.Info("Creating Service", "name", desiredService.Name)
 		if err = r.Create(ctx, &desiredService); err != nil {
-			condition = notCreated("Service", err)
+			condition = conditions.NotCreated("Service", err)
 
 			return &ctrl.Result{}, err
 		}
 
-		condition = created("Service")
+		condition = conditions.Created(objName)
 	} else if err != nil {
-		condition = conditionUnknownError("Service", err)
+		condition = conditions.UnknownError(objName, err)
 
 		return &ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundService, server) {
@@ -310,12 +320,12 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			"Service", desiredService.Name, server.Name,
 		)
 
-		condition = conditionAlreadyExists("Service", errorMessage)
+		condition = conditions.AlreadyExists(objName, errorMessage)
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if serviceNeedsUpdate(&foundService.Spec, &desiredService.Spec, log) {
 		log.Info("Updating Service", "name", desiredService.Name)
-		condition = conditionNeedsUpdate("Service")
+		condition = conditions.NeedsUpdate(objName)
 
 		if err = r.Update(ctx, &desiredService); err != nil {
 			condition = metav1.Condition{
@@ -328,7 +338,7 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 			return &ctrl.Result{}, err
 		}
 
-		condition = conditionUpdated("Service")
+		condition = conditions.Updated(objName)
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "ServiceReconciled") {
 			condition = metav1.Condition{
