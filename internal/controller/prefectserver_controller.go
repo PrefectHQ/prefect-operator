@@ -756,7 +756,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 						{
 							Name:    "prefect-server-migration",
 							Image:   server.Image(),
-							Command: []string{"prefect", "server", "database", "migrate", "--yes"},
+							Command: []string{"prefect", "server", "database", "upgrade", "--yes"},
 							Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
 						},
 					},
