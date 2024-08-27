@@ -204,13 +204,20 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 	} else if migrationJobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
 		log.Info("Recreating migration Job", "name", desiredMigrationJob.Name)
 		condition = conditions.NeedsUpdate(objName)
-		if err = r.Update(ctx, desiredMigrationJob); err != nil {
-			condition = conditions.UpdateFailed(objName, err)
 
+		// deletes the job + recreates it.
+		// k8s Jobs are immutable and need to be recreated if they are to be re-run.
+		if err = r.Delete(ctx, foundMigrationJob); err != nil {
+			condition = conditions.NotDeleted(objName, err)
 			return &ctrl.Result{}, err
 		}
 
-		condition = conditions.Updated(objName)
+		if err = r.Create(ctx, desiredMigrationJob); err != nil {
+			condition = conditions.NotCreated(objName, err)
+			return &ctrl.Result{}, err
+		}
+
+		condition = conditions.Created(objName)
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
 			condition = conditions.Updated(objName)

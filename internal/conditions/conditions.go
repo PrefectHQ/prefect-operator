@@ -24,6 +24,15 @@ func NotCreated(object string, err error) metav1.Condition {
 	}
 }
 
+func NotDeleted(object string, err error) metav1.Condition {
+	return newCondition(
+		fmt.Sprintf("%sReconciled", object),
+		fmt.Sprintf("%sNotDeleted", object),
+		fmt.Sprintf("%s was not deleted: %v", object, err.Error()),
+		metav1.ConditionFalse,
+	)
+}
+
 func Created(object string) metav1.Condition {
 	return metav1.Condition{
 		Type:    fmt.Sprintf("%sReconciled", object),
