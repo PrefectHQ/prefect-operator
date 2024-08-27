@@ -40,6 +40,9 @@ type PrefectWorkPoolSpec struct {
 	// Workers defines the number of workers to run in the Work Pool
 	Workers int32 `json:"workers,omitempty"`
 
+	// Resources defines the CPU and memory resources for each worker in the Work Pool
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// A list of environment variables to set on the Prefect Server
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 }

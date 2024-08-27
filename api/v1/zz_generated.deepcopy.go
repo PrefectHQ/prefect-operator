@@ -193,6 +193,7 @@ func (in *PrefectServerSpec) DeepCopyInto(out *PrefectServerSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	in.Resources.DeepCopyInto(&out.Resources)
 	if in.Ephemeral != nil {
 		in, out := &in.Ephemeral, &out.Ephemeral
 		*out = new(EphemeralConfiguration)
@@ -322,6 +323,7 @@ func (in *PrefectWorkPoolSpec) DeepCopyInto(out *PrefectWorkPoolSpec) {
 		**out = **in
 	}
 	out.Server = in.Server
+	in.Resources.DeepCopyInto(&out.Resources)
 	if in.Settings != nil {
 		in, out := &in.Settings, &out.Settings
 		*out = make([]corev1.EnvVar, len(*in))

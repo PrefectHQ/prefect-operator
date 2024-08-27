@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -168,6 +169,16 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Spec: prefectiov1.PrefectWorkPoolSpec{
 					Version: ptr.To("3.0.0rc18"),
 					Type:    "kubernetes",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectworkpool)).To(Succeed())
@@ -246,6 +257,20 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 				Expect(container.Ports).To(BeEmpty())
 			})
+
+			It("should have the specified resource requirements", func() {
+				Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+				container := deployment.Spec.Template.Spec.Containers[0]
+
+				Expect(container.Resources.Requests).To(Equal(corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("128Mi"),
+				}))
+				Expect(container.Resources.Limits).To(Equal(corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				}))
+			})
 		})
 	})
 
@@ -260,6 +285,18 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespaceName,
 					Name:      "example-work-pool",
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectworkpool)).To(Succeed())
@@ -278,6 +315,16 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 			prefectworkpool.Spec.Settings = []corev1.EnvVar{
 				{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
+			}
+			prefectworkpool.Spec.Resources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("200m"),
+					corev1.ResourceMemory: resource.MustParse("256Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1"),
+					corev1.ResourceMemory: resource.MustParse("1Gi"),
+				},
 			}
 			Expect(k8sClient.Update(ctx, prefectworkpool)).To(Succeed())
 
@@ -302,6 +349,27 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			Expect(container.Env).To(ContainElement(corev1.EnvVar{
 				Name:  "PREFECT_SOME_SETTING",
 				Value: "some-value",
+			}))
+		})
+
+		It("should update the Deployment with new resource requirements", func() {
+			deployment := &appsv1.Deployment{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "example-work-pool",
+				}, deployment)
+			}).Should(Succeed())
+
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.Resources.Requests).To(Equal(corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("200m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			}))
+			Expect(container.Resources.Limits).To(Equal(corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
 			}))
 		})
 
