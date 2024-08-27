@@ -1548,6 +1548,23 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+
+				// Eventually(func() error {
+				// 	yo := &batchv1.Job{}
+				// 	dawg := k8sClient.Get(specCtx, types.NamespacedName{
+				// 		Namespace: namespaceName,
+				// 		Name:      "prefect-on-postgres-migration",
+				// 	}, yo)
+
+				// 	GinkgoWriter.Println("FOOOOOBAR")
+				// 	GinkgoWriter.Println(yo.DeletionTimestamp)
+				// 	GinkgoWriter.Println(dawg)
+
+				// 	return k8sClient.Get(specCtx, types.NamespacedName{
+				// 		Namespace: namespaceName,
+				// 		Name:      "prefect-on-postgres-migration",
+				// 	}, &batchv1.Job{})
+				// }).WithContext(specCtx).ShouldNot(Succeed())
 			})
 
 			It("should update the Deployment with the new setting", func() {
