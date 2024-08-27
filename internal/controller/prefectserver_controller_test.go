@@ -1549,22 +1549,34 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				// Eventually(func() error {
-				// 	yo := &batchv1.Job{}
-				// 	dawg := k8sClient.Get(specCtx, types.NamespacedName{
-				// 		Namespace: namespaceName,
-				// 		Name:      "prefect-on-postgres-migration",
-				// 	}, yo)
+				Eventually(func() error {
+					// clusterInstance, _ := cluster.New(cfg)
+					// reader := clusterInstance.GetAPIReader()
 
-				// 	GinkgoWriter.Println("FOOOOOBAR")
-				// 	GinkgoWriter.Println(yo.DeletionTimestamp)
-				// 	GinkgoWriter.Println(dawg)
+					batch := &batchv1.Job{}
+					// err := reader.Get(ctx, types.NamespacedName{
+					err := k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      "prefect-on-postgres-migration",
+					}, batch)
 
-				// 	return k8sClient.Get(specCtx, types.NamespacedName{
-				// 		Namespace: namespaceName,
-				// 		Name:      "prefect-on-postgres-migration",
-				// 	}, &batchv1.Job{})
-				// }).WithContext(specCtx).ShouldNot(Succeed())
+					GinkgoWriter.Println("FOOOOOBAR")
+					GinkgoWriter.Println(batch.DeletionTimestamp)
+					GinkgoWriter.Println(batch.GetDeletionTimestamp())
+					GinkgoWriter.Println(err)
+
+					controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: name,
+					})
+
+					return err
+				}, 30*time.Second, 1*time.Second).Should(HaveOccurred())
+
+				// Reconcile again to update the server
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should update the Deployment with the new setting", func() {

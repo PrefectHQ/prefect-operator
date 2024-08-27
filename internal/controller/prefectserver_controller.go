@@ -203,13 +203,14 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if migrationJobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
-		log.Info("migration Job needs to be updated and replaced", "name", desiredMigrationJob.Name)
+		log.Info("Will replace migration Job", "name", desiredMigrationJob.Name)
 		condition = conditions.NeedsUpdate(objName)
 
 		// deletes the Job, so it can be recreated on the following reconciliation.
 		// k8s Jobs are immutable and need to be recreated if they are to be re-run.
 		if foundMigrationJob.GetDeletionTimestamp() == nil {
 			log.Info("Deleting existing migration Job", "name", foundMigrationJob.Name)
+
 			if err = r.Delete(ctx, foundMigrationJob); err != nil {
 				condition = conditions.NotDeleted(objName, err)
 				return &ctrl.Result{}, err
@@ -219,6 +220,7 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			log.Info("Waiting for migration Job to be deleted, so it can be recreated", "name", desiredMigrationJob.Name)
 		}
 		return &ctrl.Result{Requeue: true}, nil
+
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
 			condition = conditions.Updated(objName)
