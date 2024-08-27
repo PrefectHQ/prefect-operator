@@ -64,7 +64,6 @@ type PrefectWorkPoolStatus struct {
 	ReadyWorkers int32 `json:"readyWorkers"`
 
 	// Conditions store the status conditions of the PrefectWorkPool instances
-	// +operator-sdk:csv:customresourcedefinitions:type=status
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
