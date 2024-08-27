@@ -36,6 +36,9 @@ type PrefectServerSpec struct {
 	// Image defines the exact image to deploy for the Prefect Server, overriding Version
 	Image *string `json:"image,omitempty"`
 
+	// Resources defines the CPU and memory resources for each replica of the Prefect Server
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// Ephemeral defines whether the server will be deployed with an ephemeral storage backend
 	Ephemeral *EphemeralConfiguration `json:"ephemeral,omitempty"`
 

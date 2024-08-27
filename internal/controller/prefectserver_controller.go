@@ -468,6 +468,9 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 								Protocol:      corev1.ProtocolTCP,
 							},
 						},
+
+						Resources: server.Spec.Resources,
+
 						StartupProbe:   server.StartupProbe(),
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
@@ -547,6 +550,9 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 								Protocol:      corev1.ProtocolTCP,
 							},
 						},
+
+						Resources: server.Spec.Resources,
+
 						StartupProbe:   server.StartupProbe(),
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
@@ -590,6 +596,9 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 								Protocol:      corev1.ProtocolTCP,
 							},
 						},
+
+						Resources: server.Spec.Resources,
+
 						StartupProbe:   server.StartupProbe(),
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),

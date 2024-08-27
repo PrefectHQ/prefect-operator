@@ -228,6 +228,8 @@ func (r *PrefectWorkPoolReconciler) prefectWorkerDeployment(workPool *prefectiov
 							},
 							Env: append(workPool.ToEnvVars(), workPool.Spec.Settings...),
 
+							Resources: workPool.Spec.Resources,
+
 							// StartupProbe:   workPool.StartupProbe(),
 							// ReadinessProbe: workPool.ReadinessProbe(),
 							// LivenessProbe:  workPool.LivenessProbe(),
