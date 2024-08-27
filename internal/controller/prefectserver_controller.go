@@ -201,9 +201,35 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 		condition = conditions.AlreadyExists(objName, errorMessage)
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if jobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
-		// TODO: handle replacing the job if something has changed
+	} else if migrationJobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
+		log.Info("Recreating migration Job", "name", desiredMigrationJob.Name)
+		// deletes the job + recreates it.
+		// k8s Jobs are immutable and need to be recreated if they are to be re-run.
+		if err = r.Delete(ctx, foundMigrationJob); err != nil {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "MigrationJobReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "MigrationJobNotDeleted",
+				Message: "MigrationJob was not deleted: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
 
+			return &ctrl.Result{}, err
+		}
+
+		if err = r.Create(ctx, desiredMigrationJob); err != nil {
+			if statusErr := r.updateCondition(ctx, server, metav1.Condition{
+				Type:    "MigrationJobReconciled",
+				Status:  metav1.ConditionFalse,
+				Reason:  "MigrationJobNotRecreated",
+				Message: "MigrationJob was not recreated: " + err.Error(),
+			}); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+
+			return &ctrl.Result{}, err
+		}
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
 			condition = conditions.Updated(objName)
@@ -377,9 +403,9 @@ func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr
 	return false
 }
 
-func jobNeedsUpdate(current, desired *batchv1.JobSpec, log logr.Logger) bool {
-	// TODO: check for changes to the job spec that require an update
-	return false
+func migrationJobNeedsUpdate(current, desired *batchv1.JobSpec, log logr.Logger) bool {
+	merged := current.DeepCopy()
+	return needsUpdate(current, merged, desired, log)
 }
 
 func deploymentNeedsUpdate(current, desired *appsv1.DeploymentSpec, log logr.Logger) bool {
