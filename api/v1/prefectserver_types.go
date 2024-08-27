@@ -200,7 +200,6 @@ type PrefectServerStatus struct {
 	Version string `json:"version"`
 
 	// Conditions store the status conditions of the PrefectServer instances
-	// +operator-sdk:csv:customresourcedefinitions:type=status
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
