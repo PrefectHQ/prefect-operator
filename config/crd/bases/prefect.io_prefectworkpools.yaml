@@ -124,13 +124,38 @@ spec:
                 description: Server defines which Prefect Server to connect to
                 properties:
                   name:
-                    description: Name is the name of the Prefect Server in the given
+                    description: Name is the name of the in-cluster Prefect Server in the given
                       namespace
                     type: string
                   namespace:
-                    description: Namespace is the namespace where the Prefect Server
+                    description: Namespace is the namespace where the in-cluster Prefect Server
                       is running
                     type: string
+                  remoteApiUrl:
+                    description: API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud
+                    type: string
+                  apiKey:
+                    description: API Key for the Prefect Server. Set if using with an external Prefect Server or Prefect Cloud
+                    type: object
+                    properties:
+                      value:
+                        description: The value of the API key
+                        type: string
+                      valueFrom:
+                        description: Reference to a secret containing the API key
+                        type: object
+                        properties:
+                          secretKeyRef:
+                            description: Reference to a secret containing the API key
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              key:
+                                type: string
+                            required:
+                            - name
+                            - key
                 type: object
               settings:
                 description: A list of environment variables to set on the Prefect
