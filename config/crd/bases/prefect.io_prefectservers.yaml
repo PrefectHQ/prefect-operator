@@ -19,6 +19,10 @@ spec:
       jsonPath: .status.version
       name: Version
       type: string
+    - description: Whether this Prefect server is ready to receive requests
+      jsonPath: .status.ready
+      name: Ready
+      type: boolean
     name: v1
     schema:
       openAPIV3Schema:
@@ -768,11 +772,16 @@ spec:
                   - type
                   type: object
                 type: array
+              ready:
+                description: Ready indicates that the PrefectServer is ready to serve
+                  requests
+                type: boolean
               version:
-                description: Version is the version of the Prefect Server that is
-                  currently running
+                description: Version is the version of the PrefectServer that is currently
+                  running
                 type: string
             required:
+            - ready
             - version
             type: object
         type: object

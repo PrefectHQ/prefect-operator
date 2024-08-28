@@ -196,8 +196,11 @@ func (p *PostgresConfiguration) DatabaseEnvVar() corev1.EnvVar {
 
 // PrefectServerStatus defines the observed state of PrefectServer
 type PrefectServerStatus struct {
-	// Version is the version of the Prefect Server that is currently running
+	// Version is the version of the PrefectServer that is currently running
 	Version string `json:"version"`
+
+	// Ready indicates that the PrefectServer is ready to serve requests
+	Ready bool `json:"ready"`
 
 	// Conditions store the status conditions of the PrefectServer instances
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
@@ -206,6 +209,7 @@ type PrefectServerStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this Prefect server"
+// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready",description="Whether this Prefect server is ready to receive requests"
 // PrefectServer is the Schema for the prefectservers API
 type PrefectServer struct {
 	metav1.TypeMeta   `json:",inline"`

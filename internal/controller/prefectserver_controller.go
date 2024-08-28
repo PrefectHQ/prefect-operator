@@ -109,7 +109,6 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *prefectiov1.PrefectServer, desiredPVC *corev1.PersistentVolumeClaim, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -162,7 +161,6 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 }
 
 func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, server *prefectiov1.PrefectServer, desiredMigrationJob *batchv1.Job, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -216,7 +214,6 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 }
 
 func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, server *prefectiov1.PrefectServer, desiredDeployment appsv1.Deployment, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -270,20 +267,26 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 
 		condition = conditions.Updated(objName)
 	} else {
-		imageVersion := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
-		if server.Status.Version != imageVersion ||
-			!meta.IsStatusConditionTrue(server.Status.Conditions, "DeploymentReconciled") {
-
-			server.Status.Version = imageVersion
-
+		if !meta.IsStatusConditionTrue(server.Status.Conditions, "DeploymentReconciled") {
 			condition = conditions.Updated(objName)
+		}
+
+		ready := foundDeployment.Status.AvailableReplicas > 0
+		version := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+
+		if server.Status.Ready != ready || server.Status.Version != version {
+			server.Status.Ready = ready
+			server.Status.Version = version
+
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
 		}
 	}
 	return nil, err
 }
 
 func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *prefectiov1.PrefectServer, desiredService corev1.Service, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -354,8 +357,19 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 }
 
 func (r *PrefectServerReconciler) updateCondition(ctx context.Context, server *prefectiov1.PrefectServer, condition metav1.Condition) error {
-	meta.SetStatusCondition(&server.Status.Conditions, condition)
-	return r.Status().Update(ctx, server)
+	if condition.Type == "" {
+		// If there's no condition change, just exit
+		return nil
+	}
+	if meta.SetStatusCondition(&server.Status.Conditions, condition) {
+		err := r.Status().Update(ctx, server)
+		if err != nil {
+			log := ctrllog.FromContext(ctx)
+			log.Error(err, "Failed to update status conditions", "server", server)
+		}
+		return err
+	}
+	return nil
 }
 
 func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr.Logger) bool {
