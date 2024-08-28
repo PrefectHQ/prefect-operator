@@ -1,0 +1,17 @@
+name: Docker image
+
+on:
+  pull_request:
+  push:
+    branches:
+    - main
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          tags: prefect-operator:latest
