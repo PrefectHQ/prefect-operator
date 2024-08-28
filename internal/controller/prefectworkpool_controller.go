@@ -194,9 +194,9 @@ func (r *PrefectWorkPoolReconciler) prefectWorkerDeployment(workPool *prefectiov
 
 							Resources: workPool.Spec.Resources,
 
-							// StartupProbe:   workPool.StartupProbe(),
-							// ReadinessProbe: workPool.ReadinessProbe(),
-							// LivenessProbe:  workPool.LivenessProbe(),
+							StartupProbe:   workPool.StartupProbe(),
+							ReadinessProbe: workPool.ReadinessProbe(),
+							LivenessProbe:  workPool.LivenessProbe(),
 
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
