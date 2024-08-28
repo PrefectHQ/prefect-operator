@@ -234,25 +234,33 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 	}
 
 	mutateFn := func() error {
-		if !metav1.IsControlledBy(&desiredDeployment, server) {
-			errorMessage := fmt.Sprintf(
-				"%s %s already exists and is not controlled by PrefectServer %s",
-				"Deployment", desiredDeployment.Name, server.Name,
-			)
+		if deploy.CreationTimestamp.IsZero() {
+			if controllerErr := ctrl.SetControllerReference(server, deploy, r.Scheme); controllerErr != nil {
+				return controllerErr
+			}
 
-			// condition = conditions.AlreadyExists(objName, errorMessage)
+		} else {
+			// This is an existing deployment, make sure it is ours
+			if !metav1.IsControlledBy(deploy, server) {
+				errorMessage := fmt.Sprintf(
+					"%s %s already exists and is not controlled by PrefectServer %s",
+					"Deployment", deploy.Name, server.Name,
+				)
 
-			return errors.NewBadRequest(errorMessage)
+				return errors.NewBadRequest(errorMessage)
+			}
+
+			condition = conditions.Updated(objName)
 		}
 
 		err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
+
 		return err
 	}
 
 	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, mutateFn)
 	if err != nil {
-		// TODO: when Status scaffolding is in place, use the operation result to
-		// pick a more informative status and/or condition value.
+		condition = conditions.UnknownError(objName, err)
 		return &ctrl.Result{}, err
 	}
 
@@ -268,11 +276,11 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		if server.Status.Ready != ready || server.Status.Version != version {
 			server.Status.Ready = ready
 			server.Status.Version = version
-
-			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
-				return &ctrl.Result{}, statusErr
-			}
 		}
+	}
+
+	if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+		return &ctrl.Result{}, statusErr
 	}
 
 	return nil, err
