@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -305,6 +306,56 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(container.Resources.Limits).To(Equal(corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("500m"),
 						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					}))
+				})
+
+				It("should have the correct startup, readiness, and liveness probes", func() {
+					Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+					container := deployment.Spec.Template.Spec.Containers[0]
+
+					Expect(container.StartupProbe).To(Equal(&corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/api/health",
+								Port:   intstr.FromInt(4200),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    30,
+					}))
+
+					Expect(container.ReadinessProbe).To(Equal(&corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/api/health",
+								Port:   intstr.FromInt(4200),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    30,
+					}))
+
+					Expect(container.LivenessProbe).To(Equal(&corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/api/health",
+								Port:   intstr.FromInt(4200),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+						InitialDelaySeconds: 120,
+						PeriodSeconds:       10,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    2,
 					}))
 				})
 			})
@@ -1642,6 +1693,116 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(after.Generation).To(Equal(before.Generation))
 				Expect(after).To(Equal(before))
 			})
+		})
+	})
+
+	Context("PrefectServer Status Updates", func() {
+		var (
+			prefectServer *prefectiov1.PrefectServer
+			deployment    *appsv1.Deployment
+			reconciler    *PrefectServerReconciler
+			name          types.NamespacedName
+		)
+
+		BeforeEach(func() {
+			name = types.NamespacedName{
+				Namespace: "test-" + uuid.New().String(),
+				Name:      "test-prefectserver",
+			}
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name.Namespace}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			prefectServer = &prefectiov1.PrefectServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: name.Namespace,
+				},
+				Spec: prefectiov1.PrefectServerSpec{},
+			}
+			Expect(k8sClient.Create(ctx, prefectServer)).To(Succeed())
+
+			reconciler = &PrefectServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: name,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			deployment = &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, name, deployment)).To(Succeed())
+
+			// Update the replicas to 1, which the Deployment controller would do
+			deployment.Status.Replicas = 1
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+		})
+
+		It("should have default values initially", func() {
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			updatedPrefectServer := &prefectiov1.PrefectServer{}
+			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
+			Expect(updatedPrefectServer.Status.Ready).To(Equal(false))
+		})
+
+		It("should update status when becoming ready", func() {
+			deployment.Status.ReadyReplicas = 1
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			updatedPrefectServer := &prefectiov1.PrefectServer{}
+			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
+			Expect(updatedPrefectServer.Status.Ready).To(Equal(true))
+		})
+
+		It("should update status when becoming unready", func() {
+			deployment.Status.ReadyReplicas = 0
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			updatedPrefectServer := &prefectiov1.PrefectServer{}
+			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
+			Expect(updatedPrefectServer.Status.Ready).To(Equal(false))
+		})
+
+		It("should toggle status correctly", func() {
+			// First, make it ready
+			deployment.Status.ReadyReplicas = 1
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			updatedPrefectServer := &prefectiov1.PrefectServer{}
+			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
+			Expect(updatedPrefectServer.Status.Ready).To(Equal(true))
+
+			// Then, make it unready
+			deployment.Status.ReadyReplicas = 0
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
+			Expect(updatedPrefectServer.Status.Ready).To(Equal(false))
+
+			// Finally, make it ready again
+			deployment.Status.ReadyReplicas = 1
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
+			Expect(updatedPrefectServer.Status.Ready).To(Equal(true))
 		})
 	})
 })

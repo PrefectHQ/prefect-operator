@@ -111,7 +111,6 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *prefectiov1.PrefectServer, desiredPVC *corev1.PersistentVolumeClaim, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -164,7 +163,6 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 }
 
 func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, server *prefectiov1.PrefectServer, desiredMigrationJob *batchv1.Job, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -218,7 +216,6 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 }
 
 func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, server *prefectiov1.PrefectServer, desiredDeployment appsv1.Deployment, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -259,7 +256,6 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 }
 
 func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *prefectiov1.PrefectServer, desiredService corev1.Service, log logr.Logger) (*ctrl.Result, error) {
-	// Update the condition in one place before the parent function finishes.
 	var condition metav1.Condition
 	var err error
 	defer func() {
@@ -330,8 +326,19 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 }
 
 func (r *PrefectServerReconciler) updateCondition(ctx context.Context, server *prefectiov1.PrefectServer, condition metav1.Condition) error {
-	meta.SetStatusCondition(&server.Status.Conditions, condition)
-	return r.Status().Update(ctx, server)
+	if condition.Type == "" {
+		// If there's no condition change, just exit
+		return nil
+	}
+	if meta.SetStatusCondition(&server.Status.Conditions, condition) {
+		err := r.Status().Update(ctx, server)
+		if err != nil {
+			log := ctrllog.FromContext(ctx)
+			log.Error(err, "Failed to update status conditions", "server", server)
+		}
+		return err
+	}
+	return nil
 }
 
 func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr.Logger) bool {

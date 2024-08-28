@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -239,7 +241,11 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 				Expect(container.Name).To(Equal("prefect-worker"))
 				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc18-python3.12-kubernetes"))
-				Expect(container.Command).To(Equal([]string{"prefect", "worker", "start", "--pool", "example-work-pool", "--type", "kubernetes"}))
+				Expect(container.Command).To(Equal([]string{
+					"prefect", "worker", "start",
+					"--pool", "example-work-pool", "--type", "kubernetes",
+					"--with-healthcheck",
+				}))
 			})
 
 			It("should have an environment with PREFECT_HOME set", func() {
@@ -269,6 +275,61 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Expect(container.Resources.Limits).To(Equal(corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("500m"),
 					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				}))
+			})
+
+			It("should have the correct startup, readiness, and liveness probes", func() {
+				Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+				container := deployment.Spec.Template.Spec.Containers[0]
+
+				Expect(container.Env).To(ContainElement(corev1.EnvVar{
+					Name:  "PREFECT_WORKER_WEBSERVER_PORT",
+					Value: "8080",
+				}))
+
+				Expect(container.StartupProbe).To(Equal(&corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/health",
+							Port:   intstr.FromInt(8080),
+							Scheme: corev1.URISchemeHTTP,
+						},
+					},
+					InitialDelaySeconds: 10,
+					PeriodSeconds:       5,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    30,
+				}))
+
+				Expect(container.ReadinessProbe).To(Equal(&corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/health",
+							Port:   intstr.FromInt(8080),
+							Scheme: corev1.URISchemeHTTP,
+						},
+					},
+					InitialDelaySeconds: 10,
+					PeriodSeconds:       5,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    30,
+				}))
+
+				Expect(container.LivenessProbe).To(Equal(&corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/health",
+							Port:   intstr.FromInt(8080),
+							Scheme: corev1.URISchemeHTTP,
+						},
+					},
+					InitialDelaySeconds: 120,
+					PeriodSeconds:       10,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    2,
 				}))
 			})
 		})
@@ -447,6 +508,124 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 			Expect(after.Generation).To(Equal(before.Generation))
 			Expect(after).To(Equal(before))
+		})
+	})
+
+	Context("WorkPool Status Updates", func() {
+		var (
+			workPool   *prefectiov1.PrefectWorkPool
+			deployment *appsv1.Deployment
+			reconciler *PrefectWorkPoolReconciler
+			name       types.NamespacedName
+		)
+
+		BeforeEach(func() {
+			name = types.NamespacedName{
+				Namespace: "test-" + uuid.New().String(),
+				Name:      "test-workpool",
+			}
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name.Namespace}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			workPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: name.Namespace,
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{
+					Workers: 3,
+				},
+			}
+			Expect(k8sClient.Create(ctx, workPool)).To(Succeed())
+
+			reconciler = &PrefectWorkPoolReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: name,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			deployment = &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, name, deployment)).To(Succeed())
+
+			// Update the replicas to 3, which the Deployment controller would do
+			deployment.Status.Replicas = 3
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+		})
+
+		It("should have default values initially", func() {
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
+			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
+			Expect(updatedWorkPool.Status.ReadyWorkers).To(Equal(int32(0)))
+			Expect(updatedWorkPool.Status.Ready).To(Equal(false))
+		})
+
+		It("should update status when becoming ready", func() {
+			deployment.Status.ReadyReplicas = 3
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
+			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
+			Expect(updatedWorkPool.Status.ReadyWorkers).To(Equal(int32(3)))
+			Expect(updatedWorkPool.Status.Ready).To(Equal(true))
+		})
+
+		It("should update status when becoming unready", func() {
+			deployment.Status.ReadyReplicas = 0
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
+			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
+			Expect(updatedWorkPool.Status.ReadyWorkers).To(Equal(int32(0)))
+			Expect(updatedWorkPool.Status.Ready).To(Equal(false))
+		})
+
+		It("should toggle status correctly", func() {
+			// First, make it ready
+			deployment.Status.ReadyReplicas = 3
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
+			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
+			Expect(updatedWorkPool.Status.ReadyWorkers).To(Equal(int32(3)))
+			Expect(updatedWorkPool.Status.Ready).To(Equal(true))
+
+			// Then, make it unready
+			deployment.Status.ReadyReplicas = 0
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
+			Expect(updatedWorkPool.Status.ReadyWorkers).To(Equal(int32(0)))
+			Expect(updatedWorkPool.Status.Ready).To(Equal(false))
+
+			// Finally, make it ready again
+			deployment.Status.ReadyReplicas = 2
+			Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
+			Expect(updatedWorkPool.Status.ReadyWorkers).To(Equal(int32(2)))
+			Expect(updatedWorkPool.Status.Ready).To(Equal(true))
 		})
 	})
 })
