@@ -234,6 +234,17 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 	}
 
 	mutateFn := func() error {
+		if !metav1.IsControlledBy(&desiredDeployment, server) {
+			errorMessage := fmt.Sprintf(
+				"%s %s already exists and is not controlled by PrefectServer %s",
+				"Deployment", desiredDeployment.Name, server.Name,
+			)
+
+			// condition = conditions.AlreadyExists(objName, errorMessage)
+
+			return errors.NewBadRequest(errorMessage)
+		}
+
 		err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
 		return err
 	}
@@ -248,8 +259,20 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 	log.Info("CreateOrUpdate successful", "result", result)
 	condition = status.GetStatusConditionForOperationResult(result, objName, err)
 
-	if result == controllerutil.OperationResultCreated {
+	switch result {
+	case controllerutil.OperationResultCreated:
 		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+	case controllerutil.OperationResultUpdated:
+		ready := deploy.Status.ReadyReplicas > 0
+		version := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+		if server.Status.Ready != ready || server.Status.Version != version {
+			server.Status.Ready = ready
+			server.Status.Version = version
+
+			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+				return &ctrl.Result{}, statusErr
+			}
+		}
 	}
 
 	return nil, err
