@@ -1,4 +1,4 @@
-name: ci
+name: Docker image
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
     - main
 
 jobs:
-  docker:
+  docker-build:
     runs-on: ubuntu-latest
     steps:
       - name: Build and push
