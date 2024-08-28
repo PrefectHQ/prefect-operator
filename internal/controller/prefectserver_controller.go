@@ -88,7 +88,9 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return *result, err
 	}
 
-	// Reconcile the migration job, if one is required
+	// Reconcile the migration job, if one is required.
+	// NOTE: if an active migration is still running,
+	// this reconciliation will requeue and exit early here.
 	result, err = r.reconcileMigrationJob(ctx, server, desiredMigrationJob, log)
 	if result != nil {
 		return *result, err
@@ -203,6 +205,11 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 		condition = conditions.AlreadyExists(objName, errorMessage)
 
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
+	} else if !isMigrationJobFinished(foundMigrationJob) {
+		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
+		condition = conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name))
+
+		return &ctrl.Result{Requeue: true}, nil
 	} else {
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
 			condition = conditions.Updated(objName)
@@ -376,9 +383,15 @@ func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr
 	return false
 }
 
-func migrationJobNeedsUpdate(current, desired *batchv1.JobSpec, log logr.Logger) bool {
-	merged := current.DeepCopy()
-	return needsUpdate(current, merged, desired, log)
+func isMigrationJobFinished(foundMigrationJob *batchv1.Job) bool {
+	switch {
+	case foundMigrationJob.Status.Succeeded > 0:
+		return true
+	case foundMigrationJob.Status.Failed > 0:
+		return true
+	default:
+		return false
+	}
 }
 
 func deploymentNeedsUpdate(current, desired *appsv1.DeploymentSpec, log logr.Logger) bool {
