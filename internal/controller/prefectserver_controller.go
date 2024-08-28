@@ -271,7 +271,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			condition = conditions.Updated(objName)
 		}
 
-		ready := foundDeployment.Status.AvailableReplicas > 0
+		ready := foundDeployment.Status.ReadyReplicas > 0
 		version := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
 
 		if server.Status.Ready != ready || server.Status.Version != version {
