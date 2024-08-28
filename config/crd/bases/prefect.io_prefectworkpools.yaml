@@ -23,6 +23,10 @@ spec:
       jsonPath: .status.version
       name: Version
       type: string
+    - description: Whether the work pool is ready
+      jsonPath: .status.ready
+      name: Ready
+      type: boolean
     - description: How many workers are desired
       jsonPath: .spec.workers
       name: Desired Workers
@@ -328,6 +332,9 @@ spec:
                   - type
                   type: object
                 type: array
+              ready:
+                description: Ready is true if the work pool is ready to accept work
+                type: boolean
               readyWorkers:
                 description: ReadyWorkers is the number of workers that are currently
                   ready
@@ -338,6 +345,7 @@ spec:
                   currently running
                 type: string
             required:
+            - ready
             - readyWorkers
             - version
             type: object

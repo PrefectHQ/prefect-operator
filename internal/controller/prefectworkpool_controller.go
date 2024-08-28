@@ -27,11 +27,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 )
 
 // PrefectWorkPoolReconciler reconciles a PrefectWorkPool object
@@ -50,17 +52,26 @@ type PrefectWorkPoolReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	var condition metav1.Condition
+	var err error
+
 	log := ctrllog.FromContext(ctx)
 
 	log.Info("Reconciling PrefectWorkPool")
 
 	workPool := &prefectiov1.PrefectWorkPool{}
-	err := r.Get(ctx, req.NamespacedName, workPool)
+	err = r.Get(ctx, req.NamespacedName, workPool)
 	if errors.IsNotFound(err) {
 		return ctrl.Result{}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	defer func() {
+		if updateErr := r.updateCondition(ctx, workPool, condition); updateErr != nil {
+			err = utilerrors.NewAggregate([]error{updateErr, err})
+		}
+	}()
 
 	desiredDeployment := r.prefectWorkerDeployment(workPool)
 
@@ -74,115 +85,68 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if errors.IsNotFound(err) {
 		log.Info("Creating Deployment", "name", desiredDeployment.Name)
 		if err = r.Create(ctx, &desiredDeployment); err != nil {
-			if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-				Type:    "DeploymentReconciled",
-				Status:  metav1.ConditionFalse,
-				Reason:  "DeploymentNotCreated",
-				Message: "Deployment was not created: " + err.Error(),
-			}); statusErr != nil {
-				return ctrl.Result{}, statusErr
-			}
+			condition = conditions.NotCreated("Deployment", err)
 			return ctrl.Result{}, err
 		}
-		if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "DeploymentCreated",
-			Message: "Deployment was created",
-		}); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
+		condition = conditions.Created("Deployment")
 	} else if err != nil {
-		if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionFalse,
-			Reason:  "UnknownError",
-			Message: "Unknown error: " + err.Error(),
-		}); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
-
+		condition = conditions.UnknownError("Deployment", err)
 		return ctrl.Result{}, err
 	} else if !metav1.IsControlledBy(foundDeployment, workPool) {
 		errorMessage := fmt.Sprintf(
 			"%s %s already exists and is not controlled by PrefectWorkPool %s",
 			"Deployment", desiredDeployment.Name, workPool.Name,
 		)
-
-		if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionFalse,
-			Reason:  "DeploymentAlreadyExists",
-			Message: errorMessage,
-		}); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
-
+		condition = conditions.AlreadyExists("Deployment", errorMessage)
 		return ctrl.Result{}, errors.NewBadRequest(errorMessage)
 	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
 		log.Info("Updating Deployment", "name", desiredDeployment.Name)
 
-		if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionFalse,
-			Reason:  "DeploymentNeedsUpdate",
-			Message: "Deployment needs to be updated",
-		}); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
+		condition = conditions.NeedsUpdate("Deployment")
 
 		if err = r.Update(ctx, &desiredDeployment); err != nil {
-			if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-				Type:    "DeploymentReconciled",
-				Status:  metav1.ConditionFalse,
-				Reason:  "DeploymentUpdateFailed",
-				Message: "Deployment update failed: " + err.Error(),
-			}); statusErr != nil {
-				return ctrl.Result{}, statusErr
-			}
+			condition = conditions.UpdateFailed("Deployment", err)
 			return ctrl.Result{}, err
 		}
 
-		if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-			Type:    "DeploymentReconciled",
-			Status:  metav1.ConditionTrue,
-			Reason:  "DeploymentUpdated",
-			Message: "Deployment was updated",
-		}); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
+		condition = conditions.Updated("Deployment")
 	} else {
+		if !meta.IsStatusConditionTrue(workPool.Status.Conditions, "DeploymentReconciled") {
+			condition = conditions.Updated("Deployment")
+		}
+
 		imageVersion := prefectiov1.VersionFromImage(foundDeployment.Spec.Template.Spec.Containers[0].Image)
+		readyWorkers := foundDeployment.Status.ReadyReplicas
+		ready := readyWorkers > 0
 
-		if workPool.Status.Version != imageVersion ||
-			!meta.IsStatusConditionTrue(workPool.Status.Conditions, "DeploymentReconciled") {
-
+		if workPool.Status.Version != imageVersion || workPool.Status.ReadyWorkers != readyWorkers || workPool.Status.Ready != ready {
 			workPool.Status.Version = imageVersion
-			workPool.Status.ReadyWorkers = foundDeployment.Status.ReadyReplicas
+			workPool.Status.ReadyWorkers = readyWorkers
+			workPool.Status.Ready = ready
 
-			if statusErr := r.updateCondition(ctx, workPool, metav1.Condition{
-				Type:    "DeploymentReconciled",
-				Status:  metav1.ConditionTrue,
-				Reason:  "DeploymentUpdated",
-				Message: "Deployment is in the correct state",
-			}); statusErr != nil {
-				return ctrl.Result{}, statusErr
-			}
-		} else if workPool.Status.ReadyWorkers != foundDeployment.Status.ReadyReplicas {
-			workPool.Status.ReadyWorkers = foundDeployment.Status.ReadyReplicas
 			if statusErr := r.Status().Update(ctx, workPool); statusErr != nil {
 				return ctrl.Result{}, statusErr
 			}
 		}
-
 	}
 
 	return ctrl.Result{}, nil
 }
 
 func (r *PrefectWorkPoolReconciler) updateCondition(ctx context.Context, workPool *prefectiov1.PrefectWorkPool, condition metav1.Condition) error {
-	meta.SetStatusCondition(&workPool.Status.Conditions, condition)
-	return r.Status().Update(ctx, workPool)
+	if condition.Type == "" {
+		// If there's no condition change, just exit
+		return nil
+	}
+	if meta.SetStatusCondition(&workPool.Status.Conditions, condition) {
+		err := r.Status().Update(ctx, workPool)
+		if err != nil {
+			log := ctrllog.FromContext(ctx)
+			log.Error(err, "Failed to update status conditions", "workPool", workPool)
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *PrefectWorkPoolReconciler) prefectWorkerDeployment(workPool *prefectiov1.PrefectWorkPool) appsv1.Deployment {
