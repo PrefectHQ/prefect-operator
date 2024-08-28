@@ -24,15 +24,6 @@ func NotCreated(object string, err error) metav1.Condition {
 	}
 }
 
-func NotDeleted(object string, err error) metav1.Condition {
-	return newCondition(
-		fmt.Sprintf("%sReconciled", object),
-		fmt.Sprintf("%sNotDeleted", object),
-		fmt.Sprintf("%s was not deleted: %v", object, err.Error()),
-		metav1.ConditionFalse,
-	)
-}
-
 func Created(object string) metav1.Condition {
 	return metav1.Condition{
 		Type:    fmt.Sprintf("%sReconciled", object),
@@ -40,15 +31,6 @@ func Created(object string) metav1.Condition {
 		Message: fmt.Sprintf("%s was created", object),
 		Status:  metav1.ConditionTrue,
 	}
-}
-
-func Deleted(object string) metav1.Condition {
-	return newCondition(
-		fmt.Sprintf("%sReconciled", object),
-		fmt.Sprintf("%sDeleted", object),
-		fmt.Sprintf("%s was deleted", object),
-		metav1.ConditionTrue,
-	)
 }
 
 func UnknownError(object string, err error) metav1.Condition {
