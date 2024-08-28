@@ -35,11 +35,13 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
+	"github.com/PrefectHQ/prefect-operator/internal/status"
 	"github.com/go-logr/logr"
 )
 
@@ -227,58 +229,32 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 
 	objName := constants.Deployment
 
-	serverNamespacedName := types.NamespacedName{
-		Namespace: server.Namespace,
-		Name:      server.Name,
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name,
+			Namespace: server.Namespace,
+		},
 	}
 
-	foundDeployment := &appsv1.Deployment{}
-	err = r.Get(ctx, serverNamespacedName, foundDeployment)
-	if errors.IsNotFound(err) {
-		log.Info("Creating Deployment", "name", desiredDeployment.Name)
-		if err = r.Create(ctx, &desiredDeployment); err != nil {
-			condition = conditions.NotCreated(objName, err)
+	mutateFn := func() error {
+		err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
+		return err
+	}
 
-			return &ctrl.Result{}, err
-		}
-
-		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
-
-		condition = conditions.Created(objName)
-	} else if err != nil {
-		condition = conditions.UnknownError(objName, err)
-
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, mutateFn)
+	if err != nil {
+		// TODO: when Status scaffolding is in place, use the operation result to
+		// pick a more informative status and/or condition value.
 		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundDeployment, server) {
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"Deployment", desiredDeployment.Name, server.Name,
-		)
-
-		condition = conditions.AlreadyExists(objName, errorMessage)
-
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
-		log.Info("Updating Deployment", "name", desiredDeployment.Name)
-		condition = conditions.NeedsUpdate(objName)
-
-		if err = r.Update(ctx, &desiredDeployment); err != nil {
-			condition = conditions.UpdateFailed(objName, err)
-
-			return &ctrl.Result{}, err
-		}
-
-		condition = conditions.Updated(objName)
-	} else {
-		imageVersion := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
-		if server.Status.Version != imageVersion ||
-			!meta.IsStatusConditionTrue(server.Status.Conditions, "DeploymentReconciled") {
-
-			server.Status.Version = imageVersion
-
-			condition = conditions.Updated(objName)
-		}
 	}
+
+	log.Info("CreateOrUpdate successful", "result", result)
+	condition = status.GetStatusConditionForOperationResult(result, objName, err)
+
+	if result == controllerutil.OperationResultCreated {
+		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+	}
+
 	return nil, err
 }
 
