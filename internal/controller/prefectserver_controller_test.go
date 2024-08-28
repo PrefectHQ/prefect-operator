@@ -38,6 +38,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/utils"
 )
 
 var _ = Describe("PrefectServer controller", func() {
@@ -1255,11 +1256,13 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				hashSuffix, _ := utils.Hash(desiredMigrationJob.Spec, 8)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
 						Namespace: namespaceName,
-						Name:      "prefect-on-postgres-migration",
+						Name:      fmt.Sprintf("prefect-on-postgres-migration-%s", hashSuffix),
 					}, migrateJob)
 				}).Should(Succeed())
 
@@ -1430,11 +1433,13 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				hashSuffix, _ := utils.Hash(desiredMigrationJob.Spec, 8)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
 						Namespace: namespaceName,
-						Name:      "prefect-on-postgres-migration",
+						Name:      fmt.Sprintf("prefect-on-postgres-migration-%s", hashSuffix),
 					}, migrateJob)
 				}).Should(Succeed())
 
@@ -1549,29 +1554,6 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				Eventually(func() error {
-					// clusterInstance, _ := cluster.New(cfg)
-					// reader := clusterInstance.GetAPIReader()
-
-					batch := &batchv1.Job{}
-					// err := reader.Get(ctx, types.NamespacedName{
-					err := k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: namespaceName,
-						Name:      "prefect-on-postgres-migration",
-					}, batch)
-
-					GinkgoWriter.Println("FOOOOOBAR")
-					GinkgoWriter.Println(batch.DeletionTimestamp)
-					GinkgoWriter.Println(batch.GetDeletionTimestamp())
-					GinkgoWriter.Println(err)
-
-					controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: name,
-					})
-
-					return err
-				}, 30*time.Second, 1*time.Second).Should(HaveOccurred())
-
 				// Reconcile again to update the server
 				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
@@ -1597,24 +1579,26 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			It("should not attempt to update a migration Job that it does not own", func() {
-				job := &batchv1.Job{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-postgres-migration",
-				}, job)).To(Succeed())
-
-				job.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, job)).To(Succeed())
-
 				controllerReconciler := &PrefectServerReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
 				}
 
+				job := &batchv1.Job{}
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				hashSuffix, _ := utils.Hash(desiredMigrationJob.Spec, 8)
+				Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      fmt.Sprintf("prefect-on-postgres-migration-%s", hashSuffix),
+				}, job)).To(Succeed())
+
+				job.OwnerReferences = nil
+				Expect(k8sClient.Update(ctx, job)).To(Succeed())
+
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Job prefect-on-postgres-migration already exists and is not controlled by PrefectServer prefect-on-postgres"))
+				Expect(err).To(MatchError(fmt.Sprintf("Job prefect-on-postgres-migration-%s already exists and is not controlled by PrefectServer prefect-on-postgres", hashSuffix)))
 			})
 
 			It("should not attempt to update a Deployment that it does not own", func() {
