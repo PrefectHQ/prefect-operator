@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
@@ -112,7 +113,11 @@ func (s *PrefectWorkPool) Command() []string {
 	if strings.HasPrefix(workPoolName, "prefect") {
 		workPoolName = "pool-" + workPoolName
 	}
-	return []string{"prefect", "worker", "start", "--pool", workPoolName, "--type", s.Spec.Type}
+	return []string{
+		"prefect", "worker", "start",
+		"--pool", workPoolName, "--type", s.Spec.Type,
+		"--with-healthcheck",
+	}
 }
 
 func (s *PrefectWorkPool) PrefectAPIURL() string {
@@ -133,6 +138,51 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 			Name:  "PREFECT_API_URL",
 			Value: s.PrefectAPIURL(),
 		},
+		{
+			Name:  "PREFECT_WORKER_WEBSERVER_PORT",
+			Value: "8080",
+		},
+	}
+}
+
+func (s *PrefectWorkPool) HealthProbe() corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path:   "/health",
+			Port:   intstr.FromInt(8080),
+			Scheme: corev1.URISchemeHTTP,
+		},
+	}
+}
+
+func (s *PrefectWorkPool) StartupProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:        s.HealthProbe(),
+		InitialDelaySeconds: 10,
+		PeriodSeconds:       5,
+		TimeoutSeconds:      5,
+		SuccessThreshold:    1,
+		FailureThreshold:    30,
+	}
+}
+func (s *PrefectWorkPool) ReadinessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:        s.HealthProbe(),
+		InitialDelaySeconds: 10,
+		PeriodSeconds:       5,
+		TimeoutSeconds:      5,
+		SuccessThreshold:    1,
+		FailureThreshold:    30,
+	}
+}
+func (s *PrefectWorkPool) LivenessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:        s.HealthProbe(),
+		InitialDelaySeconds: 120,
+		PeriodSeconds:       10,
+		TimeoutSeconds:      5,
+		SuccessThreshold:    1,
+		FailureThreshold:    2,
 	}
 }
 

@@ -308,6 +308,56 @@ var _ = Describe("PrefectServer controller", func() {
 						corev1.ResourceMemory: resource.MustParse("512Mi"),
 					}))
 				})
+
+				It("should have the correct startup, readiness, and liveness probes", func() {
+					Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+					container := deployment.Spec.Template.Spec.Containers[0]
+
+					Expect(container.StartupProbe).To(Equal(&corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/api/health",
+								Port:   intstr.FromInt(4200),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    30,
+					}))
+
+					Expect(container.ReadinessProbe).To(Equal(&corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/api/health",
+								Port:   intstr.FromInt(4200),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+						InitialDelaySeconds: 10,
+						PeriodSeconds:       5,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    30,
+					}))
+
+					Expect(container.LivenessProbe).To(Equal(&corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   "/api/health",
+								Port:   intstr.FromInt(4200),
+								Scheme: corev1.URISchemeHTTP,
+							},
+						},
+						InitialDelaySeconds: 120,
+						PeriodSeconds:       10,
+						TimeoutSeconds:      5,
+						SuccessThreshold:    1,
+						FailureThreshold:    2,
+					}))
+				})
 			})
 
 			Describe("the Service", func() {

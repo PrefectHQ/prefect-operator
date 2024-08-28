@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -240,7 +241,11 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 				Expect(container.Name).To(Equal("prefect-worker"))
 				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc18-python3.12-kubernetes"))
-				Expect(container.Command).To(Equal([]string{"prefect", "worker", "start", "--pool", "example-work-pool", "--type", "kubernetes"}))
+				Expect(container.Command).To(Equal([]string{
+					"prefect", "worker", "start",
+					"--pool", "example-work-pool", "--type", "kubernetes",
+					"--with-healthcheck",
+				}))
 			})
 
 			It("should have an environment with PREFECT_HOME set", func() {
@@ -270,6 +275,61 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Expect(container.Resources.Limits).To(Equal(corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("500m"),
 					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				}))
+			})
+
+			It("should have the correct startup, readiness, and liveness probes", func() {
+				Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+				container := deployment.Spec.Template.Spec.Containers[0]
+
+				Expect(container.Env).To(ContainElement(corev1.EnvVar{
+					Name:  "PREFECT_WORKER_WEBSERVER_PORT",
+					Value: "8080",
+				}))
+
+				Expect(container.StartupProbe).To(Equal(&corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/health",
+							Port:   intstr.FromInt(8080),
+							Scheme: corev1.URISchemeHTTP,
+						},
+					},
+					InitialDelaySeconds: 10,
+					PeriodSeconds:       5,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    30,
+				}))
+
+				Expect(container.ReadinessProbe).To(Equal(&corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/health",
+							Port:   intstr.FromInt(8080),
+							Scheme: corev1.URISchemeHTTP,
+						},
+					},
+					InitialDelaySeconds: 10,
+					PeriodSeconds:       5,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    30,
+				}))
+
+				Expect(container.LivenessProbe).To(Equal(&corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/health",
+							Port:   intstr.FromInt(8080),
+							Scheme: corev1.URISchemeHTTP,
+						},
+					},
+					InitialDelaySeconds: 120,
+					PeriodSeconds:       10,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    2,
 				}))
 			})
 		})
