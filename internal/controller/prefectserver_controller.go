@@ -233,32 +233,14 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		},
 	}
 
-	mutateFn := func() error {
-		if deploy.CreationTimestamp.IsZero() {
-			if controllerErr := ctrl.SetControllerReference(server, deploy, r.Scheme); controllerErr != nil {
-				return controllerErr
-			}
-
-		} else {
-			// This is an existing deployment, make sure it is ours
-			if !metav1.IsControlledBy(deploy, server) {
-				errorMessage := fmt.Sprintf(
-					"%s %s already exists and is not controlled by PrefectServer %s",
-					"Deployment", deploy.Name, server.Name,
-				)
-
-				return errors.NewBadRequest(errorMessage)
-			}
-
-			condition = conditions.Updated(objName)
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		if err := ctrl.SetControllerReference(server, deploy, r.Scheme); err != nil {
+			return err
 		}
 
-		err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
+		return mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
+	})
 
-		return err
-	}
-
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, mutateFn)
 	if err != nil {
 		condition = conditions.UnknownError(objName, err)
 		return &ctrl.Result{}, err
