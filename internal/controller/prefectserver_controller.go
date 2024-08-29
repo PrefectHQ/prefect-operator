@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"dario.cat/mergo"
 	appsv1 "k8s.io/api/apps/v1"
@@ -207,7 +208,9 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 	case !isMigrationJobFinished(foundMigrationJob):
 		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
 		condition = conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name))
-		return &ctrl.Result{Requeue: true}, nil
+
+		// We'll requeue after 20 seconds to check on the migration Job's status
+		return &ctrl.Result{Requeue: true, RequeueAfter: 20 * time.Second}, nil
 
 	default:
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
