@@ -36,11 +36,13 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
+	"github.com/PrefectHQ/prefect-operator/internal/status"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
 	"github.com/go-logr/logr"
 )
@@ -78,6 +80,14 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	// Defer a final status update at the end of the reconciliation loop, so that any of the
+	// individual reconciliation functions can update the status as they see fit.
+	defer func() {
+		if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+			log.Error(statusErr, "Failed to update PrefectServer status")
+		}
+	}()
+
 	desiredDeployment, desiredPVC, desiredMigrationJob := r.prefectServerDeployment(server)
 	desiredService := r.prefectServerService(server)
 
@@ -113,108 +123,79 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *prefectiov1.PrefectServer, desiredPVC *corev1.PersistentVolumeClaim, log logr.Logger) (*ctrl.Result, error) {
-	var condition metav1.Condition
-	var err error
-	defer func() {
-		if updateErr := r.updateCondition(ctx, server, condition); updateErr != nil {
-			err = utilerrors.NewAggregate([]error{updateErr, err})
-		}
-	}()
-
 	objName := constants.PVC
 
 	if desiredPVC == nil {
-		condition = conditions.NotRequired(objName)
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.NotRequired(objName))
 
 		return nil, nil
 	}
 
-	foundPVC := &corev1.PersistentVolumeClaim{}
-	err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredPVC.Name}, foundPVC)
-	if errors.IsNotFound(err) {
-		log.Info("Creating PersistentVolumeClaim", "name", desiredPVC.Name)
-		if err = r.Create(ctx, desiredPVC); err != nil {
-			condition = conditions.NotCreated(objName, err)
-
-			return &ctrl.Result{}, err
-		}
-
-		condition = conditions.Created(objName)
-	} else if err != nil {
-		condition = conditions.UnknownError(objName, err)
-
-		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundPVC, server) {
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"PersistentVolumeClaim", desiredPVC.Name, server.Name,
-		)
-		condition = conditions.AlreadyExists(objName, errorMessage)
-
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if pvcNeedsUpdate(&foundPVC.Spec, &desiredPVC.Spec, log) {
-		// TODO: handle patching the PVC if there are meaningful updates that we can make,
-		// specifically the size request for a dynamically-provisioned PVC
-	} else {
-		if !meta.IsStatusConditionTrue(server.Status.Conditions, "PersistentVolumeClaimReconciled") {
-			condition = conditions.Updated(objName)
-		}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      desiredPVC.Name,
+			Namespace: server.Namespace,
+		},
 	}
 
-	return nil, err
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, pvc, func() error {
+		if err := ctrl.SetControllerReference(server, pvc, r.Scheme); err != nil {
+			return err
+		}
+
+		return mergo.Merge(pvc, desiredPVC, mergo.WithOverride)
+	})
+
+	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+
+	if err != nil {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
+		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
+			return &ctrl.Result{}, utilerrors.NewAggregate([]error{updateErr, err})
+		}
+		return &ctrl.Result{}, err
+	}
+
+	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
+
+	return nil, nil
 }
 
 func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, server *prefectiov1.PrefectServer, desiredMigrationJob *batchv1.Job, log logr.Logger) (*ctrl.Result, error) {
-	var condition metav1.Condition
-	var err error
-	defer func() {
-		if updateErr := r.updateCondition(ctx, server, condition); updateErr != nil {
-			err = utilerrors.NewAggregate([]error{updateErr, err})
-		}
-	}()
-
 	objName := constants.MigrationJob
 
 	if desiredMigrationJob == nil {
-		condition = conditions.NotRequired(objName)
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.NotRequired(objName))
 
 		return nil, nil
 	}
 
 	foundMigrationJob := &batchv1.Job{}
-	err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
+	err := r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
 
 	switch {
 	case errors.IsNotFound(err):
 		log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
 		if err = r.Create(ctx, desiredMigrationJob); err != nil {
-			condition = conditions.NotCreated(objName, err)
+			meta.SetStatusCondition(&server.Status.Conditions, conditions.NotCreated(objName, err))
 			return &ctrl.Result{}, err
 		}
-		condition = conditions.Created(objName)
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.Created(objName))
 
 	case err != nil:
-		condition = conditions.UnknownError(objName, err)
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
 		return &ctrl.Result{}, err
-
-	case !metav1.IsControlledBy(foundMigrationJob, server):
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"Job", desiredMigrationJob.Name, server.Name,
-		)
-		condition = conditions.AlreadyExists(objName, errorMessage)
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
 
 	case !isMigrationJobFinished(foundMigrationJob):
 		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
-		condition = conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name))
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name)))
 
 		// We'll requeue after 20 seconds to check on the migration Job's status
 		return &ctrl.Result{Requeue: true, RequeueAfter: 20 * time.Second}, nil
 
 	default:
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
-			condition = conditions.Updated(objName)
+			meta.SetStatusCondition(&server.Status.Conditions, conditions.Updated(objName))
 		}
 	}
 
@@ -222,162 +203,81 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 }
 
 func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, server *prefectiov1.PrefectServer, desiredDeployment appsv1.Deployment, log logr.Logger) (*ctrl.Result, error) {
-	var condition metav1.Condition
-	var err error
-	defer func() {
-		if updateErr := r.updateCondition(ctx, server, condition); updateErr != nil {
-			err = utilerrors.NewAggregate([]error{updateErr, err})
-		}
-	}()
-
 	objName := constants.Deployment
 
-	serverNamespacedName := types.NamespacedName{
-		Namespace: server.Namespace,
-		Name:      server.Name,
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name,
+			Namespace: server.Namespace,
+		},
 	}
 
-	foundDeployment := &appsv1.Deployment{}
-	err = r.Get(ctx, serverNamespacedName, foundDeployment)
-	if errors.IsNotFound(err) {
-		log.Info("Creating Deployment", "name", desiredDeployment.Name)
-		if err = r.Create(ctx, &desiredDeployment); err != nil {
-			condition = conditions.NotCreated(objName, err)
-
-			return &ctrl.Result{}, err
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		if err := ctrl.SetControllerReference(server, deploy, r.Scheme); err != nil {
+			return err
 		}
 
-		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+		return mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
+	})
 
-		condition = conditions.Created(objName)
-	} else if err != nil {
-		condition = conditions.UnknownError(objName, err)
+	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
+	if err != nil {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
+		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
+			return &ctrl.Result{}, utilerrors.NewAggregate([]error{updateErr, err})
+		}
 		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundDeployment, server) {
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"Deployment", desiredDeployment.Name, server.Name,
-		)
+	}
 
-		condition = conditions.AlreadyExists(objName, errorMessage)
+	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
 
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if deploymentNeedsUpdate(&foundDeployment.Spec, &desiredDeployment.Spec, log) {
-		log.Info("Updating Deployment", "name", desiredDeployment.Name)
-		condition = conditions.NeedsUpdate(objName)
-
-		if err = r.Update(ctx, &desiredDeployment); err != nil {
-			condition = conditions.UpdateFailed(objName, err)
-
-			return &ctrl.Result{}, err
-		}
-
-		condition = conditions.Updated(objName)
-	} else {
-		if !meta.IsStatusConditionTrue(server.Status.Conditions, "DeploymentReconciled") {
-			condition = conditions.Updated(objName)
-		}
-
-		ready := foundDeployment.Status.ReadyReplicas > 0
+	switch result {
+	case controllerutil.OperationResultCreated:
+		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+	case controllerutil.OperationResultUpdated:
+		ready := deploy.Status.ReadyReplicas > 0
 		version := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
-
 		if server.Status.Ready != ready || server.Status.Version != version {
 			server.Status.Ready = ready
 			server.Status.Version = version
-
-			if statusErr := r.Status().Update(ctx, server); statusErr != nil {
-				return &ctrl.Result{}, statusErr
-			}
-		}
-	}
-	return nil, err
-}
-
-func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *prefectiov1.PrefectServer, desiredService corev1.Service, log logr.Logger) (*ctrl.Result, error) {
-	var condition metav1.Condition
-	var err error
-	defer func() {
-		if updateErr := r.updateCondition(ctx, server, condition); updateErr != nil {
-			err = utilerrors.NewAggregate([]error{updateErr, err})
-		}
-	}()
-
-	objName := constants.Service
-
-	serverNamespacedName := types.NamespacedName{
-		Namespace: server.Namespace,
-		Name:      server.Name,
-	}
-
-	foundService := &corev1.Service{}
-	err = r.Get(ctx, serverNamespacedName, foundService)
-	if errors.IsNotFound(err) {
-		log.Info("Creating Service", "name", desiredService.Name)
-		if err = r.Create(ctx, &desiredService); err != nil {
-			condition = conditions.NotCreated("Service", err)
-
-			return &ctrl.Result{}, err
-		}
-
-		condition = conditions.Created(objName)
-	} else if err != nil {
-		condition = conditions.UnknownError(objName, err)
-
-		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundService, server) {
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"Service", desiredService.Name, server.Name,
-		)
-
-		condition = conditions.AlreadyExists(objName, errorMessage)
-
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if serviceNeedsUpdate(&foundService.Spec, &desiredService.Spec, log) {
-		log.Info("Updating Service", "name", desiredService.Name)
-		condition = conditions.NeedsUpdate(objName)
-
-		if err = r.Update(ctx, &desiredService); err != nil {
-			condition = metav1.Condition{
-				Type:    "ServiceReconciled",
-				Status:  metav1.ConditionFalse,
-				Reason:  "ServiceUpdateFailed",
-				Message: "Service update failed: " + err.Error(),
-			}
-
-			return &ctrl.Result{}, err
-		}
-
-		condition = conditions.Updated(objName)
-	} else {
-		if !meta.IsStatusConditionTrue(server.Status.Conditions, "ServiceReconciled") {
-			condition = metav1.Condition{
-				Type:    "ServiceReconciled",
-				Status:  metav1.ConditionTrue,
-				Reason:  "ServiceUpdated",
-				Message: "Service is in the correct state",
-			}
 		}
 	}
 
 	return nil, nil
 }
 
-func (r *PrefectServerReconciler) updateCondition(ctx context.Context, server *prefectiov1.PrefectServer, condition metav1.Condition) error {
-	if condition.Type == "" {
-		// If there's no condition change, just exit
-		return nil
+func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *prefectiov1.PrefectServer, desiredService corev1.Service, log logr.Logger) (*ctrl.Result, error) {
+	objName := constants.Service
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name,
+			Namespace: server.Namespace,
+		},
 	}
-	if meta.SetStatusCondition(&server.Status.Conditions, condition) {
-		err := r.Status().Update(ctx, server)
-		if err != nil {
-			log := ctrllog.FromContext(ctx)
-			log.Error(err, "Failed to update status conditions", "server", server)
+
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, service, func() error {
+		if err := ctrl.SetControllerReference(server, service, r.Scheme); err != nil {
+			return err
 		}
-		return err
+
+		return mergo.Merge(service, desiredService, mergo.WithOverride)
+	})
+
+	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+
+	if err != nil {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
+		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
+			return &ctrl.Result{}, utilerrors.NewAggregate([]error{updateErr, err})
+		}
+		return &ctrl.Result{}, err
 	}
-	return nil
+
+	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
+
+	return &ctrl.Result{}, err
 }
 
 func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr.Logger) bool {
