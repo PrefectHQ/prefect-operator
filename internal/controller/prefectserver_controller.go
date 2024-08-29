@@ -146,6 +146,8 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		return mergo.Merge(pvc, desiredPVC, mergo.WithOverride)
 	})
 
+	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+
 	if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
 		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
@@ -154,7 +156,6 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		return &ctrl.Result{}, err
 	}
 
-	log.Info("CreateOrUpdate successful", "object", objName, "name", server.Name, "result", result)
 	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
 
 	return nil, nil
@@ -219,7 +220,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		return mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
 	})
 
-	log.Info("CreateOrUpdate successful", "object", objName, "name", server.Name, "result", result)
+	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
 	if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
@@ -264,6 +265,8 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 		return mergo.Merge(service, desiredService, mergo.WithOverride)
 	})
 
+	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+
 	if err != nil {
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
 		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
@@ -272,7 +275,6 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 		return &ctrl.Result{}, err
 	}
 
-	log.Info("CreateOrUpdate successful", "object", objName, "name", server.Name, "result", result)
 	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
 
 	return &ctrl.Result{}, err
