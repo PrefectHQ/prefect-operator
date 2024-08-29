@@ -1255,13 +1255,17 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
 						Namespace: namespaceName,
-						Name:      "prefect-on-postgres-migration",
+						Name:      desiredMigrationJob.Name,
 					}, migrateJob)
 				}).Should(Succeed())
+
+				migrateJob.Status.Succeeded = 1
+				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
 
 				deployment = &appsv1.Deployment{}
 				Eventually(func() error {
@@ -1430,11 +1434,12 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
 						Namespace: namespaceName,
-						Name:      "prefect-on-postgres-migration",
+						Name:      desiredMigrationJob.Name,
 					}, migrateJob)
 				}).Should(Succeed())
 
@@ -1508,6 +1513,7 @@ var _ = Describe("PrefectServer controller", func() {
 		})
 
 		Context("When updating a server backed by PostgreSQL", func() {
+			var controllerReconciler *PrefectServerReconciler
 			BeforeEach(func() {
 				prefectserver = &prefectiov1.PrefectServer{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1526,7 +1532,7 @@ var _ = Describe("PrefectServer controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
 
-				controllerReconciler := &PrefectServerReconciler{
+				controllerReconciler = &PrefectServerReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
 				}
@@ -1538,6 +1544,18 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
+				// Set the first migration Job to be complete
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				migrateJob := &batchv1.Job{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      desiredMigrationJob.Name,
+					}, migrateJob)
+				}).Should(Succeed())
+				migrateJob.Status.Succeeded = 1
+				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
+
 				prefectserver.Spec.Settings = []corev1.EnvVar{
 					{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
 				}
@@ -1548,6 +1566,18 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+
+				// Set the second migration Job to be complete
+				_, _, desiredMigrationJob = controllerReconciler.prefectServerDeployment(prefectserver)
+				migrateJob = &batchv1.Job{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      desiredMigrationJob.Name,
+					}, migrateJob)
+				}).Should(Succeed())
+				migrateJob.Status.Succeeded = 1
+				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
 			})
 
 			It("should update the Deployment with the new setting", func() {
@@ -1567,25 +1597,67 @@ var _ = Describe("PrefectServer controller", func() {
 				}))
 			})
 
+			It("should create new migration Job with the new setting", func() {
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				job := &batchv1.Job{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      desiredMigrationJob.Name,
+					}, job)
+				}).Should(Succeed())
+				Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
+				container := job.Spec.Template.Spec.Containers[0]
+				Expect(container.Env).To(ContainElement(corev1.EnvVar{
+					Name:  "PREFECT_SOME_SETTING",
+					Value: "some-value",
+				}))
+			})
+
+			It("should do nothing if an active migration Job already exists", func() {
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				migrateJob := &batchv1.Job{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      desiredMigrationJob.Name,
+					}, migrateJob)
+				}).Should(Succeed())
+
+				migrateJob.Status.Succeeded = 0
+				migrateJob.Status.Failed = 0
+				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				migrateJob2 := &batchv1.Job{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      desiredMigrationJob.Name,
+					}, migrateJob2)
+				}).Should(Succeed())
+
+				Expect(migrateJob2.Generation).To(Equal(migrateJob.Generation))
+			})
+
 			It("should not attempt to update a migration Job that it does not own", func() {
 				job := &batchv1.Job{}
+				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
 				Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Namespace: namespaceName,
-					Name:      "prefect-on-postgres-migration",
+					Name:      desiredMigrationJob.Name,
 				}, job)).To(Succeed())
 
 				job.OwnerReferences = nil
 				Expect(k8sClient.Update(ctx, job)).To(Succeed())
 
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
-				Expect(err).To(MatchError("Job prefect-on-postgres-migration already exists and is not controlled by PrefectServer prefect-on-postgres"))
+				Expect(err).To(MatchError(fmt.Sprintf("Job %s already exists and is not controlled by PrefectServer %s", desiredMigrationJob.Name, prefectserver.Name)))
 			})
 
 			It("should not attempt to update a Deployment that it does not own", func() {

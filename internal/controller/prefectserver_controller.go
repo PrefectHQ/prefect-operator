@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"dario.cat/mergo"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +41,7 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
+	"github.com/PrefectHQ/prefect-operator/internal/utils"
 	"github.com/go-logr/logr"
 )
 
@@ -87,7 +89,9 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return *result, err
 	}
 
-	// Reconcile the migration job, if one is required
+	// Reconcile the migration job, if one is required.
+	// NOTE: if an active migration is still running,
+	// this reconciliation will requeue and exit early here.
 	result, err = r.reconcileMigrationJob(ctx, server, desiredMigrationJob, log)
 	if result != nil {
 		return *result, err
@@ -179,32 +183,36 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 
 	foundMigrationJob := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
-	if errors.IsNotFound(err) {
+
+	switch {
+	case errors.IsNotFound(err):
 		log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
 		if err = r.Create(ctx, desiredMigrationJob); err != nil {
 			condition = conditions.NotCreated(objName, err)
-
 			return &ctrl.Result{}, err
 		}
-
 		condition = conditions.Created(objName)
-	} else if err != nil {
-		condition = conditions.UnknownError(objName, err)
 
+	case err != nil:
+		condition = conditions.UnknownError(objName, err)
 		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundMigrationJob, server) {
+
+	case !metav1.IsControlledBy(foundMigrationJob, server):
 		errorMessage := fmt.Sprintf(
 			"%s %s already exists and is not controlled by PrefectServer %s",
 			"Job", desiredMigrationJob.Name, server.Name,
 		)
-
 		condition = conditions.AlreadyExists(objName, errorMessage)
-
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if jobNeedsUpdate(&foundMigrationJob.Spec, &desiredMigrationJob.Spec, log) {
-		// TODO: handle replacing the job if something has changed
 
-	} else {
+	case !isMigrationJobFinished(foundMigrationJob):
+		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
+		condition = conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name))
+
+		// We'll requeue after 20 seconds to check on the migration Job's status
+		return &ctrl.Result{Requeue: true, RequeueAfter: 20 * time.Second}, nil
+
+	default:
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
 			condition = conditions.Updated(objName)
 		}
@@ -377,9 +385,15 @@ func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr
 	return false
 }
 
-func jobNeedsUpdate(current, desired *batchv1.JobSpec, log logr.Logger) bool {
-	// TODO: check for changes to the job spec that require an update
-	return false
+func isMigrationJobFinished(foundMigrationJob *batchv1.Job) bool {
+	switch {
+	case foundMigrationJob.Status.Succeeded > 0:
+		return true
+	case foundMigrationJob.Status.Failed > 0:
+		return true
+	default:
+		return false
+	}
 }
 
 func deploymentNeedsUpdate(current, desired *appsv1.DeploymentSpec, log logr.Logger) bool {
@@ -627,29 +641,34 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 }
 
 func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) *batchv1.Job {
+	jobSpec := batchv1.JobSpec{
+		TTLSecondsAfterFinished: ptr.To(int32(7 * 24 * 60 * 60)), // 7 days
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: server.ServerLabels(),
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:    "prefect-server-migration",
+						Image:   server.Image(),
+						Command: []string{"prefect", "server", "database", "upgrade", "--yes"},
+						Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
+					},
+				},
+				RestartPolicy: corev1.RestartPolicyOnFailure,
+			},
+		},
+	}
+
+	// Generate hash based on the job spec
+	hashSuffix, _ := utils.Hash(jobSpec, 8) // Use the first 8 characters of the hash
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: server.Namespace,
-			Name:      server.Name + "-migration",
+			Name:      fmt.Sprintf("%s-migration-%s", server.Name, hashSuffix),
 		},
-		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: server.ServerLabels(),
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:    "prefect-server-migration",
-							Image:   server.Image(),
-							Command: []string{"prefect", "server", "database", "upgrade", "--yes"},
-							Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
-						},
-					},
-					RestartPolicy: corev1.RestartPolicyOnFailure,
-				},
-			},
-		},
+		Spec: jobSpec,
 	}
 }
 
