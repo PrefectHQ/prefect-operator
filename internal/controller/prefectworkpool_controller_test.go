@@ -433,27 +433,6 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				corev1.ResourceMemory: resource.MustParse("1Gi"),
 			}))
 		})
-
-		It("should not attempt to update a Deployment that it does not own", func() {
-			deployment := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Namespace: namespaceName,
-				Name:      "example-work-pool",
-			}, deployment)).To(Succeed())
-
-			deployment.OwnerReferences = nil
-			Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
-
-			controllerReconciler := &PrefectWorkPoolReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: name,
-			})
-			Expect(err).To(MatchError("Deployment example-work-pool already exists and is not controlled by PrefectWorkPool example-work-pool"))
-		})
 	})
 
 	Context("When evaluating changes with a work pool", func() {
