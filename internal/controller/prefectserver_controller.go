@@ -127,36 +127,31 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		return nil, nil
 	}
 
-	foundPVC := &corev1.PersistentVolumeClaim{}
-	err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredPVC.Name}, foundPVC)
-	if errors.IsNotFound(err) {
-		log.Info("Creating PersistentVolumeClaim", "name", desiredPVC.Name)
-		if err = r.Create(ctx, desiredPVC); err != nil {
-			condition = conditions.NotCreated(objName, err)
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      desiredPVC.Name,
+			Namespace: server.Namespace,
+		},
+	}
 
-			return &ctrl.Result{}, err
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, pvc, func() error {
+		if err := ctrl.SetControllerReference(server, pvc, r.Scheme); err != nil {
+			return err
 		}
 
-		condition = conditions.Created(objName)
-	} else if err != nil {
+		return mergo.Merge(pvc, desiredPVC, mergo.WithOverride)
+	})
+
+	if err != nil {
 		condition = conditions.UnknownError(objName, err)
-
 		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundPVC, server) {
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"PersistentVolumeClaim", desiredPVC.Name, server.Name,
-		)
-		condition = conditions.AlreadyExists(objName, errorMessage)
+	}
 
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if pvcNeedsUpdate(&foundPVC.Spec, &desiredPVC.Spec, log) {
-		// TODO: handle patching the PVC if there are meaningful updates that we can make,
-		// specifically the size request for a dynamically-provisioned PVC
-	} else {
-		if !meta.IsStatusConditionTrue(server.Status.Conditions, "PersistentVolumeClaimReconciled") {
-			condition = conditions.Updated(objName)
-		}
+	log.Info("CreateOrUpdate successful", "object", objName, "name", server.Name, "result", result)
+	condition = status.GetStatusConditionForOperationResult(result, objName, err)
+
+	if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+		return &ctrl.Result{}, statusErr
 	}
 
 	return nil, err
