@@ -246,7 +246,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		return &ctrl.Result{}, err
 	}
 
-	log.Info("CreateOrUpdate successful", "result", result)
+	log.Info("CreateOrUpdate successful", "object", objName, "name", server.Name, "result", result)
 	condition = status.GetStatusConditionForOperationResult(result, objName, err)
 
 	switch result {
