@@ -504,48 +504,6 @@ var _ = Describe("PrefectServer controller", func() {
 					corev1.ResourceMemory: resource.MustParse("1Gi"),
 				}))
 			})
-
-			It("should not attempt to update a Deployment that it does not own", func() {
-				deployment := &appsv1.Deployment{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-anything",
-				}, deployment)).To(Succeed())
-
-				deployment.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Deployment prefect-on-anything already exists and is not controlled by PrefectServer prefect-on-anything"))
-			})
-
-			It("should not attempt to update a service that it does not own", func() {
-				service := &corev1.Service{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-anything",
-				}, service)).To(Succeed())
-
-				service.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, service)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Service prefect-on-anything already exists and is not controlled by PrefectServer prefect-on-anything"))
-			})
 		})
 
 		Context("When evaluating changes with any server", func() {
@@ -778,48 +736,6 @@ var _ = Describe("PrefectServer controller", func() {
 					Name:  "PREFECT_SOME_SETTING",
 					Value: "some-value",
 				}))
-			})
-
-			It("should not attempt to update a Deployment that it does not own", func() {
-				deployment := &appsv1.Deployment{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-ephemeral",
-				}, deployment)).To(Succeed())
-
-				deployment.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Deployment prefect-on-ephemeral already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
-			})
-
-			It("should not attempt to update a service that it does not own", func() {
-				service := &corev1.Service{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-ephemeral",
-				}, service)).To(Succeed())
-
-				service.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, service)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Service prefect-on-ephemeral already exists and is not controlled by PrefectServer prefect-on-ephemeral"))
 			})
 		})
 
@@ -1077,69 +993,6 @@ var _ = Describe("PrefectServer controller", func() {
 					Name:  "PREFECT_SOME_SETTING",
 					Value: "some-value",
 				}))
-			})
-
-			It("should not attempt to update a PersistentVolumeClaim that it does not own", func() {
-				pvc := &corev1.PersistentVolumeClaim{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-sqlite-data",
-				}, pvc)).To(Succeed())
-
-				pvc.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, pvc)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("PersistentVolumeClaim prefect-on-sqlite-data already exists and is not controlled by PrefectServer prefect-on-sqlite"))
-			})
-
-			It("should not attempt to update a Deployment that it does not own", func() {
-				deployment := &appsv1.Deployment{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-sqlite",
-				}, deployment)).To(Succeed())
-
-				deployment.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Deployment prefect-on-sqlite already exists and is not controlled by PrefectServer prefect-on-sqlite"))
-			})
-
-			It("should not attempt to update a service that it does not own", func() {
-				service := &corev1.Service{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-sqlite",
-				}, service)).To(Succeed())
-
-				service.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, service)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Service prefect-on-sqlite already exists and is not controlled by PrefectServer prefect-on-sqlite"))
 			})
 		})
 
@@ -1641,65 +1494,6 @@ var _ = Describe("PrefectServer controller", func() {
 				}).Should(Succeed())
 
 				Expect(migrateJob2.Generation).To(Equal(migrateJob.Generation))
-			})
-
-			It("should not attempt to update a migration Job that it does not own", func() {
-				job := &batchv1.Job{}
-				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      desiredMigrationJob.Name,
-				}, job)).To(Succeed())
-
-				job.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, job)).To(Succeed())
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError(fmt.Sprintf("Job %s already exists and is not controlled by PrefectServer %s", desiredMigrationJob.Name, prefectserver.Name)))
-			})
-
-			It("should not attempt to update a Deployment that it does not own", func() {
-				deployment := &appsv1.Deployment{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-postgres",
-				}, deployment)).To(Succeed())
-
-				deployment.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Deployment prefect-on-postgres already exists and is not controlled by PrefectServer prefect-on-postgres"))
-			})
-
-			It("should not attempt to update a service that it does not own", func() {
-				service := &corev1.Service{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-on-postgres",
-				}, service)).To(Succeed())
-
-				service.OwnerReferences = nil
-				Expect(k8sClient.Update(ctx, service)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).To(MatchError("Service prefect-on-postgres already exists and is not controlled by PrefectServer prefect-on-postgres"))
 			})
 		})
 

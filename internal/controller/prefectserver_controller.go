@@ -194,14 +194,6 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 		condition = conditions.UnknownError(objName, err)
 		return &ctrl.Result{}, err
 
-	case !metav1.IsControlledBy(foundMigrationJob, server):
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"Job", desiredMigrationJob.Name, server.Name,
-		)
-		condition = conditions.AlreadyExists(objName, errorMessage)
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-
 	case !isMigrationJobFinished(foundMigrationJob):
 		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
 		condition = conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name))
