@@ -279,63 +279,34 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 
 	objName := constants.Service
 
-	serverNamespacedName := types.NamespacedName{
-		Namespace: server.Namespace,
-		Name:      server.Name,
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name,
+			Namespace: server.Namespace,
+		},
 	}
 
-	foundService := &corev1.Service{}
-	err = r.Get(ctx, serverNamespacedName, foundService)
-	if errors.IsNotFound(err) {
-		log.Info("Creating Service", "name", desiredService.Name)
-		if err = r.Create(ctx, &desiredService); err != nil {
-			condition = conditions.NotCreated("Service", err)
-
-			return &ctrl.Result{}, err
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, service, func() error {
+		if err := ctrl.SetControllerReference(server, service, r.Scheme); err != nil {
+			return err
 		}
 
-		condition = conditions.Created(objName)
-	} else if err != nil {
+		return mergo.Merge(service, desiredService, mergo.WithOverride)
+	})
+
+	if err != nil {
 		condition = conditions.UnknownError(objName, err)
-
 		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundService, server) {
-		errorMessage := fmt.Sprintf(
-			"%s %s already exists and is not controlled by PrefectServer %s",
-			"Service", desiredService.Name, server.Name,
-		)
-
-		condition = conditions.AlreadyExists(objName, errorMessage)
-
-		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if serviceNeedsUpdate(&foundService.Spec, &desiredService.Spec, log) {
-		log.Info("Updating Service", "name", desiredService.Name)
-		condition = conditions.NeedsUpdate(objName)
-
-		if err = r.Update(ctx, &desiredService); err != nil {
-			condition = metav1.Condition{
-				Type:    "ServiceReconciled",
-				Status:  metav1.ConditionFalse,
-				Reason:  "ServiceUpdateFailed",
-				Message: "Service update failed: " + err.Error(),
-			}
-
-			return &ctrl.Result{}, err
-		}
-
-		condition = conditions.Updated(objName)
-	} else {
-		if !meta.IsStatusConditionTrue(server.Status.Conditions, "ServiceReconciled") {
-			condition = metav1.Condition{
-				Type:    "ServiceReconciled",
-				Status:  metav1.ConditionTrue,
-				Reason:  "ServiceUpdated",
-				Message: "Service is in the correct state",
-			}
-		}
 	}
 
-	return nil, nil
+	log.Info("CreateOrUpdate successful", "object", objName, "name", server.Name, "result", result)
+	condition = status.GetStatusConditionForOperationResult(result, objName, err)
+
+	if statusErr := r.Status().Update(ctx, server); statusErr != nil {
+		return &ctrl.Result{}, statusErr
+	}
+
+	return &ctrl.Result{}, err
 }
 
 func (r *PrefectServerReconciler) updateCondition(ctx context.Context, server *prefectiov1.PrefectServer, condition metav1.Condition) error {
