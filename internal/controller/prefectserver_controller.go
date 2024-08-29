@@ -183,34 +183,33 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 	foundMigrationJob := &batchv1.Job{}
 	err = r.Get(ctx, types.NamespacedName{Namespace: server.Namespace, Name: desiredMigrationJob.Name}, foundMigrationJob)
 
-	if errors.IsNotFound(err) {
+	switch {
+	case errors.IsNotFound(err):
 		log.Info("Creating migration Job", "name", desiredMigrationJob.Name)
 		if err = r.Create(ctx, desiredMigrationJob); err != nil {
 			condition = conditions.NotCreated(objName, err)
-
 			return &ctrl.Result{}, err
 		}
-
 		condition = conditions.Created(objName)
-	} else if err != nil {
-		condition = conditions.UnknownError(objName, err)
 
+	case err != nil:
+		condition = conditions.UnknownError(objName, err)
 		return &ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(foundMigrationJob, server) {
+
+	case !metav1.IsControlledBy(foundMigrationJob, server):
 		errorMessage := fmt.Sprintf(
 			"%s %s already exists and is not controlled by PrefectServer %s",
 			"Job", desiredMigrationJob.Name, server.Name,
 		)
-
 		condition = conditions.AlreadyExists(objName, errorMessage)
-
 		return &ctrl.Result{}, errors.NewBadRequest(errorMessage)
-	} else if !isMigrationJobFinished(foundMigrationJob) {
+
+	case !isMigrationJobFinished(foundMigrationJob):
 		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
 		condition = conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name))
-
 		return &ctrl.Result{Requeue: true}, nil
-	} else {
+
+	default:
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
 			condition = conditions.Updated(objName)
 		}
