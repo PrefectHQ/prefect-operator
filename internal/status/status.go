@@ -12,12 +12,12 @@ func GetStatusConditionForOperationResult(result controllerutil.OperationResult,
 		return conditions.Created(objectName)
 	case controllerutil.OperationResultUpdated:
 		return conditions.Updated(objectName)
-	case controllerutil.OperationResultNone:
-		return conditions.NotRequired(objectName)
-		// return conditions.AlreadyExists(objectName, "object already exists")
-	// case controllerutil.OperationResultUpdatedStatus:
-	// case controllerutil.OperationResultUpdatedStatusOnly:
 	default:
 		return conditions.UnknownError(objectName, err)
 	}
+
+	// Other OperationResult values we can check in the future if needed:
+	// - OperationResultUpdatedStatus
+	// - OperationResultUpdatedStatusOnly
+	// - OperationResultNone
 }
