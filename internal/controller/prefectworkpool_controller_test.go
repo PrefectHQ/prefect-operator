@@ -169,7 +169,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					Name:      "example-work-pool",
 				},
 				Spec: prefectiov1.PrefectWorkPoolSpec{
-					Version: ptr.To("3.0.0rc18"),
+					Version: ptr.To("3.0.0"),
 					Type:    "kubernetes",
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -240,7 +240,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				container := deployment.Spec.Template.Spec.Containers[0]
 
 				Expect(container.Name).To(Equal("prefect-worker"))
-				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc18-python3.12-kubernetes"))
+				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0-python3.12-kubernetes"))
 				Expect(container.Command).To(Equal([]string{
 					"prefect", "worker", "start",
 					"--pool", "example-work-pool", "--type", "kubernetes",
