@@ -273,7 +273,7 @@ var _ = Describe("PrefectServer controller", func() {
 					container := deployment.Spec.Template.Spec.Containers[0]
 
 					Expect(container.Name).To(Equal("prefect-server"))
-					Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0rc18-python3.12"))
+					Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0-python3.12"))
 					Expect(container.Command).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
 				})
 
