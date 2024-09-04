@@ -19,7 +19,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd config/manager && kustomize edit set image controller=${{ github.ref_name }}
+          cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }}
           kustomize build config/crds > prefect-crds.yaml
           kustomize build config/default > prefect.yaml
           gh release upload ${{github.event.release.tag_name}} prefect-crds.yaml prefect.yaml
