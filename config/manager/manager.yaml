@@ -63,7 +63,7 @@ spec:
         args:
         - --leader-elect
         env:
-        - name: WATCH_NAMESPACE
+        - name: WATCH_NAMESPACES
           # This restricts the Operator to watch objects in the same
           # namespace where it is deployed.
           valueFrom:
