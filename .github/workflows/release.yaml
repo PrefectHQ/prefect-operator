@@ -4,6 +4,9 @@ name: Release
 on:
   release:
     types: [published]
+  pull_request:
+    branches:
+      - main
 
 permissions: {}
 
@@ -15,14 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
-      - name: Build and upload manifests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build manifests
         run: |
           cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }}
           kustomize build config/crds > prefect-crds.yaml
           kustomize build config/default > prefect.yaml
-          gh release upload ${{github.event.release.tag_name}} prefect-crds.yaml prefect.yaml
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{github.event.release.tag_name}} prefect-crds.yaml prefect.yaml
 
   build-and-push-docker-image:
     runs-on: ubuntu-latest
@@ -42,4 +47,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: prefect/prefect-operator:${{ github.ref_name }}
+          tags: ${{ github.event_name == 'pull_request' && 'prefecthq/prefect-operator-dev:${{ github.sha }}' || 'prefecthq/prefect-operator:${{ github.ref_name }}' }}
