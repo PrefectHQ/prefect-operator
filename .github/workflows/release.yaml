@@ -21,7 +21,7 @@ jobs:
       - name: Build manifests
         run: |
           (cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }})
-          kustomize build config/crds > prefect-crds.yaml
+          kustomize build config/crd > prefect-crds.yaml
           kustomize build config/default > prefect.yaml
       - name: Upload release assets
         if: github.event_name == 'release'
