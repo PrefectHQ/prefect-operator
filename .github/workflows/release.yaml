@@ -17,13 +17,18 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install tool dependencies
+        uses: jdx/mise-action@v2
+
       - name: Build manifests
         run: |
           (cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }})
           kustomize build config/crd > prefect-crds.yaml
           kustomize build config/default > prefect.yaml
+
       - name: Upload release assets
         if: github.event_name == 'release'
         env:
@@ -38,7 +43,9 @@ jobs:
     # The environment will be 'prod' if the GitHub event is a release. Otherwise, it will be 'dev'.
     environment: ${{ github.event_name == 'release' && 'prod' || 'dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
