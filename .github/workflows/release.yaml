@@ -83,7 +83,7 @@ jobs:
         id: metadata
         uses: docker/metadata-action@v5
         with:
-          images: prefecthq/prefect-operator${{ github.event_name == 'pull_request' && '-dev' }}
+          images: prefecthq/prefect-operator${{ github.event_name == 'pull_request' && '-dev' || '' }}
           tags: |
             type=ref,event=pr
             type=ref,event=branch
