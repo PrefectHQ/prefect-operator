@@ -20,7 +20,7 @@ jobs:
       - uses: jdx/mise-action@v2
       - name: Build manifests
         run: |
-          cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }}
+          (cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }})
           kustomize build config/crds > prefect-crds.yaml
           kustomize build config/default > prefect.yaml
       - name: Upload release assets
