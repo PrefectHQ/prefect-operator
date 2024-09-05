@@ -25,13 +25,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,7 +40,6 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
-	"github.com/PrefectHQ/prefect-operator/internal/status"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
 	"github.com/go-logr/logr"
 )
@@ -127,7 +124,6 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 
 	if desiredPVC == nil {
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.NotRequired(objName))
-
 		return nil, nil
 	}
 
@@ -148,15 +144,14 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 
 	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
+	meta.SetStatusCondition(
+		&server.Status.Conditions,
+		conditions.GetStatusConditionForOperationResult(result, objName, err),
+	)
+
 	if err != nil {
-		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
-		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
-			return &ctrl.Result{}, utilerrors.NewAggregate([]error{updateErr, err})
-		}
 		return &ctrl.Result{}, err
 	}
-
-	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
 
 	return nil, nil
 }
@@ -166,7 +161,6 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 
 	if desiredMigrationJob == nil {
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.NotRequired(objName))
-
 		return nil, nil
 	}
 
@@ -188,7 +182,13 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 
 	case !isMigrationJobFinished(foundMigrationJob):
 		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
-		meta.SetStatusCondition(&server.Status.Conditions, conditions.AlreadyExists(objName, fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name)))
+		meta.SetStatusCondition(
+			&server.Status.Conditions,
+			conditions.AlreadyExists(
+				objName,
+				fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name),
+			),
+		)
 
 		// We'll requeue after 20 seconds to check on the migration Job's status
 		return &ctrl.Result{Requeue: true, RequeueAfter: 20 * time.Second}, nil
@@ -222,22 +222,23 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 
 	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
+	meta.SetStatusCondition(
+		&server.Status.Conditions,
+		conditions.GetStatusConditionForOperationResult(result, objName, err),
+	)
+
 	if err != nil {
-		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
-		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
-			return &ctrl.Result{}, utilerrors.NewAggregate([]error{updateErr, err})
-		}
 		return &ctrl.Result{}, err
 	}
 
-	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
+	serverContainer := desiredDeployment.Spec.Template.Spec.Containers[0]
 
 	switch result {
 	case controllerutil.OperationResultCreated:
-		server.Status.Version = prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+		server.Status.Version = prefectiov1.VersionFromImage(serverContainer.Image)
 	case controllerutil.OperationResultUpdated:
 		ready := deploy.Status.ReadyReplicas > 0
-		version := prefectiov1.VersionFromImage(desiredDeployment.Spec.Template.Spec.Containers[0].Image)
+		version := prefectiov1.VersionFromImage(serverContainer.Image)
 		if server.Status.Ready != ready || server.Status.Version != version {
 			server.Status.Ready = ready
 			server.Status.Version = version
@@ -267,22 +268,16 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 
 	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
+	meta.SetStatusCondition(
+		&server.Status.Conditions,
+		conditions.GetStatusConditionForOperationResult(result, objName, err),
+	)
+
 	if err != nil {
-		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
-		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
-			return &ctrl.Result{}, utilerrors.NewAggregate([]error{updateErr, err})
-		}
 		return &ctrl.Result{}, err
 	}
 
-	meta.SetStatusCondition(&server.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
-
-	return &ctrl.Result{}, err
-}
-
-func pvcNeedsUpdate(current, desired *corev1.PersistentVolumeClaimSpec, log logr.Logger) bool {
-	// TODO: check for meaningful updates to the PVC spec
-	return false
+	return nil, nil
 }
 
 func isMigrationJobFinished(foundMigrationJob *batchv1.Job) bool {
@@ -294,25 +289,6 @@ func isMigrationJobFinished(foundMigrationJob *batchv1.Job) bool {
 	default:
 		return false
 	}
-}
-
-func deploymentNeedsUpdate(current, desired *appsv1.DeploymentSpec, log logr.Logger) bool {
-	merged := current.DeepCopy()
-	return needsUpdate(current, merged, desired, log)
-}
-
-func serviceNeedsUpdate(current, desired *corev1.ServiceSpec, log logr.Logger) bool {
-	merged := current.DeepCopy()
-	return needsUpdate(current, merged, desired, log)
-}
-
-func needsUpdate(current, merged, desired interface{}, log logr.Logger) bool {
-	err := mergo.Merge(merged, desired, mergo.WithOverride)
-	if err != nil {
-		log.Error(err, "Failed to merge objects", "current", current, "desired", desired)
-		return true
-	}
-	return !equality.Semantic.DeepEqual(current, merged)
 }
 
 func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job) {
@@ -470,7 +446,12 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 								MountPath: "/var/lib/prefect/",
 							},
 						},
-						Env: append(append(server.ToEnvVars(), server.Spec.SQLite.ToEnvVars()...), server.Spec.Settings...),
+						Env: append(
+							append(
+								server.ToEnvVars(),
+								server.Spec.SQLite.ToEnvVars()...),
+							server.Spec.Settings...,
+						),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -516,7 +497,12 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
 						Command: server.Command(),
-						Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
+						Env: append(
+							append(
+								server.ToEnvVars(),
+								server.Spec.Postgres.ToEnvVars()...),
+							server.Spec.Settings...,
+						),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -553,7 +539,13 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 						Name:    "prefect-server-migration",
 						Image:   server.Image(),
 						Command: []string{"prefect", "server", "database", "upgrade", "--yes"},
-						Env:     append(append(server.ToEnvVars(), server.Spec.Postgres.ToEnvVars()...), server.Spec.Settings...),
+						Env: append(
+							append(
+								server.ToEnvVars(),
+								server.Spec.Postgres.ToEnvVars()...,
+							),
+							server.Spec.Settings...,
+						),
 					},
 				},
 				RestartPolicy: corev1.RestartPolicyOnFailure,

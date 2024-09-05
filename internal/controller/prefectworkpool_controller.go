@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 
-	"dario.cat/mergo"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,7 +33,6 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
-	"github.com/PrefectHQ/prefect-operator/internal/status"
 )
 
 // PrefectWorkPoolReconciler reconciles a PrefectWorkPool object
@@ -75,12 +73,10 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	objName := constants.Deployment
 
-	desiredDeployment := r.prefectWorkerDeployment(workPool)
-
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      desiredDeployment.Name,
-			Namespace: desiredDeployment.Namespace,
+			Namespace: workPool.Namespace,
+			Name:      workPool.Name,
 		},
 	}
 
@@ -89,56 +85,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return err
 		}
 
-		return mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
-	})
-
-	log.Info("CreateOrUpdate", "object", objName, "name", desiredDeployment.Name, "result", result)
-
-	if err != nil {
-		meta.SetStatusCondition(&workPool.Status.Conditions, conditions.UnknownError(objName, err))
-		return ctrl.Result{}, err
-	}
-
-	meta.SetStatusCondition(&workPool.Status.Conditions, status.GetStatusConditionForOperationResult(result, objName, err))
-
-	if result == controllerutil.OperationResultUpdated {
-		imageVersion := prefectiov1.VersionFromImage(deploy.Spec.Template.Spec.Containers[0].Image)
-		readyWorkers := deploy.Status.ReadyReplicas
-		ready := readyWorkers > 0
-
-		if workPool.Status.Version != imageVersion || workPool.Status.ReadyWorkers != readyWorkers || workPool.Status.Ready != ready {
-			workPool.Status.Version = imageVersion
-			workPool.Status.ReadyWorkers = readyWorkers
-			workPool.Status.Ready = ready
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *PrefectWorkPoolReconciler) updateCondition(ctx context.Context, workPool *prefectiov1.PrefectWorkPool, condition metav1.Condition) error {
-	if condition.Type == "" {
-		// If there's no condition change, just exit
-		return nil
-	}
-	if meta.SetStatusCondition(&workPool.Status.Conditions, condition) {
-		err := r.Status().Update(ctx, workPool)
-		if err != nil {
-			log := ctrllog.FromContext(ctx)
-			log.Error(err, "Failed to update status conditions", "workPool", workPool)
-		}
-		return err
-	}
-	return nil
-}
-
-func (r *PrefectWorkPoolReconciler) prefectWorkerDeployment(workPool *prefectiov1.PrefectWorkPool) appsv1.Deployment {
-	dep := appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      workPool.Name,
-			Namespace: workPool.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
+		deploy.Spec = appsv1.DeploymentSpec{
 			Replicas: &workPool.Spec.Workers,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
@@ -187,13 +134,37 @@ func (r *PrefectWorkPoolReconciler) prefectWorkerDeployment(workPool *prefectiov
 					},
 				},
 			},
-		},
+		}
+
+		return nil
+	})
+
+	log.Info("CreateOrUpdate", "object", objName, "name", workPool.Name, "result", result)
+
+	meta.SetStatusCondition(
+		&workPool.Status.Conditions,
+		conditions.GetStatusConditionForOperationResult(result, objName, err),
+	)
+
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
-	// Set PrefectWorkPool instance as the owner and controller
-	ctrl.SetControllerReference(workPool, &dep, r.Scheme)
+	if result == controllerutil.OperationResultUpdated {
+		imageVersion := prefectiov1.VersionFromImage(deploy.Spec.Template.Spec.Containers[0].Image)
+		readyWorkers := deploy.Status.ReadyReplicas
+		ready := readyWorkers > 0
 
-	return dep
+		if workPool.Status.Version != imageVersion ||
+			workPool.Status.ReadyWorkers != readyWorkers ||
+			workPool.Status.Ready != ready {
+			workPool.Status.Version = imageVersion
+			workPool.Status.ReadyWorkers = readyWorkers
+			workPool.Status.Ready = ready
+		}
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
