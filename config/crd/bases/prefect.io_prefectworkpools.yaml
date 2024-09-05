@@ -123,43 +123,118 @@ spec:
               server:
                 description: Server defines which Prefect Server to connect to
                 properties:
-                  name:
-                    description: Name is the name of the in-cluster Prefect Server in the given
-                      namespace
-                    type: string
-                  namespace:
-                    description: Namespace is the namespace where the in-cluster Prefect Server
-                      is running
-                    type: string
-                  remoteApiUrl:
-                    description: API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud
-                    type: string
                   apiKey:
-                    description: API Key for the Prefect Server. Set if using with an external Prefect Server or Prefect Cloud
-                    type: object
+                    description: APIKey is the API key to use to connect to a remote
+                      Prefect Server
                     properties:
                       value:
-                        description: The value of the API key
+                        description: Value is the literal value of the API key
                         type: string
                       valueFrom:
-                        description: Reference to a secret containing the API key
-                        type: object
+                        description: ValueFrom is a reference to a secret containing
+                          the API key
                         properties:
-                          secretKeyRef:
-                            description: Reference to a secret containing the API key
-                            type: object
+                          configMapKeyRef:
+                            description: Selects a key of a ConfigMap.
                             properties:
-                              name:
-                                type: string
                               key:
+                                description: The key to select.
+                                type: string
+                              name:
+                                description: |-
+                                  Name of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind, uid?
+                                type: string
+                              optional:
+                                description: Specify whether the ConfigMap or its
+                                  key must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          fieldRef:
+                            description: |-
+                              Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                              spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                            properties:
+                              apiVersion:
+                                description: Version of the schema the FieldPath is
+                                  written in terms of, defaults to "v1".
+                                type: string
+                              fieldPath:
+                                description: Path of the field to select in the specified
+                                  API version.
                                 type: string
                             required:
-                            - name
+                            - fieldPath
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          resourceFieldRef:
+                            description: |-
+                              Selects a resource of the container: only resources limits and requests
+                              (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                            properties:
+                              containerName:
+                                description: 'Container name: required for volumes,
+                                  optional for env vars'
+                                type: string
+                              divisor:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: Specifies the output format of the exposed
+                                  resources, defaults to "1"
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              resource:
+                                description: 'Required: resource to select'
+                                type: string
+                            required:
+                            - resource
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          secretKeyRef:
+                            description: Selects a key of a secret in the pod's namespace
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                description: |-
+                                  Name of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  TODO: Add other useful fields. apiVersion, kind, uid?
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
                             - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                    type: object
+                  name:
+                    description: Name is the name of the in-cluster Prefect Server
+                      in the given namespace
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace where the in-cluster Prefect
+                      Server is running
+                    type: string
+                  remoteApiUrl:
+                    description: RemoteAPIURL is the API URL for the remote Prefect
+                      Server. Set if using with an external Prefect Server or Prefect
+                      Cloud
+                    type: string
                 type: object
               settings:
                 description: A list of environment variables to set on the Prefect
-                  Server
+                  Worker
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.
