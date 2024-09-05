@@ -68,7 +68,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=prefect-operator
             org.opencontainers.image.description=Prefect Operator image
-            org.opencontainers.image.vendor=PrefectHQ
+            org.opencontainers.image.vendor=Prefect
 
       - name: Build and push
         uses: docker/build-push-action@v6
