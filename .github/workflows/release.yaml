@@ -43,9 +43,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Docker image metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: prefecthq/prefect-operator${{ github.event_name == 'pull_request' && '-dev' }}
+          tags: |
+            type=ref,event=pr
+            type=semver,pattern={{version}},event=tag
+          labels: |
+            org.opencontainers.image.title=prefect-operator
+            org.opencontainers.image.description=Prefect Operator image
+            org.opencontainers.image.vendor=PrefectHQ
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ github.event_name == 'pull_request' && 'prefecthq/prefect-operator-dev:${{ github.sha }}' || 'prefecthq/prefect-operator:${{ github.ref_name }}' }}
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
