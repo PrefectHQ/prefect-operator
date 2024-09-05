@@ -2,13 +2,12 @@
 name: Release
 
 "on":
-  release:
-    types:
-      - published
-  pull_request:
+  push:
     branches:
       - main
-  push:
+    tags:
+      - '*'
+  pull_request:
     branches:
       - main
 
@@ -52,10 +51,10 @@ jobs:
           kustomize build config/default > prefect.yaml
 
       - name: Upload release assets
-        if: github.event_name == 'release'
+        if: github.ref_type == 'tag'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{github.event.release.tag_name}} prefect-crds.yaml prefect.yaml
+        run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect.yaml
 
   build-and-push-docker-image:
     needs: unit-tests
@@ -88,7 +87,7 @@ jobs:
           tags: |
             type=ref,event=pr
             type=ref,event=branch
-            type=semver,pattern={{version}},event=tag
+            type=semver,pattern={{version}}
           labels: |
             org.opencontainers.image.title=prefect-operator
             org.opencontainers.image.description=Prefect Operator image
