@@ -1,7 +1,7 @@
 # Prefect Operator release workflow.
 name: Release
 
-on:
+"on":
   release:
     types:
       - published
