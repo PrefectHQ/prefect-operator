@@ -8,10 +8,31 @@ name: Release
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 permissions: {}
 
 jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install tool dependencies
+        uses: jdx/mise-action@v2
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test
+
   build-and-upload-manifests:
     needs: unit-tests
     permissions:
@@ -66,6 +87,7 @@ jobs:
           images: prefecthq/prefect-operator${{ github.event_name == 'pull_request' && '-dev' }}
           tags: |
             type=ref,event=pr
+            type=ref,event=branch
             type=semver,pattern={{version}},event=tag
           labels: |
             org.opencontainers.image.title=prefect-operator
