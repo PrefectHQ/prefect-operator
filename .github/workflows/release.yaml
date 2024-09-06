@@ -63,7 +63,7 @@ jobs:
     # - dev: https://hub.docker.com/r/prefecthq/prefect-operator-dev
     # - prod: https://hub.docker.com/r/prefecthq/prefect-operator
     # The environment will be 'prod' if the GitHub event is a release. Otherwise, it will be 'dev'.
-    environment: ${{ github.event_name == 'release' && 'prod' || 'dev' }}
+    environment: ${{ github.ref_type == 'tag' && 'prod' || 'dev' }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -83,7 +83,12 @@ jobs:
         id: metadata
         uses: docker/metadata-action@v5
         with:
-          images: prefecthq/prefect-operator${{ github.event_name == 'pull_request' && '-dev' || '' }}
+          # When running jobs for a tag, do not apply an image name suffix to
+          # push to the production repository.
+          #
+          # In other situations, such as pull requests and main, add a '-dev'
+          # image name suffix to push to the dev repository.
+          images: prefecthq/prefect-operator${{ github.ref_type == 'tag' && '' || '-dev' }}
           tags: |
             type=ref,event=pr
             type=ref,event=branch
