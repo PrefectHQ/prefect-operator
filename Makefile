@@ -24,9 +24,18 @@ ENVTEST ?= setup-envtest
 GOLANGCI_LINT ?= golangci-lint
 GINKGO ?= ginkgo
 
-.PHONY: tools
-tools:
+.PHONY: all
+all: tools build
+
+.PHONY: mise
+mise:
 	@mise install --yes
+
+.git/hooks/pre-commit:
+	@pre-commit install
+
+.PHONY: tools
+tools: mise .git/hooks/pre-commit
 
 .PHONY: tools-list
 tools-list:
@@ -36,9 +45,6 @@ tools-list:
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
-
-.PHONY: all
-all: build
 
 ##@ General
 
@@ -75,7 +81,7 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-GINKGO_OPTIONS ?= -v --skip-package test/e2e -coverprofile cover.out -coverpkg ./api/v1/,./internal/controller/ -r
+GINKGO_OPTIONS ?= -v --skip-package test/e2e -coverprofile cover.out -coverpkg ./api/v1/...,./internal/... -r
 
 .PHONY: test
 test: manifests generate fmt vet tools ## Run tests.
