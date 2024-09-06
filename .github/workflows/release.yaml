@@ -83,12 +83,9 @@ jobs:
         id: metadata
         uses: docker/metadata-action@v5
         with:
-          # When running jobs for a tag, do not apply an image name suffix to
-          # push to the production repository.
-          #
-          # In other situations, such as pull requests and main, add a '-dev'
-          # image name suffix to push to the dev repository.
-          images: prefecthq/prefect-operator${{ github.ref_type == 'tag' && '' || '-dev' }}
+          # For jobs on tags, push to the prod repository.
+          # For all other situations, like pull requests and 'main', push to the dev repository.
+          images: prefecthq/${{ github.ref_type == 'tag' && 'prefect-operator' || 'prefect-operator-dev' }}
           tags: |
             type=ref,event=pr
             type=ref,event=branch
