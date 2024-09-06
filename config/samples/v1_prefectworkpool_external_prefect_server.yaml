@@ -1,0 +1,12 @@
+apiVersion: prefect.io/v1
+kind: PrefectWorkPool
+metadata:
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: external-pool
+spec:
+  type: process
+  server:
+    remoteApiUrl: https://my-server.example.com
+  workers: 3

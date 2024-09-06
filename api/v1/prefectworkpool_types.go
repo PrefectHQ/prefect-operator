@@ -143,11 +143,10 @@ func (s *PrefectWorkPool) Command() []string {
 	}
 }
 
-// PrefectAPIURL returns the API URL for the Prefect Server.
-// If an API Key is provided, it will return the RemoteAPIURL.
-// Otherwise, it will default to the local, in-cluster API URL.
+// PrefectAPIURL returns the API URL for the Prefect Server, either from the RemoteAPIURL or
+// from the in-cluster server
 func (s *PrefectWorkPool) PrefectAPIURL() string {
-	if s.Spec.Server.APIKey != nil && s.Spec.Server.RemoteAPIURL != nil {
+	if s.Spec.Server.RemoteAPIURL != nil {
 		remote := *s.Spec.Server.RemoteAPIURL
 		if !strings.HasSuffix(remote, "/api") {
 			remote = fmt.Sprintf("%s/api", remote)
