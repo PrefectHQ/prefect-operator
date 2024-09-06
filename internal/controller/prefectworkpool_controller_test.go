@@ -608,6 +608,94 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		})
 	})
 
+	It("should set PREFECT_API_URL when provided", func() {
+		name := types.NamespacedName{
+			Namespace: namespaceName,
+			Name:      "example-work-pool-with-api-key",
+		}
+
+		prefectworkpool := &prefectiov1.PrefectWorkPool{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: name.Namespace,
+				Name:      name.Name,
+			},
+			Spec: prefectiov1.PrefectWorkPoolSpec{
+				Server: prefectiov1.PrefectServerReference{
+					Name:         "test-server",
+					Namespace:    name.Namespace,
+					RemoteAPIURL: ptr.To("https://some-server.example.com/api"),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, prefectworkpool)).To(Succeed())
+
+		controllerReconciler := &PrefectWorkPoolReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+		}
+
+		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: name,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		deployment := &appsv1.Deployment{}
+		Eventually(func() error {
+			return k8sClient.Get(ctx, name, deployment)
+		}).Should(Succeed())
+
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container := deployment.Spec.Template.Spec.Containers[0]
+		Expect(container.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "PREFECT_API_URL",
+			Value: "https://some-server.example.com/api",
+		}))
+	})
+
+	It("should ensure PREFECT_API_URL ends with /api when provided", func() {
+		name := types.NamespacedName{
+			Namespace: namespaceName,
+			Name:      "example-work-pool-with-api-key",
+		}
+
+		prefectworkpool := &prefectiov1.PrefectWorkPool{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: name.Namespace,
+				Name:      name.Name,
+			},
+			Spec: prefectiov1.PrefectWorkPoolSpec{
+				Server: prefectiov1.PrefectServerReference{
+					Name:         "test-server",
+					Namespace:    name.Namespace,
+					RemoteAPIURL: ptr.To("https://some-server.example.com"),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, prefectworkpool)).To(Succeed())
+
+		controllerReconciler := &PrefectWorkPoolReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+		}
+
+		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: name,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		deployment := &appsv1.Deployment{}
+		Eventually(func() error {
+			return k8sClient.Get(ctx, name, deployment)
+		}).Should(Succeed())
+
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container := deployment.Spec.Template.Spec.Containers[0]
+		Expect(container.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "PREFECT_API_URL",
+			Value: "https://some-server.example.com/api",
+		}))
+	})
+
 	It("should set PREFECT_API_KEY and a remote PREFECT_API_URL when apiKey.value is provided", func() {
 		name := types.NamespacedName{
 			Namespace: namespaceName,
