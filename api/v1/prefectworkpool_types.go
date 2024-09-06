@@ -49,7 +49,19 @@ type PrefectWorkPoolSpec struct {
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=local;cloud;self-managed
+type ServerType string
+
+const (
+	ServerTypeLocal       ServerType = "local"
+	ServerTypeCloud       ServerType = "cloud"
+	ServerTypeSelfManaged ServerType = "self-managed"
+)
+
 type PrefectServerReference struct {
+	// Type is the type of the Prefect Server to connect to
+	Type ServerType `json:"type,omitempty"`
+
 	// Namespace is the namespace where the in-cluster Prefect Server is running
 	Namespace string `json:"namespace,omitempty"`
 
@@ -60,7 +72,14 @@ type PrefectServerReference struct {
 	RemoteAPIURL *string `json:"remoteApiUrl,omitempty"`
 
 	// APIKey is the API key to use to connect to a remote Prefect Server
-	APIKey APIKeySpec `json:"apiKey,omitempty"`
+	APIKey *APIKeySpec `json:"apiKey,omitempty"`
+
+	// AccountID is the ID of the account to use to connect to Prefect Cloud
+	AccountID *string `json:"accountId,omitempty"`
+	// AccountID *uuid.UUID `json:"accountId,omitempty"`
+
+	// WorkspaceID is the ID of the workspace to use to connect to Prefect Cloud
+	WorkspaceID *string `json:"workspaceId,omitempty"`
 }
 
 // APIKeySpec is the API key to use to connect to a remote Prefect Server
@@ -140,10 +159,14 @@ func (s *PrefectWorkPool) Command() []string {
 // If an API Key is provided, it will return the RemoteAPIURL.
 // Otherwise, it will default to the local, in-cluster API URL.
 func (s *PrefectWorkPool) PrefectAPIURL() string {
-	if (s.Spec.Server.APIKey.Value != nil || s.Spec.Server.APIKey.ValueFrom != nil) && s.Spec.Server.RemoteAPIURL != nil {
+	if s.Spec.Server.APIKey != nil && s.Spec.Server.RemoteAPIURL != nil {
 		remote := *s.Spec.Server.RemoteAPIURL
 		if !strings.HasSuffix(remote, "/api") {
 			remote = fmt.Sprintf("%s/api", remote)
+		}
+
+		if s.Spec.Server.AccountID != nil && s.Spec.Server.WorkspaceID != nil {
+			remote = fmt.Sprintf("%s/accounts/%s/workspaces/%s", remote, *s.Spec.Server.AccountID, *s.Spec.Server.WorkspaceID)
 		}
 		return remote
 	}
@@ -173,12 +196,12 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 
 	// If the API key is specified, add it to the environment variables.
 	// If both are set, we favor ValueFrom > Value as it is more secure.
-	if s.Spec.Server.APIKey.ValueFrom != nil {
+	if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.ValueFrom != nil {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:      "PREFECT_API_KEY",
 			ValueFrom: s.Spec.Server.APIKey.ValueFrom,
 		})
-	} else if s.Spec.Server.APIKey.Value != nil {
+	} else if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.Value != nil {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  "PREFECT_API_KEY",
 			Value: *s.Spec.Server.APIKey.Value,

@@ -123,6 +123,10 @@ spec:
               server:
                 description: Server defines which Prefect Server to connect to
                 properties:
+                  accountId:
+                    description: AccountID is the ID of the account to use to connect
+                      to Prefect Cloud
+                    type: string
                   apiKey:
                     description: APIKey is the API key to use to connect to a remote
                       Prefect Server
@@ -230,6 +234,18 @@ spec:
                     description: RemoteAPIURL is the API URL for the remote Prefect
                       Server. Set if using with an external Prefect Server or Prefect
                       Cloud
+                    type: string
+                  type:
+                    description: Type is the type of the Prefect Server to connect
+                      to
+                    enum:
+                    - local
+                    - cloud
+                    - self-managed
+                    type: string
+                  workspaceId:
+                    description: WorkspaceID is the ID of the workspace to use to
+                      connect to Prefect Cloud
                     type: string
                 type: object
               settings:
