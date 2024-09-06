@@ -235,14 +235,6 @@ spec:
                       Server. Set if using with an external Prefect Server or Prefect
                       Cloud
                     type: string
-                  type:
-                    description: Type is the type of the Prefect Server to connect
-                      to
-                    enum:
-                    - local
-                    - cloud
-                    - self-managed
-                    type: string
                   workspaceId:
                     description: WorkspaceID is the ID of the workspace to use to
                       connect to Prefect Cloud

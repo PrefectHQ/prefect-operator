@@ -49,19 +49,7 @@ type PrefectWorkPoolSpec struct {
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=local;cloud;self-managed
-type ServerType string
-
-const (
-	ServerTypeLocal       ServerType = "local"
-	ServerTypeCloud       ServerType = "cloud"
-	ServerTypeSelfManaged ServerType = "self-managed"
-)
-
 type PrefectServerReference struct {
-	// Type is the type of the Prefect Server to connect to
-	Type ServerType `json:"type,omitempty"`
-
 	// Namespace is the namespace where the in-cluster Prefect Server is running
 	Namespace string `json:"namespace,omitempty"`
 
