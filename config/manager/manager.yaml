@@ -62,13 +62,13 @@ spec:
         - /manager
         args:
         - --leader-elect
-        env:
-        - name: WATCH_NAMESPACES
-          # This restricts the Operator to watch objects in the same
-          # namespace where it is deployed.
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
+        # env:
+        # - name: WATCH_NAMESPACES
+        #   # This restricts the Operator to watch objects in the same
+        #   # namespace where it is deployed.
+        #   valueFrom:
+        #     fieldRef:
+        #       fieldPath: metadata.namespace
         image: controller:latest
         name: manager
         securityContext:
