@@ -8,5 +8,5 @@ metadata:
 spec:
   type: process
   server:
-    name: prefect-ephemeral
+    name: prefect-sqlite
   workers: 3
