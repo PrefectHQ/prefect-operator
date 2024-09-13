@@ -27,6 +27,6 @@ go.work
 *~
 
 # Helm lock files & local charts
-charts/*/charts
+deploy/charts/*/charts
 requirements.lock
 Chart.lock
