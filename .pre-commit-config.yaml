@@ -15,7 +15,6 @@ repos:
     hooks:
       - id: actionlint
 
-
   - repo: https://github.com/norwoodj/helm-docs
     rev: v1.11.0
     hooks:
@@ -27,3 +26,10 @@ repos:
     rev: v0.1.17
     hooks:
       - id: helmlint
+
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.28.0
+    hooks:
+      - id: yamllint
+        args:
+          - --strict
