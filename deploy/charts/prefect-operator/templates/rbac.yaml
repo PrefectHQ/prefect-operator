@@ -114,7 +114,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs:   
+    verbs:
         - get
         - list
         - watch
@@ -129,7 +129,7 @@ rules:
         - patch
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
-    verbs:   
+    verbs:
         - get
         - list
         - watch

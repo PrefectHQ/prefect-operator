@@ -1,13 +1,14 @@
-{{ if .Values.kubeRbacProxy.create -}}
+---
+{{if .Values.kubeRbacProxy.create -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.kubeRbacProxy.name }}
-  namespace: {{ include "common.names.namespace" . | quote }}
-  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: {{ .Values.kubeRbacProxy.name }}
-  {{- if .Values.commonAnnotations }}
-  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  name: {{.Values.kubeRbacProxy.name}}
+  namespace: {{include "common.names.namespace" . | quote}}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4}}
+    app.kubernetes.io/component: {{.Values.kubeRbacProxy.name}}
+  {{- if .Values.commonAnnotations}}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4}}
   {{- end }}
 spec:
   type: ClusterIP
@@ -18,4 +19,4 @@ spec:
       targetPort: https
   selector:
     app.kubernetes.io/component: operator
-{{- end }}
+{{- end -}}

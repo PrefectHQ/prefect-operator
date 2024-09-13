@@ -1,10 +1,4 @@
 resources:
-
-
-- auth_proxy_service.yaml
-- auth_proxy_role.yaml
-- auth_proxy_role_binding.yaml
-- auth_proxy_client_clusterrole.yaml
 # For each CRD, "Editor" and "Viewer" roles are scaffolded by
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines

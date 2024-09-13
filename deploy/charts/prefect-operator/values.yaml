@@ -40,11 +40,11 @@ operator:
       # -- The number of seconds to wait between consecutive probes.
       periodSeconds: 20
       # -- The number of seconds to wait for a probe response before considering it as failed.
-      # timeoutSeconds: 
+      # timeoutSeconds:
       # -- The number of consecutive failures allowed before considering the probe as failed.
-      # failureThreshold:       
+      # failureThreshold:
       # -- The minimum consecutive successes required to consider the probe successful.
-      # successThreshold: 
+      # successThreshold:
 
   readinessProbe:
     enabled: true
@@ -54,14 +54,14 @@ operator:
       # -- The number of seconds to wait between consecutive probes.
       periodSeconds: 10
       # -- The number of seconds to wait for a probe response before considering it as failed.
-      # timeoutSeconds: 
+      # timeoutSeconds:
       # -- The number of consecutive failures allowed before considering the probe as failed.
-      # failureThreshold: 
+      # failureThreshold:
       # -- The minimum consecutive successes required to consider the probe successful.
-      # successThreshold: 
+      # successThreshold:
 
   # requests MUST be specified if using an HPA, otherwise the HPA will not know when to trigger a scale event
-  
+
   resources:
     # -- the requested resources for the operator container
     requests:
