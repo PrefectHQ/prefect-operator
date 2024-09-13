@@ -18,7 +18,7 @@ operator:
     # -- operator image repository
     repository: prefecthq/prefect-operator
     # -- operator image tag (immutable tags are recommended)
-    tag: latest # for now
+    tag: latest
     # -- operator image pull policy
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
