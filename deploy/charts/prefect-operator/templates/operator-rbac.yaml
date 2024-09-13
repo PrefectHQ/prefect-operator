@@ -10,17 +10,6 @@ metadata:
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
   {{- end }}
 rules:
-  # TODO: Update resources and verbs to the proper values for the application cases
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
   - apiGroups: [""]
     resources: ["events"]
     verbs:
@@ -44,6 +33,16 @@ rules:
         - watch
   - apiGroups: [""]
     resources: ["services"]
+    verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
     verbs:
         - create
         - delete
@@ -85,9 +84,7 @@ rules:
   {{- if .Values.rbac.rules }}
   {{- include "common.tplvalues.render" ( dict "value" .Values.rbac.rules "context" $ ) | nindent 2 }}
   {{- end }}
-{{- end }}
 ---
-{{ if .Values.rbac.create }}
 kind: ClusterRoleBinding
 apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
 metadata:
@@ -105,5 +102,56 @@ subjects:
   - kind: ServiceAccount
     name: {{ template "operator.serviceAccountName" . }}
     namespace: {{ include "common.names.namespace" . | quote }}
-{{- end }}
 ---
+# leader election rules
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ template "common.names.fullname" . }}:leaderelection
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: operator
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs:   
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs:
+        - create
+        - patch
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs:   
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ template "common.names.fullname" . }}:leaderelection
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ template "common.names.fullname" . }}:leaderelection
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "operator.serviceAccountName" . }}
+    namespace: {{ include "common.names.namespace" . | quote }}
+{{- end }}
+
