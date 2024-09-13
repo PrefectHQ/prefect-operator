@@ -25,3 +25,8 @@ go.work
 *.swp
 *.swo
 *~
+
+# Helm lock files & local charts
+charts/*/charts
+requirements.lock
+Chart.lock
