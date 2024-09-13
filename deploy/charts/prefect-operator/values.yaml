@@ -155,6 +155,16 @@ rbac:
         create: true
 
 
+## ServiceAccount configuration
+serviceAccount:
+  # -- specifies whether a ServiceAccount should be created
+  create: true
+  # -- the name of the ServiceAccount to use. if not set and create is true, a name is generated using the common.names.fullname template
+  name: ""
+  # -- additional service account annotations (evaluated as a template)
+  annotations: {}
+
+
 ## Kube RBAC Proxy Configuration
 ## TODO add some more info here
 ## The kube-rbac-proxy protects your /metrics endpoint.
@@ -168,26 +178,14 @@ kubeRbacProxy:
   image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
 
 
-## ServiceAccount configuration
-serviceAccount:
-  # -- specifies whether a ServiceAccount should be created
-  create: true
-  # -- the name of the ServiceAccount to use. if not set and create is true, a name is generated using the common.names.fullname template
-  name: ""
-  # -- additional service account annotations (evaluated as a template)
-  annotations: {}
 
-# ## Prometheus metrics
-# ##
+# # Prometheus metrics
 # metrics:
-#   ## @param metrics.enabled Enable the export of Prometheus metrics
-#   ##
-#   enabled: false
-#   ## Prometheus Operator ServiceMonitor configuration
-#   ##
+#   # -- enable the export of Prometheus metrics
+#   enabled: true
+# #   ## Prometheus Operator ServiceMonitor configuration
 #   serviceMonitor:
-#     ## @param metrics.serviceMonitor.enabled if `true`, creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
-#     ##
+#     # -- creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
 #     enabled: false
 #     ## @param metrics.serviceMonitor.namespace Namespace in which Prometheus is running
 #     ##
