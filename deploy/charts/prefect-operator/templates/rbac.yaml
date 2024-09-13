@@ -14,69 +14,79 @@ rules:
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
   - apiGroups: [""]
     resources: ["pods"]
     verbs:
-        - get
-        - list
-        - watch
+      - get
+      - list
+      - watch
   - apiGroups: [""]
     resources: ["services"]
     verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
   - apiGroups: ["prefect.io"]
     resources: ["prefectservers/finalizers"]
     verbs:
-        - update
+      - update
   - apiGroups: ["prefect.io"]
     resources: ["prefectservers/status"]
     verbs:
-        - get
-        - patch
-        - update
+      - get
+      - patch
+      - update
   - apiGroups: ["prefect.io"]
     resources: ["prefectworkpools"]
     verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
   - apiGroups: ["prefect.io"]
     resources: ["prefectworkpools/finalizers"]
     verbs:
-        - update
+      - update
   - apiGroups: ["prefect.io"]
     resources: ["prefectworkpools/status"]
     verbs:
-        - get
-        - patch
-        - update
+      - get
+      - patch
+      - update
 ---
 kind: ClusterRoleBinding
 apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
