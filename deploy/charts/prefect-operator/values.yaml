@@ -11,6 +11,7 @@ commonLabels:
 # -- annotations to add to all deployed objects
 commonAnnotations: {}
 
+
 ## Deployment Configuration
 operator:
   image:
