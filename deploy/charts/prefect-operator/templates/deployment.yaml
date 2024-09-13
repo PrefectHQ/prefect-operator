@@ -5,9 +5,8 @@ metadata:
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: operator
-  {{- if or .Values.operator.deploymentAnnotations .Values.commonAnnotations }}
-  {{- $annotations := include "common.tplvalues.merge" (dict "values" (list .Values.operator.deploymentAnnotations .Values.commonAnnotations) "context" .) }}
-  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $ ) | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
   {{- end }}
 spec:
   replicas: {{ .Values.operator.replicaCount }}
@@ -61,21 +60,14 @@ spec:
           command:
             - /manager
           args:
+            {{- if .Values.kubeRbacProxy.create }}
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=127.0.0.1:8080
+            {{- end }}
             - --leader-elect
           env:
-            - name: foo
-              value: bar
             {{- if .Values.operator.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVars "context" $) | nindent 12 }}
-            {{- end }}
-          envFrom:
-            {{- if .Values.operator.extraEnvVarsCM }}
-            - configMapRef:
-                name: {{ include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVarsCM "context" $) }}
-            {{- end }}
-            {{- if .Values.operator.extraEnvVarsSecret }}
-            - secretRef:
-                name: {{ include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVarsSecret "context" $) }}
             {{- end }}
           {{- if .Values.operator.resources }}
           resources: {{- toYaml .Values.operator.resources | nindent 12 }}
@@ -99,4 +91,29 @@ spec:
               port: 8081
           {{- toYaml .Values.operator.readinessProbe.config | nindent 12 }}
           {{- end }}
-
+        {{- if .Values.kubeRbacProxy.create }}
+        - name: {{ .Values.kubeRbacProxy.name }}
+          image: {{ .Values.kubeRbacProxy.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--secure-listen-address=0.0.0.0:8443"
+            - "--upstream=http://127.0.0.1:8080/"
+            - "--logtostderr=true"
+            - "--v=0"
+          ports:
+            - containerPort: 8443
+              name: https
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 5m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
