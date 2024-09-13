@@ -4,21 +4,18 @@ metadata:
   name: {{ template "common.names.fullname" . }}
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: operator
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
 spec:
   replicas: {{ .Values.operator.replicaCount }}
   {{- $podLabels := include "common.tplvalues.merge" (dict "values" (list .Values.operator.podLabels .Values.commonLabels) "context" .) }}
   selector:
     matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" $podLabels "context" $ ) | nindent 6 }}
-      app.kubernetes.io/component: operator
   template:
     metadata:
       {{- if .Values.operator.podAnnotations }}
       annotations: {{- include "common.tplvalues.render" (dict "value" .Values.operator.podAnnotations "context" $) | nindent 8 }}
       {{- end }}
       labels: {{- include "common.labels.standard" ( dict "customLabels" $podLabels "context" $ ) | nindent 8 }}
-        app.kubernetes.io/component: operator
     spec:
     {{- if .Values.operator.image.pullSecrets }}
       imagePullSecrets:

@@ -13,6 +13,5 @@ spec:
       port: 8443
       protocol: TCP
       targetPort: https
-  selector:
-    app.kubernetes.io/component: operator
+  selector: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
 {{- end }}

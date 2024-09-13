@@ -4,7 +4,6 @@ apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
 metadata:
   name: {{ include "common.names.fullname" . }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: operator
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
 rules:
   - apiGroups: [""]
@@ -84,7 +83,6 @@ apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
 metadata:
   name: {{ template "common.names.fullname" . }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: operator
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -102,7 +100,6 @@ metadata:
   name: {{ template "common.names.fullname" . }}:leaderelection
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: operator
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
 rules:
   - apiGroups: [""]
@@ -137,7 +134,6 @@ metadata:
   name: {{ template "common.names.fullname" . }}:leaderelection
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: operator
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
