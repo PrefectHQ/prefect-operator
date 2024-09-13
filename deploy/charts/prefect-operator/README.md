@@ -35,7 +35,6 @@ Prefect Operator application bundle
 | kubeRbacProxy.create | bool | `true` | specifies whether the kube-rbac-proxy should be deployed to the cluster |
 | kubeRbacProxy.image | string | `"gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0"` | the image of the kube-rbac-proxy to use |
 | kubeRbacProxy.name | string | `"kube-rbac-proxy"` | the name of the kube-rbac-proxy to use |
-| kubeRbacProxy.sidecars | list | `[]` |  |
 | nameOverride | string | `""` | partially overrides common.names.name |
 | namespaceOverride | string | `""` | fully override common.names.namespace |
 | operator.affinity | object | `{}` | affinity for operator pods assignment |
@@ -63,7 +62,11 @@ Prefect Operator application bundle
 | operator.terminationGracePeriodSeconds | int | `10` | seconds operator pod needs to terminate gracefully |
 | operator.tolerations | list | `[]` | tolerations for operator pods assignment |
 | operator.topologySpreadConstraints | list | `[]` | topology spread constraints for operator pod assignment spread across your cluster among failure-domains |
-| rbac.operator.create | bool | `true` | specifies whether a the operator role & role binding should be created |
+| rbac.operator.create | bool | `true` | specifies whether the operator role & role binding should be created |
+| rbac.userRoles.prefectServer.editor.create | bool | `true` | specifies whether the server editor role should be created |
+| rbac.userRoles.prefectServer.viewer.create | bool | `true` | specifies whether the server viewer role should be created |
+| rbac.userRoles.prefectWorkpool.editor.create | bool | `true` | specifies whether the workpool editor role should be created |
+| rbac.userRoles.prefectWorkpool.viewer.create | bool | `true` | specifies whether the workpool viewer role should be created |
 | serviceAccount.annotations | object | `{}` | additional service account annotations (evaluated as a template) |
 | serviceAccount.create | bool | `true` | specifies whether a ServiceAccount should be created |
 | serviceAccount.name | string | `""` | the name of the ServiceAccount to use. if not set and create is true, a name is generated using the common.names.fullname template |

@@ -130,17 +130,32 @@ operator:
   # -- seconds operator pod needs to terminate gracefully
   terminationGracePeriodSeconds: 10
 
-# ## @section Other Parameters
-# ##
-
 ## RBAC configuration
 rbac:
   operator:
-    # -- specifies whether a the operator role & role binding should be created
+    # -- specifies whether the operator role & role binding should be created
     create: true
+  ## For each CRD, "Editor" and "Viewer" roles are created by default, aiding admins in cluster management.
+  ## Those roles are not used by the operator itself. You can disable those roles by setting
+  # the following lines to `create: false` or comment them out.
+  userRoles:
+    prefectServer:
+      editor:
+        # -- specifies whether the server editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the server viewer role should be created
+        create: true
+    prefectWorkpool:
+      editor:
+        # -- specifies whether the workpool editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the workpool viewer role should be created
+        create: true
 
 
-
+## Kube RBAC Proxy Configuration
 ## TODO add some more info here
 ## The kube-rbac-proxy protects your /metrics endpoint.
 ## ref: https://github.com/brancz/kube-rbac-proxy
@@ -151,21 +166,6 @@ kubeRbacProxy:
   name: kube-rbac-proxy
   # -- the image of the kube-rbac-proxy to use
   image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
-
-
-
-
-  ## @param %%MAIN_OBJECT_BLOCK%%.sidecars Add additional sidecar containers to the %%MAIN_CONTAINER_NAME%% pods
-  ## e.g:
-  ## sidecars:
-  ##   - name: your-image-name
-  ##     image: your-image
-  ##     imagePullPolicy: Always
-  ##     ports:
-  ##       - name: portname
-  ##         containerPort: 1234
-  ##
-  sidecars: []
 
 
 ## ServiceAccount configuration

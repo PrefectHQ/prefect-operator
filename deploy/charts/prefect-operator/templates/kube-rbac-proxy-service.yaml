@@ -4,11 +4,8 @@ kind: Service
 metadata:
   name: {{ .Values.kubeRbacProxy.name }}
   namespace: {{ include "common.names.namespace" . | quote }}
-  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  labels:
     app.kubernetes.io/component: {{ .Values.kubeRbacProxy.name }}
-  {{- if .Values.commonAnnotations }}
-  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
-  {{- end }}
 spec:
   type: ClusterIP
   ports:
