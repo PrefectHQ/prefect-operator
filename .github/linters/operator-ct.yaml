@@ -1,0 +1,8 @@
+# See https://github.com/helm/chart-testing#configuration
+charts:
+  - deploy/charts/prefect-operator
+chart-repos:
+  - bitnami=https://charts.bitnami.com/bitnami
+helm-extra-args: --timeout 60s
+namespace: prefect-operator
+release-label: prefect-operator
