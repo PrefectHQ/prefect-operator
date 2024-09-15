@@ -30,12 +30,7 @@ jobs:
           set -x
           echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_OUTPUT
           echo "OPERATOR_VERSION=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $GITHUB_OUTPUT
-
-      # - name: Copy Artifact Hub metadata
-      #   run: |
-      #     mkdir -p /tmp/chart
-      #     cp artifacthub-repo.yml /tmp/chart
-
+          
       - name: Configure Git
         run: |
           git config user.name "$GITHUB_ACTOR"
@@ -92,10 +87,9 @@ jobs:
 
       - name: Commit and push
         run: |
-          cp /tmp/chart/artifacthub-repo.yml .
           cp /tmp/chart/index.yaml .
           cp /tmp/chart/prefect-operator-$RELEASE_VERSION.* ./charts
-          git add ./artifacthub-repo.yml ./index.yaml ./charts/prefect-operator-$RELEASE_VERSION.* ./charts/
+          git add ./index.yaml ./charts/prefect-operator-$RELEASE_VERSION.* ./charts/
           git commit -m "Release $RELEASE_VERSION"
           git push origin gh-pages
         env:
