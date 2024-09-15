@@ -1,10 +1,68 @@
 # prefect-operator
 
-![Version: v0.0.0](https://img.shields.io/badge/Version-v0.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.0.0](https://img.shields.io/badge/AppVersion-v0.0.0-informational?style=flat-square)
+## Installing the Chart
 
-Prefect Operator application bundle
+### Prerequisites
 
-**Homepage:** <https://github.com/PrefectHQ>
+1. Add the Prefect Helm repository to your Helm client:
+
+    ```bash
+    helm repo add prefect-operator https://prefecthq.github.io/prefect-operator
+    helm repo update
+    ```
+
+2. Create a new namespace in your Kubernetes cluster to deploy the Prefect Operator in:
+
+    ```bash
+    kubectl create namespace prefect-system
+    ```
+
+### [Optional] Verify the Chart
+
+We use a PGP key to sign the Helm chart as recommended by Helm.
+
+If you would like to verify the charts signature before installing it, you can do so by following the instructions below:
+
+```bash
+# Pull Prefects public PGP key from keybase
+curl https://keybase.io/prefecthq/pgp_keys.asc | gpg --dearmor > .gnupg/pubring.gpg
+# Run `helm fetch` to validate the chart
+helm fetch --verify prefect-operator/prefect-operator --version 2024.9.15203739 --keyring .gnupg/pubring.gpg
+```
+
+### Install the Chart
+
+1. Install the Prefect Operator using Helm
+
+    ```bash
+    helm install prefect-operator prefect-operator/prefect-operator --namespace=prefect-system -f values.yaml
+    ```
+
+2. Verify the deployment
+
+    Check the status of your Prefect Operatr deployment:
+
+    ```bash
+    kubectl get pods -n prefect-system
+
+    NAME                                READY   STATUS    RESTARTS       AGE
+    prefect-operator-69874bdc54-lc9vk   2/2     Running   0              25m
+    ```
+
+    You should see the Prefect Operator pod running
+
+## Uninstalling the Chart
+
+To uninstall/delete the prefect-operator deployment:
+
+```bash
+helm delete prefect-operator -n prefect-system
+```
+
+The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+## FAQ
+tbd
 
 ## Maintainers
 
@@ -14,10 +72,6 @@ Prefect Operator application bundle
 | jimid27 | <jimi@prefect.io> |  |
 | parkedwards | <edward@prefect.io> |  |
 | mitchnielsen | <mitchell@prefect.io> |  |
-
-## Source Code
-
-* <https://github.com/PrefectHQ/prefect-operator>
 
 ## Requirements
 

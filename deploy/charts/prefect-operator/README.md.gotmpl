@@ -26,7 +26,7 @@ If you would like to verify the charts signature before installing it, you can d
 ```bash
 # Pull Prefects public PGP key from keybase
 curl https://keybase.io/prefecthq/pgp_keys.asc | gpg --dearmor > .gnupg/pubring.gpg
-# Run `helm fetch` to validate the chart 
+# Run `helm fetch` to validate the chart
 helm fetch --verify prefect-operator/prefect-operator --version 2024.9.15203739 --keyring .gnupg/pubring.gpg
 ```
 

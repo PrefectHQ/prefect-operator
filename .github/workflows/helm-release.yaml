@@ -29,7 +29,7 @@ jobs:
           set -x
           echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_OUTPUT
           echo "OPERATOR_VERSION=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $GITHUB_OUTPUT
-          
+
       - name: Configure Git
         run: |
           git config user.name "$GITHUB_ACTOR"
