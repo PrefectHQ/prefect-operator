@@ -1,0 +1,18 @@
+{{ if .Values.rbac.userRoles.prefectServer.viewer.create -}}
+kind: ClusterRole
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+metadata:
+  name: prefect-server:viewer
+  labels:
+    app.kubernetes.io/component: prefect
+rules:
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers"]
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers/status"]
+    verbs: ["get"]
+{{- end }}

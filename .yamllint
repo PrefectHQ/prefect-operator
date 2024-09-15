@@ -3,6 +3,7 @@ extends: default
 
 ignore: |
   config/
+  deploy/
 
 rules:
   comments:

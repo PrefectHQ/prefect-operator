@@ -1,0 +1,157 @@
+{{ if .Values.rbac.operator.create -}}
+kind: ClusterRole
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs:
+        - create
+        - patch
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers/finalizers"]
+    verbs:
+      - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers/status"]
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkpools"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkpools/finalizers"]
+    verbs:
+      - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkpools/status"]
+    verbs:
+      - get
+      - patch
+      - update
+---
+kind: ClusterRoleBinding
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+metadata:
+  name: {{ template "common.names.fullname" . }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ template "common.names.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "operator.serviceAccountName" . }}
+    namespace: {{ include "common.names.namespace" . | quote }}
+---
+# leader election rules
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ template "common.names.fullname" . }}:leaderelection
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs:
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs:
+        - create
+        - patch
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs:
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ template "common.names.fullname" . }}:leaderelection
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ template "common.names.fullname" . }}:leaderelection
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "operator.serviceAccountName" . }}
+    namespace: {{ include "common.names.namespace" . | quote }}
+{{- end }}
+
