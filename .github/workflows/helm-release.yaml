@@ -97,7 +97,7 @@ jobs:
       - name: Create Github Release + Tag
         run: |
           gh release create $RELEASE_VERSION \
-            --generate-notes \
+            --latest=false \
             --notes "Packaged with `prefect-operator` version \
             [$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/$OPERATOR_VERSION)"
         env:
