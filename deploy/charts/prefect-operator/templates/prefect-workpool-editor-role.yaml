@@ -1,0 +1,22 @@
+{{ if .Values.rbac.userRoles.prefectWorkpool.editor.create -}}
+kind: ClusterRole
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+metadata:
+  name: prefect-workpool:editor
+  labels:
+    app.kubernetes.io/component: prefect
+rules:
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkpools"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkpools/status"]
+    verbs: ["get"]
+{{- end }}

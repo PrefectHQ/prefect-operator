@@ -1,0 +1,22 @@
+{{ if .Values.rbac.userRoles.prefectServer.editor.create -}}
+kind: ClusterRole
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+metadata:
+  name: prefect-server:editor
+  labels:
+    app.kubernetes.io/component: prefect
+rules:
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectservers/status"]
+    verbs: ["get"]
+{{- end }}

@@ -1,0 +1,191 @@
+## Common parameters
+# -- partially overrides common.names.name
+nameOverride: ""
+# -- fully override common.names.fullname
+fullnameOverride: prefect-operator
+# -- fully override common.names.namespace
+namespaceOverride: ""
+# -- labels to add to all deployed objects
+commonLabels:
+  app.kubernetes.io/component: operator
+# -- annotations to add to all deployed objects
+commonAnnotations: {}
+
+
+## Deployment Configuration
+operator:
+  image:
+    # -- operator image repository
+    repository: prefecthq/prefect-operator
+    # -- operator image tag (immutable tags are recommended)
+    tag: latest
+    # -- operator image pull policy
+    pullPolicy: IfNotPresent
+    ## Optionally specify an array of imagePullSecrets.
+    ## Secrets must be manually created in the namespace.
+    ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+    ## e.g:
+    ## pullSecrets:
+    ##   - myRegistryKeySecretName
+    # -- operator image pull secrets
+    pullSecrets: []
+
+  # -- number of operator replicas to deploy
+  replicaCount: 1
+
+  # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  livenessProbe:
+    enabled: true
+    config:
+      # -- The number of seconds to wait before starting the first probe.
+      initialDelaySeconds: 15
+      # -- The number of seconds to wait between consecutive probes.
+      periodSeconds: 20
+      # -- The number of seconds to wait for a probe response before considering it as failed.
+      # timeoutSeconds:
+      # -- The number of consecutive failures allowed before considering the probe as failed.
+      # failureThreshold:
+      # -- The minimum consecutive successes required to consider the probe successful.
+      # successThreshold:
+
+  readinessProbe:
+    enabled: true
+    config:
+      # -- The number of seconds to wait before starting the first probe.
+      initialDelaySeconds: 5
+      # -- The number of seconds to wait between consecutive probes.
+      periodSeconds: 10
+      # -- The number of seconds to wait for a probe response before considering it as failed.
+      # timeoutSeconds:
+      # -- The number of consecutive failures allowed before considering the probe as failed.
+      # failureThreshold:
+      # -- The minimum consecutive successes required to consider the probe successful.
+      # successThreshold:
+
+  # requests MUST be specified if using an HPA, otherwise the HPA will not know when to trigger a scale event
+
+  resources:
+    # -- the requested resources for the operator container
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    # -- the requested limits for the operator container
+    limits:
+      cpu: 500m
+      memory: 128Mi
+
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+  podSecurityContext:
+    # -- set operator pod's security context runAsUser
+    # runAsUser:
+    # -- set operator pod's security context runAsNonRoot
+    runAsNonRoot: true
+    # -- set operator pod's security context fsGroup
+    # fsGroup:
+
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container
+  containerSecurityContext:
+    # -- set operator containers' security context runAsUser
+    # runAsUser: 1001
+    # -- set operator containers' security context runAsNonRoot
+    # runAsNonRoot: true
+    # -- set operator containers' security context readOnlyRootFilesystem
+    # readOnlyRootFilesystem: true
+    # -- set operator containers' security context allowPrivilegeEscalation
+    allowPrivilegeEscalation: false
+    # -- set operator container's security context capabilities
+    capabilities:
+      drop: ["ALL"]
+
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  # -- extra labels for operator pod
+  podLabels: {}
+
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  # -- extra annotations for operator pod
+  podAnnotations: {}
+
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  # -- affinity for operator pods assignment
+  affinity: {}
+
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+  # -- node labels for operator pods assignment
+  nodeSelector: {}
+
+  ## ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  # -- tolerations for operator pods assignment
+  tolerations: []
+
+  # -- array with environment variables to add to operator container
+  extraEnvVars: []
+
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass
+  # -- priority class name to use for the operator pods; if the priority class is empty or doesn't exist, the operator pods are scheduled without a priority class
+  priorityClassName: ""
+
+  ## Ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/#spread-constraints-for-pods
+  # -- topology spread constraints for operator pod assignment spread across your cluster among failure-domains
+  topologySpreadConstraints: []
+
+  ## ref: https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
+  # -- seconds operator pod needs to terminate gracefully
+  terminationGracePeriodSeconds: 10
+
+## RBAC configuration
+rbac:
+  operator:
+    # -- specifies whether the operator role & role binding should be created
+    create: true
+  ## For each CRD, "Editor" and "Viewer" roles are created by default, aiding admins in cluster management.
+  ## Those roles are not used by the operator itself. You can disable those roles by setting
+  # the following lines to `create: false` or comment them out.
+  userRoles:
+    prefectServer:
+      editor:
+        # -- specifies whether the server editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the server viewer role should be created
+        create: true
+    prefectWorkpool:
+      editor:
+        # -- specifies whether the workpool editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the workpool viewer role should be created
+        create: true
+
+
+## ServiceAccount configuration
+serviceAccount:
+  # -- specifies whether a ServiceAccount should be created
+  create: true
+  # -- the name of the ServiceAccount to use. if not set and create is true, a name is generated using the common.names.fullname template
+  name: ""
+  # -- additional service account annotations (evaluated as a template)
+  annotations: {}
+
+
+## Kube RBAC Proxy Configuration
+## TODO add some more info here
+## The kube-rbac-proxy protects your /metrics endpoint.
+## ref: https://github.com/brancz/kube-rbac-proxy
+kubeRbacProxy:
+  # -- specifies whether the kube-rbac-proxy should be deployed to the cluster
+  create: true
+  # -- the name of the kube-rbac-proxy to use
+  name: kube-rbac-proxy
+  # -- the image of the kube-rbac-proxy to use
+  image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+
+
+## Prometheus Metrics Configuration
+## This needs to be tested
+metrics:
+  # -- enable the export of Prometheus metrics
+  enabled: false
+#   ## Prometheus Operator ServiceMonitor configuration
+  serviceMonitor:
+    # -- creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
+    enabled: false

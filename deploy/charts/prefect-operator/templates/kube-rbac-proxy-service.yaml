@@ -1,0 +1,17 @@
+{{ if .Values.kubeRbacProxy.create -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.kubeRbacProxy.name }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    app.kubernetes.io/component: {{ .Values.kubeRbacProxy.name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: https
+      port: 8443
+      protocol: TCP
+      targetPort: https
+  selector: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+{{- end }}
