@@ -173,7 +173,7 @@ serviceAccount:
 ## ref: https://github.com/brancz/kube-rbac-proxy
 kubeRbacProxy:
   # -- specifies whether the kube-rbac-proxy should be deployed to the cluster
-  create: true
+  create: false
   # -- the name of the kube-rbac-proxy to use
   name: kube-rbac-proxy
   # -- the image of the kube-rbac-proxy to use
@@ -185,7 +185,7 @@ kubeRbacProxy:
 metrics:
   # -- enable the export of Prometheus metrics
   enabled: false
-#   ## Prometheus Operator ServiceMonitor configuration
+  ## Prometheus Operator ServiceMonitor configuration
   serviceMonitor:
     # -- creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
     enabled: false
