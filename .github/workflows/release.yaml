@@ -1,5 +1,5 @@
-# Prefect Operator release workflow.
-name: Release
+---
+name: prefect-operator release
 
 "on":
   push:
