@@ -28,7 +28,12 @@ jobs:
           # Enable pipefail so git command failures do not result in null versions downstream
           set -x
           echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_OUTPUT
-          echo "OPERATOR_VERSION=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $GITHUB_OUTPUT
+
+          # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
+          echo "OPERATOR_VERSION=$(\
+          git ls-remote --tags --refs --sort="v:refname" \
+          origin '[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///'
+          )" >> $GITHUB_OUTPUT"
 
       - name: Configure Git
         run: |
