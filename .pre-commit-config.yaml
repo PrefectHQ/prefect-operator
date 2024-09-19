@@ -33,3 +33,14 @@ repos:
       - id: yamllint
         args:
           - --strict
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: go-vet
+      - id: go-imports
+      - id: validate-toml
+      - id: golangci-lint
+      - id: go-unit-tests
+      - id: go-mod-tidy
