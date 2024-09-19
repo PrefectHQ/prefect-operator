@@ -157,11 +157,11 @@ endif
 
 .PHONY: install
 install: manifests tools ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUBECTL) apply -f deploy/charts/prefect-operator/chart/crds/*.yaml
+	$(KUBECTL) apply -f deploy/charts/prefect-operator/crds/*.yaml
 
 .PHONY: uninstall
 uninstall: manifests tools ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f deploy/charts/prefect-operator/chart/crds/*.yaml
+	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f deploy/charts/prefect-operator/crds/*.yaml
 
 .PHONY: deploy
 deploy: ## Install CRDs & the Helm Chart to the K8s cluster specified in ~/.kube/config.
