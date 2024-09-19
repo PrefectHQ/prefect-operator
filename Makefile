@@ -88,6 +88,11 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: helmbuild
+helmbuild: ## Build Helm dependencies
+	helm dependency build $(CHART_PATH)
+
+
 GINKGO_OPTIONS ?= -v --skip-package test/e2e -coverprofile cover.out -coverpkg ./api/v1/...,./internal/... -r
 
 .PHONY: test
@@ -164,9 +169,10 @@ uninstall: manifests tools ## Uninstall CRDs from the K8s cluster specified in ~
 	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f deploy/charts/prefect-operator/crds/*.yaml
 
 .PHONY: deploy
-deploy: ## Install CRDs & the Helm Chart to the K8s cluster specified in ~/.kube/config.
+deploy: helmbuild ## Install CRDs & the Helm Chart to the K8s cluster specified in ~/.kube/config.
 	helm install $(RELEASE_NAME) $(CHART_PATH) \
 		--namespace $(NAMESPACE) \
+		--create-namespace \
 		--values $(VALUES_FILE)
 
 .PHONY: undeploy
