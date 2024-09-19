@@ -29,6 +29,16 @@ jobs:
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
 
+      - name: Install tool dependencies (non-mise)
+        run: |
+          go install github.com/BurntSushi/toml/cmd/tomlv@latest
+          go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Build helm dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm dependency build deploy/charts/prefect-operator
+
       - name: Run pre-commit
         run: |
           pre-commit run --show-diff-on-failure --color=always --all-files
