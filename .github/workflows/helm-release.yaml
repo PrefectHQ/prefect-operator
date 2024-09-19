@@ -103,7 +103,7 @@ jobs:
         run: |
           gh release create $RELEASE_VERSION \
             --latest=false \
-            --notes "Packaged with `prefect-operator` version \
+            --notes "Packaged with prefect-operator version \
             [$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/$OPERATOR_VERSION)"
         env:
           GITHUB_TOKEN: ${{ github.token }}
