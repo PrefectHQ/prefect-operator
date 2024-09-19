@@ -6,6 +6,14 @@ metadata:
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
   annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
 rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
   - apiGroups: [""]
     resources: ["events"]
     verbs:
