@@ -309,12 +309,13 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 	}
 
 	// Set PrefectServer instance as the owner and controller
-	ctrl.SetControllerReference(server, dep, r.Scheme)
+	// TODO: handle errors from SetControllerReference.
+	_ = ctrl.SetControllerReference(server, dep, r.Scheme)
 	if pvc != nil {
-		ctrl.SetControllerReference(server, pvc, r.Scheme)
+		_ = ctrl.SetControllerReference(server, pvc, r.Scheme)
 	}
 	if migrationJob != nil {
-		ctrl.SetControllerReference(server, migrationJob, r.Scheme)
+		_ = ctrl.SetControllerReference(server, migrationJob, r.Scheme)
 	}
 	return *dep, pvc, migrationJob
 }
@@ -574,7 +575,8 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 		},
 	}
 
-	ctrl.SetControllerReference(server, &service, r.Scheme)
+	// TODO: handle errors from SetControllerReference.
+	_ = ctrl.SetControllerReference(server, &service, r.Scheme)
 
 	return service
 }
