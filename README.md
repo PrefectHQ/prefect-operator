@@ -46,10 +46,10 @@ make deploy IMG=<some-registry>/prefect-operator:tag
 privileges or be logged in as admin.
 
 **Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+You can apply the samples (examples) from the deploy/sample:
 
 ```sh
-kubectl apply -k config/samples/
+kubectl apply -k deploy/samples/
 ```
 
 >**NOTE**: Ensure that the samples has default values to test it out.
@@ -58,7 +58,7 @@ kubectl apply -k config/samples/
 **Delete the instances (CRs) from the cluster:**
 
 ```sh
-kubectl delete -k config/samples/
+kubectl delete -k deploy/samples/
 ```
 
 **Delete the APIs(CRDs) from the cluster:**
