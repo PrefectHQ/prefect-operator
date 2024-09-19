@@ -38,9 +38,13 @@ repos:
     rev: v0.5.1
     hooks:
       - id: go-fmt
-      - id: go-vet
+      # This one doesn't work because no Go files are in the root.
+      # See https://github.com/dnephin/pre-commit-golang/issues/30
+      # - id: go-vet
       - id: go-imports
       - id: validate-toml
       - id: golangci-lint
-      - id: go-unit-tests
+      # We already run unit tests in tests.yaml, which ensures
+      # they're called properly by using the `make` target.
+      # - id: go-unit-tests
       - id: go-mod-tidy
