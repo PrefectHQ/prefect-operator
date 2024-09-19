@@ -2,7 +2,7 @@
 actionlint = '1.7.1'
 ginkgo = '2.19.0'
 golang = '1.21'
-golangci-lint = '1.57.2'
+golangci-lint = '1.61.0'
 helm = '3.15'
 helm-ct = '3.11.0'
 helm-docs = '1.13.1'
