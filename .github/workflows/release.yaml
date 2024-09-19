@@ -44,11 +44,9 @@ jobs:
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
 
-      - name: Build manifests
+      - name: Build CRDs
         run: |
-          (cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }})
-          kustomize build config/crd > prefect-crds.yaml
-          kustomize build config/default > prefect.yaml
+          kustomize build deploy/charts/prefect-operator/crds > prefect-crds.yaml
 
       - name: Upload release assets
         if: github.ref_type == 'tag'
