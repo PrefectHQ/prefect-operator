@@ -73,7 +73,7 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=deploy/charts/prefect-operator/crds
 
 .PHONY: generate
