@@ -206,10 +206,6 @@ type PrefectServerStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this Prefect server"
-// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready",description="Whether this Prefect server is ready to receive requests"
 // PrefectServer is the Schema for the prefectservers API
 type PrefectServer struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -289,7 +285,6 @@ func (s *PrefectServer) LivenessProbe() *corev1.Probe {
 	}
 }
 
-// +kubebuilder:object:root=true
 // PrefectServerList contains a list of PrefectServer
 type PrefectServerList struct {
 	metav1.TypeMeta `json:",inline"`

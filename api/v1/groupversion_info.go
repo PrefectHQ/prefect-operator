@@ -15,7 +15,6 @@ limitations under the License.
 */
 
 // Package v1 contains API Schema definitions for the  v1 API group
-// +kubebuilder:object:generate=true
 // +groupName=prefect.io
 package v1
 

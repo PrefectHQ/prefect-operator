@@ -94,13 +94,6 @@ type PrefectWorkPoolStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type",description="The type of this work pool"
-// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this work pool"
-// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready",description="Whether the work pool is ready"
-// +kubebuilder:printcolumn:name="Desired Workers",type="integer",JSONPath=".spec.workers",description="How many workers are desired"
-// +kubebuilder:printcolumn:name="Ready Workers",type="integer",JSONPath=".status.readyWorkers",description="How many workers are ready"
 // PrefectWorkPool is the Schema for the prefectworkpools API
 type PrefectWorkPool struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -238,8 +231,6 @@ func (s *PrefectWorkPool) LivenessProbe() *corev1.Probe {
 		FailureThreshold:    2,
 	}
 }
-
-//+kubebuilder:object:root=true
 
 // PrefectWorkPoolList contains a list of PrefectWorkPool
 type PrefectWorkPoolList struct {
