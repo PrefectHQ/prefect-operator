@@ -27,9 +27,9 @@ import (
 	"github.com/PrefectHQ/prefect-operator/test/utils"
 )
 
-const namespace = "prefect-operator-system"
+const namespace = "prefect-system"
 
-var _ = Describe("controller", Ordered, func() {
+var _ = Describe("operator", Ordered, func() {
 	BeforeAll(func() {
 		By("installing prometheus operator")
 		Expect(utils.InstallPrometheusOperator()).To(Succeed())
@@ -37,7 +37,7 @@ var _ = Describe("controller", Ordered, func() {
 		By("installing the cert-manager")
 		Expect(utils.InstallCertManager()).To(Succeed())
 
-		By("creating manager namespace")
+		By("creating operator namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, _ = utils.Run(cmd)
 	})
@@ -56,7 +56,7 @@ var _ = Describe("controller", Ordered, func() {
 
 	Context("Operator", func() {
 		It("should run successfully", func() {
-			var controllerPodName string
+			var operatorPodName string
 			var err error
 
 			// projectimage stores the name of the image used in the example
@@ -76,17 +76,17 @@ var _ = Describe("controller", Ordered, func() {
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-			By("deploying the controller-manager")
+			By("deploying the operator")
 			cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectimage))
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-			By("validating that the controller-manager pod is running as expected")
-			verifyControllerUp := func() error {
+			By("validating that the operator pod is running as expected")
+			verifyoperatorUp := func() error {
 				// Get pod name
 
 				cmd = exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
+					"pods", "-l", "component=operator",
 					"-o", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
@@ -98,24 +98,24 @@ var _ = Describe("controller", Ordered, func() {
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				podNames := utils.GetNonEmptyLines(string(podOutput))
 				if len(podNames) != 1 {
-					return fmt.Errorf("expect 1 controller pods running, but got %d", len(podNames))
+					return fmt.Errorf("expect 1 operator pods running, but got %d", len(podNames))
 				}
-				controllerPodName = podNames[0]
-				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
+				operatorPodName = podNames[0]
+				ExpectWithOffset(2, operatorPodName).Should(ContainSubstring("operator"))
 
 				// Validate pod status
 				cmd = exec.Command("kubectl", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
+					"pods", operatorPodName, "-o", "jsonpath={.status.phase}",
 					"-n", namespace,
 				)
 				status, err := utils.Run(cmd)
 				ExpectWithOffset(2, err).NotTo(HaveOccurred())
 				if string(status) != "Running" {
-					return fmt.Errorf("controller pod in %s status", status)
+					return fmt.Errorf("operator pod in %s status", status)
 				}
 				return nil
 			}
-			EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+			EventuallyWithOffset(1, verifyoperatorUp, time.Minute, time.Second).Should(Succeed())
 
 		})
 	})

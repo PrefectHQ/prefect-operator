@@ -44,17 +44,15 @@ jobs:
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
 
-      - name: Build manifests
+      - name: Package CRDs
         run: |
-          (cd config/manager && kustomize edit set image controller=prefecthq/prefect-operator:${{ github.ref_name }})
-          kustomize build config/crd > prefect-crds.yaml
-          kustomize build config/default > prefect.yaml
+          cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
 
       - name: Upload release assets
         if: github.ref_type == 'tag'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect.yaml
+        run: gh release upload ${{ github.ref_name }} prefect-crds.yaml
 
   build-and-push-docker-image:
     needs: unit-tests

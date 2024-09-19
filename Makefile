@@ -3,6 +3,13 @@ IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
+# Variables
+CHART_NAME=prefect-operator
+CHART_PATH=./deploy/charts/prefect-operator
+RELEASE_NAME=prefect-operator
+NAMESPACE=prefect-system
+VALUES_FILE=./deploy/charts/prefect-operator/values.yaml
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -66,8 +73,8 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=deploy/charts/prefect-operator/crds
 
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -80,6 +87,11 @@ fmt: ## Run go fmt against code.
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
+
+.PHONY: helmbuild
+helmbuild: ## Build Helm dependencies
+	helm dependency build $(CHART_PATH)
+
 
 GINKGO_OPTIONS ?= -v --skip-package test/e2e -coverprofile cover.out -coverpkg ./api/v1/...,./internal/... -r
 
@@ -142,12 +154,6 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx rm project-v3-builder
 	rm Dockerfile.cross
 
-.PHONY: build-installer
-build-installer: manifests generate tools ## Generate a consolidated YAML with CRDs and deployment.
-	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default > dist/install.yaml
-
 ##@ Deployment
 
 ifndef ignore-not-found
@@ -156,20 +162,22 @@ endif
 
 .PHONY: install
 install: manifests tools ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
+	$(KUBECTL) apply -f deploy/charts/prefect-operator/crds/*.yaml
 
 .PHONY: uninstall
 uninstall: manifests tools ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f deploy/charts/prefect-operator/crds/*.yaml
 
 .PHONY: deploy
-deploy: manifests tools ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+deploy: helmbuild ## Install CRDs & the Helm Chart to the K8s cluster specified in ~/.kube/config.
+	helm install $(RELEASE_NAME) $(CHART_PATH) \
+		--namespace $(NAMESPACE) \
+		--create-namespace \
+		--values $(VALUES_FILE)
 
 .PHONY: undeploy
-undeploy: tools ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+undeploy: ## Uninstall the Helm Chart to the K8s cluster specified in ~/.kube/config.
+	helm uninstall $(RELEASE_NAME) --namespace $(NAMESPACE)
 
 ##@ Dependencies
 
