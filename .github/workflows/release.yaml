@@ -44,9 +44,9 @@ jobs:
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
 
-      - name: Build CRDs
+      - name: Package CRDs
         run: |
-          kustomize build deploy/charts/prefect-operator/crds > prefect-crds.yaml
+          cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
 
       - name: Upload release assets
         if: github.ref_type == 'tag'
