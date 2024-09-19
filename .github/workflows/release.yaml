@@ -52,7 +52,7 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect.yaml
+        run: gh release upload ${{ github.ref_name }} prefect-crds.yaml
 
   build-and-push-docker-image:
     needs: unit-tests
