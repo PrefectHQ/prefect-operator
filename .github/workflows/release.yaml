@@ -49,9 +49,7 @@ jobs:
         run: |
           # package just CRDs
           cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
-          # handle helm dependencies
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm dependency build deploy/charts/prefect-operator
+          make helmbuild
           # template the helm chart including the CRDs
           helm template prefect-operator deploy/charts/prefect-operator \
           --include-crds --set operator.image.tag=${{ github.ref_name }} \
