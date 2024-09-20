@@ -4,7 +4,7 @@ metadata:
   name: the-api-key-secret
 type: Opaque
 stringData:
-  the-api-key: "pnu_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+  the-api-key: pnu_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ---
 apiVersion: prefect.io/v1
 kind: PrefectWorkPool
@@ -17,11 +17,11 @@ spec:
   type: process
   server:
     remoteApiUrl: https://api.prefect.cloud
-    accountId:   aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+    accountId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
     workspaceId: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
     apiKey:
       valueFrom:
         secretKeyRef:
-          name: 'the-api-key-secret'
-          key: 'the-api-key'
+          name: the-api-key-secret
+          key: the-api-key
   workers: 3
