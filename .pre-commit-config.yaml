@@ -42,7 +42,6 @@ repos:
       # See https://github.com/dnephin/pre-commit-golang/issues/30
       # - id: go-vet
       - id: go-imports
-      - id: validate-toml
       - id: golangci-lint
       # We already run unit tests in tests.yaml, which ensures
       # they're called properly by using the `make` target.

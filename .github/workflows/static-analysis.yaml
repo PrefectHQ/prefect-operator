@@ -31,7 +31,6 @@ jobs:
 
       - name: Install tool dependencies (non-mise)
         run: |
-          go install github.com/BurntSushi/toml/cmd/tomlv@latest
           go install golang.org/x/tools/cmd/goimports@latest
 
       - name: Build helm dependencies
