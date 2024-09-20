@@ -44,9 +44,10 @@ jobs:
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
 
-      - name: Package CRDs
+      - name: Package kubernetes manifests & CRDs
         run: |
           cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
+          helm dependency build deploy/charts/prefect-operator
           helm template prefect-operator deploy/charts/prefect-operator \
           --include-crds --set operator.image.tag=${{ github.ref_name }} \
           > prefect-operator.yaml
