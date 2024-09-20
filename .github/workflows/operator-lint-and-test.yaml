@@ -2,6 +2,10 @@ name: Lint and Test Prefect Operator Chart
 
 "on":
   pull_request:
+    branches:
+      - main
+    paths:
+      - deploy/charts/**
 
 # Do not grant jobs any permissions by default
 permissions: {}

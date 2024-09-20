@@ -2,7 +2,7 @@
 extends: default
 
 ignore: |
-  deploy/
+  deploy/charts/
 
 rules:
   comments:
