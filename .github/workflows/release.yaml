@@ -54,7 +54,8 @@ jobs:
           yq -i 'del(.metadata.labels."helm.sh/chart")' prefect-operator.yaml
           yq -i 'del(.spec.template.metadata.labels."app.kubernetes.io/managed-by")' prefect-operator.yaml
           yq -i 'del(.spec.template.metadata.labels."helm.sh/chart")' prefect-operator.yaml
-          yq -i '.metadata.labels."app.kubernetes.io/version" = ${{ github.ref_name }}"' prefect-operator.yaml
+          yq -i '.metadata.labels."app.kubernetes.io/version" = "${{ github.ref_name }}"' prefect-operator.yaml
+          yq -i '.spec.template.metadata.labels."app.kubernetes.io/version" = "${{ github.ref_name }}"' prefect-operator.yaml
 
       - name: Upload release assets
         if: github.ref_type == 'tag'
