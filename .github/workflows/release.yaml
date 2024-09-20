@@ -45,6 +45,7 @@ jobs:
         uses: jdx/mise-action@v2
 
       - name: Package kubernetes manifests & CRDs
+        if: github.ref_type == 'tag'
         run: |
           cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
           helm dependency build deploy/charts/prefect-operator
