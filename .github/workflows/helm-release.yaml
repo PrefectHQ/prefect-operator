@@ -2,7 +2,8 @@
 name: prefect-operator Helm Chart release
 
 "on":
-  workflow_dispatch:
+  workflow_dispatch: {}
+  workflow_call: {}
 
 permissions: {}
 
