@@ -47,17 +47,22 @@ jobs:
 
       - name: Package kubernetes manifests & CRDs
         run: |
+          # package just CRDs
           cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
+          # handle helm dependencies
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm dependency build deploy/charts/prefect-operator
+          # template the helm chart including the CRDs
           helm template prefect-operator deploy/charts/prefect-operator \
           --include-crds --set operator.image.tag=${{ github.ref_name }} \
           > prefect-operator.yaml
+          # Remove labels relevant only for Helm installs
           yq -i 'del(.metadata.labels."app.kubernetes.io/managed-by")' prefect-operator.yaml
           yq -i 'del(.metadata.labels."helm.sh/chart")' prefect-operator.yaml
           yq -i 'del(.spec.template.metadata.labels."app.kubernetes.io/managed-by")' prefect-operator.yaml
           yq -i 'del(.spec.template.metadata.labels."helm.sh/chart")' prefect-operator.yaml
-          yq -i '(.. | select(tag == "!!str" and . == "v0.0.0")) |= "${{ github.ref_name }}0"' prefect-operator.yaml
+          # Ensure all references to app version match the released version tag
+          yq -i '(.. | select(tag == "!!str" and . == "v0.0.0")) |= "${{ github.ref_name }}"' prefect-operator.yaml
 
       - name: Upload release assets
         env:
