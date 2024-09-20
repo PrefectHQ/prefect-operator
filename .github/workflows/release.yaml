@@ -120,3 +120,4 @@ jobs:
     needs: build_and_push_docker_image
     if: github.ref_type == 'tag'
     uses: ./.github/workflows/helm-release.yaml
+    secrets: inherit
