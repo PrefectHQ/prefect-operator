@@ -1,5 +1,5 @@
 ---
-name: prefect-operator Helm Chart release
+name: Release Prefect Operator Helm Chart
 
 "on":
   workflow_dispatch: {}

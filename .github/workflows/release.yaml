@@ -1,5 +1,5 @@
 ---
-name: prefect-operator release
+name: Release Prefect Operator
 
 "on":
   push:
@@ -32,7 +32,7 @@ jobs:
       - name: Test
         run: make test
 
-  build-and-upload-manifests:
+  build_and_upload_manifests:
     if: github.ref_type == 'tag'
     needs: unit-tests
     permissions:
@@ -67,7 +67,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect-operator.yaml
 
-  build-and-push-docker-image:
+  build_and_push_docker_image:
     needs: unit-tests
     runs-on: ubuntu-latest
     # The GitHub environments are created by Terraform and map to Docker Hub repositories:
@@ -113,3 +113,10 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+
+  release_helm_chart:
+    permissions:
+      contents: write
+    needs: build_and_push_docker_image
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/helm-release.yaml
