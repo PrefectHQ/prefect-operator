@@ -1,8 +1,9 @@
 ---
-name: prefect-operator Helm Chart release
+name: Release Prefect Operator Helm Chart
 
 "on":
-  workflow_dispatch:
+  workflow_dispatch: {}
+  workflow_call: {}
 
 permissions: {}
 
@@ -27,13 +28,13 @@ jobs:
         run: |
           # Enable pipefail so git command failures do not result in null versions downstream
           set -x
-          echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> "${GITHUB_OUTPUT}"
+          echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_OUTPUT
 
           # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
           echo "OPERATOR_VERSION=$(\
           git ls-remote --tags --refs --sort="v:refname" \
           origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///'
-          )" >> "${GITHUB_OUTPUT}"
+          )" >> $GITHUB_OUTPUT
 
       - name: Configure Git
         run: |
@@ -68,15 +69,15 @@ jobs:
           mkdir -p /tmp/chart
           cd deploy/charts
           # Update the operator version tag in values.yaml
-          sed -i "s/tag:.*$/tag: ${OPERATOR_VERSION}/g" prefect-operator/values.yaml
+          sed -i "s/tag:.*$/tag: $OPERATOR_VERSION/g" prefect-operator/values.yaml
           helm package prefect-operator \
             --destination /tmp/chart \
             --dependency-update \
-            --version "${RELEASE_VERSION}" \
-            --app-version "${OPERATOR_VERSION}" \
+            --version $RELEASE_VERSION \
+            --app-version $OPERATOR_VERSION \
             --sign --key 'jamie@prefect.io' \
-            --keyring "${SIGN_KEYRING}" \
-            --passphrase-file "${SIGN_PASSPHRASE_FILE}"
+            --keyring $SIGN_KEYRING \
+            --passphrase-file $SIGN_PASSPHRASE_FILE
         env:
           RELEASE_VERSION: ${{ steps.get_version.outputs.RELEASE_VERSION }}
           OPERATOR_VERSION: ${{ steps.get_version.outputs.OPERATOR_VERSION }}
@@ -92,8 +93,8 @@ jobs:
       - name: Commit and push
         run: |
           cp /tmp/chart/index.yaml .
-          cp "/tmp/chart/prefect-operator-${RELEASE_VERSION}.*" ./charts
-          git add ./index.yaml "./charts/prefect-operator-$RELEASE_VERSION.*" ./charts/
+          cp /tmp/chart/prefect-operator-${RELEASE_VERSION}.* ./charts
+          git add ./index.yaml ./charts/prefect-operator-$RELEASE_VERSION.* ./charts/
           git commit -m "Release $RELEASE_VERSION"
           git push origin gh-pages
         env:
@@ -101,10 +102,10 @@ jobs:
 
       - name: Create Github Release + Tag
         run: |
-          gh release create "${RELEASE_VERSION}" \
+          gh release create $RELEASE_VERSION \
             --latest=false \
             --notes "Packaged with prefect-operator version \
-            [${OPERATOR_VERSION}](https://github.com/PrefectHQ/prefect-operator/releases/tag/${OPERATOR_VERSION})"
+            [$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/$OPERATOR_VERSION)"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.get_version.outputs.RELEASE_VERSION }}

@@ -4,15 +4,8 @@ name: Updatecli dependency updates
 "on":
   workflow_dispatch:
   schedule:
-    #       ┌───────────── minute (0 - 59)
-    #       │  ┌───────────── hour (0 - 23)
-    #       │  │  ┌───────────── day of the month (1 - 31)
-    #       │  │  │ ┌───────────── month (1 - 12 or JAN-DEC)
-    #       │  │  │ │ ┌───────────── day of the week (0 - 6 or SUN-SAT)
-    #       │  │  │ │ │
-    #       │  │  │ │ │
-    #       │  │  │ │ │
-    - cron: 0 15 1 * * # The first of each month at 10am EST
+    # The first of each month at 10am EST
+    - cron: 0 15 1 * *
 
 permissions: {}
 
@@ -35,7 +28,7 @@ jobs:
 
       - name: Get current date
         id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> "${GITHUB_OUTPUT}"
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: create branch for helm version updates
         run: |
