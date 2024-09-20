@@ -90,6 +90,7 @@ vet: ## Run go vet against code.
 
 .PHONY: helmbuild
 helmbuild: ## Build Helm dependencies
+	helm repo add bitnami https://charts.bitnami.com/bitnami
 	helm dependency build $(CHART_PATH)
 
 
