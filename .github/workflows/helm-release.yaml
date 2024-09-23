@@ -33,7 +33,7 @@ jobs:
           # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
           echo "IMAGE_VERSION=$(\
           git ls-remote --tags --refs --sort="v:refname" \
-          origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///')" | sed 's/v//' >> $GITHUB_OUTPUT
+          origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///' | sed 's/v//')" >> $GITHUB_OUTPUT
 
       - name: Configure Git
         run: |
