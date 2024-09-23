@@ -104,8 +104,8 @@ jobs:
           gh release create $RELEASE_VERSION \
             --latest=false \
             --notes "Packaged with prefect-operator version \
-            [$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/$OPERATOR_VERSION)"
+            [v$IMAGE_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/v$IMAGE_VERSION)"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.get_version.outputs.RELEASE_VERSION }}
-          OPERATOR_VERSION: ${{ steps.get_version.outputs.OPERATOR_VERSION }}
+          IMAGE_VERSION: ${{ steps.get_version.outputs.IMAGE_VERSION }}
