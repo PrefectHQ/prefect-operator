@@ -31,10 +31,9 @@ jobs:
           echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_OUTPUT
 
           # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
-          echo "OPERATOR_VERSION=$(\
+          echo "IMAGE_VERSION=$(\
           git ls-remote --tags --refs --sort="v:refname" \
-          origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///'
-          )" >> $GITHUB_OUTPUT
+          origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///')" | sed 's/v//' >> $GITHUB_OUTPUT
 
       - name: Configure Git
         run: |
@@ -69,18 +68,18 @@ jobs:
           mkdir -p /tmp/chart
           cd deploy/charts
           # Update the operator version tag in values.yaml
-          sed -i "s/tag:.*$/tag: $OPERATOR_VERSION/g" prefect-operator/values.yaml
+          sed -i "s/tag:.*$/tag: $IMAGE_VERSION/g" prefect-operator/values.yaml
           helm package prefect-operator \
             --destination /tmp/chart \
             --dependency-update \
             --version $RELEASE_VERSION \
-            --app-version $OPERATOR_VERSION \
+            --app-version v$IMAGE_VERSION \
             --sign --key 'jamie@prefect.io' \
             --keyring $SIGN_KEYRING \
             --passphrase-file $SIGN_PASSPHRASE_FILE
         env:
+          IMAGE_VERSION: ${{ steps.get_version.outputs.IMAGE_VERSION }}
           RELEASE_VERSION: ${{ steps.get_version.outputs.RELEASE_VERSION }}
-          OPERATOR_VERSION: ${{ steps.get_version.outputs.OPERATOR_VERSION }}
           SIGN_KEYRING: ${{ env.SIGN_KEYRING }}
           SIGN_PASSPHRASE_FILE: ${{ env.SIGN_PASSPHRASE_FILE }}
 
@@ -105,8 +104,8 @@ jobs:
           gh release create $RELEASE_VERSION \
             --latest=false \
             --notes "Packaged with prefect-operator version \
-            [$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/$OPERATOR_VERSION)"
+            [v$IMAGE_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/v$IMAGE_VERSION)"
         env:
+          IMAGE_VERSION: ${{ steps.get_version.outputs.IMAGE_VERSION }}
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.get_version.outputs.RELEASE_VERSION }}
-          OPERATOR_VERSION: ${{ steps.get_version.outputs.OPERATOR_VERSION }}
