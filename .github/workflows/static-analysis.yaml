@@ -28,10 +28,8 @@ jobs:
 
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
-
-      - name: Install tool dependencies (non-mise)
-        run: |
-          go install golang.org/x/tools/cmd/goimports@latest
+        with:
+          experimental: true
 
       - name: Build helm dependencies
         run: |

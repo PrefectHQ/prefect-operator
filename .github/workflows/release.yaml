@@ -25,6 +25,8 @@ jobs:
 
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
+        with:
+          experimental: true
 
       - name: Build
         run: make build
@@ -44,6 +46,8 @@ jobs:
 
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
+        with:
+          experimental: true
 
       - name: Package kubernetes manifests & CRDs
         run: |
