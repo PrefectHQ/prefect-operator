@@ -481,6 +481,9 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 				Labels: server.ServerLabels(),
 			},
 			Spec: corev1.PodSpec{
+				InitContainers: []corev1.Container{
+					r.initContainerWaitForPostgres(server),
+				},
 				Containers: []corev1.Container{
 					{
 						Name: "prefect-server",
@@ -526,6 +529,9 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 				Labels: server.ServerLabels(),
 			},
 			Spec: corev1.PodSpec{
+				InitContainers: []corev1.Container{
+					r.initContainerWaitForPostgres(server),
+				},
 				Containers: []corev1.Container{
 					{
 						Name:    "prefect-server-migration",
@@ -579,6 +585,23 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 	_ = ctrl.SetControllerReference(server, &service, r.Scheme)
 
 	return service
+}
+
+func (r *PrefectServerReconciler) initContainerWaitForPostgres(server *prefectiov1.PrefectServer) corev1.Container {
+	return corev1.Container{
+		Name:            "wait-for-database",
+		Image:           "postgres:16",
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			"until pg_isready -h $PREFECT_API_DATABASE_HOST -U $PREFECT_API_DATABASE_USER; do echo 'Waiting for PostgreSQL...'; sleep 2; done;",
+		},
+		Env: []corev1.EnvVar{
+			server.Spec.Postgres.HostEnvVar(),
+			server.Spec.Postgres.UserEnvVar(),
+		},
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
