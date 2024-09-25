@@ -590,7 +590,7 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 func (r *PrefectServerReconciler) initContainerWaitForPostgres(server *prefectiov1.PrefectServer) corev1.Container {
 	return corev1.Container{
 		Name:            "wait-for-database",
-		Image:           "postgres:16",
+		Image:           "postgres:16-alpine",
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command: []string{
 			"/bin/sh",
