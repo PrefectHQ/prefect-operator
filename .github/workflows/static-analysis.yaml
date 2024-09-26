@@ -2,7 +2,7 @@
 name: Static analysis
 
 "on":
-  pull_request:
+  pull_request: {}
 
 # Limit concurrency by workflow/branch combination.
 #
@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  pre-commit-checks:
+  pre_commit_checks:
     name: pre-commit checks
     runs-on: ubuntu-latest
     steps:

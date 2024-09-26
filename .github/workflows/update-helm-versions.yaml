@@ -2,7 +2,7 @@
 name: Updatecli dependency updates
 
 "on":
-  workflow_dispatch:
+  workflow_dispatch: {}
   schedule:
     # The first of each month at 10am EST
     - cron: 0 15 1 * *
@@ -30,24 +30,22 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: create branch for helm version updates
+      - name: Create branch for helm version updates
         run: |
           git checkout -b "helm-version-${{ steps.date.outputs.date }}"
 
-      - name: install updatecli in the runner
+      - name: Install updatecli in the runner
         uses: updatecli/updatecli-action@v2
 
-      - name: run updatecli in apply mode
+      - name: Run updatecli in apply mode
         run: |
           updatecli apply --config .github/updatecli/manifest.yaml
           git commit -am "helm-version-${{ steps.date.outputs.date }}"
           git push --set-upstream origin "helm-version-${{ steps.date.outputs.date }}"
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: create pr
+      - name: Create pr
         run: |
           git checkout "helm-version-${{ steps.date.outputs.date }}"
           gh pr create --base main --title "helm-version-bump-${{ steps.date.outputs.date }}" -b "please run helm-docs locally to update chart readmes" --label dependencies
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
