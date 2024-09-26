@@ -119,6 +119,7 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
 
   create_helm_release:
+    if: github.ref_type == 'tag'
     needs: build_and_push_docker_image
     uses: ./.github/workflows/helm-release.yaml
     secrets: inherit
