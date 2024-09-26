@@ -16,6 +16,8 @@ permissions: {}
 jobs:
   run_unit_tests:
     uses: ./.github/workflows/tests.yaml
+    permissions:
+      contents: read
 
   build_and_upload_manifests:
     if: github.ref_type == 'tag'
@@ -101,8 +103,7 @@ jobs:
 
   create_helm_release:
     if: github.ref_type == 'tag'
-    permissions:
-      contents: write
     needs: build_and_push_docker_image
     uses: ./.github/workflows/helm-release.yaml
-    secrets: inherit
+		permissions:
+			contents: write
