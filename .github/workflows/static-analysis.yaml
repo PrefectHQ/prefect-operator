@@ -4,6 +4,8 @@ name: Static analysis
 "on":
   pull_request: {}
 
+permissions: {}
+
 # Limit concurrency by workflow/branch combination.
 #
 # For pull request builds, pushing additional changes to the
@@ -21,6 +23,8 @@ jobs:
   pre_commit_checks:
     name: pre-commit checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
