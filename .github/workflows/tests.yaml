@@ -6,7 +6,6 @@ name: Unit tests
   push:
     branches:
       - main
-  workflow_call: {}
 
 permissions: {}
 
