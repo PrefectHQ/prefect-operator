@@ -28,5 +28,3 @@ jobs:
       - name: run updatecli diff to validate config
         run: |
           updatecli diff --config .github/updatecli/manifest.yaml
-        env:
-          GITHUB_TOKEN: ${{ github.token }}

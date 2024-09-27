@@ -6,7 +6,7 @@ name: Labeler
       - opened
 
 jobs:
-  apply-label:
+  apply_label:
     runs-on: ubuntu-latest
     steps:
       - name: Apply prefect-operator label to all issues

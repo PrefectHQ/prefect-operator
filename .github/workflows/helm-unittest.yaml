@@ -10,7 +10,6 @@ name: Run Helm unit tests
     paths:
       - deploy/charts/**
 
-# Do not grant jobs any permissions by default
 permissions: {}
 
 jobs:
