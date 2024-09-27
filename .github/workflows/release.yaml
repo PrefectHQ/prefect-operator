@@ -22,6 +22,7 @@ jobs:
 
   build_and_upload_manifests:
     if: github.ref_type == 'tag'
+    needs: run_unit_tests
     permissions:
       # required to write artifacts to a release
       contents: write
@@ -54,8 +55,11 @@ jobs:
 
       - name: Upload release assets
         run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect-operator.yaml
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   build_and_push_docker_image:
+    needs: run_unit_tests
     runs-on: ubuntu-latest
     # The GitHub environments are created by Terraform and map to Docker Hub repositories:
     # - dev: https://hub.docker.com/r/prefecthq/prefect-operator-dev
