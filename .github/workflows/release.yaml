@@ -17,11 +17,13 @@ jobs:
   run_unit_tests:
     uses: ./.github/workflows/tests.yaml
     permissions:
+      # required by downstream jobs
       contents: read
 
   build_and_upload_manifests:
     if: github.ref_type == 'tag'
     permissions:
+      # required to write artifacts to a release
       contents: write
     runs-on: ubuntu-latest
     steps:
@@ -51,8 +53,6 @@ jobs:
           yq -i '(.. | select(tag == "!!str" and . == "v0.0.0")) |= "${{ github.ref_name }}"' prefect-operator.yaml
 
       - name: Upload release assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect-operator.yaml
 
   build_and_push_docker_image:
@@ -104,6 +104,7 @@ jobs:
   create_helm_release:
     if: github.ref_type == 'tag'
     permissions:
+      # required by downstream jobs
       contents: write
     needs: build_and_push_docker_image
     uses: ./.github/workflows/helm-release.yaml

@@ -13,7 +13,7 @@ jobs:
   updatecli:
     runs-on: ubuntu-latest
     permissions:
-      # required to write to the repo
+      # required to commit to a branch
       contents: write
       # required to open a pr with updatecli changes
       pull-requests: write
