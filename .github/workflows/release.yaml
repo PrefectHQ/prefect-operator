@@ -7,10 +7,18 @@ name: Release Prefect Operator
       - main
     tags:
       - '*'
+  pull_request:
+    branches:
+      - main
 
 permissions: {}
 
 jobs:
+  run_unit_tests:
+    uses: ./.github/workflows/tests.yaml
+    permissions:
+      contents: read
+
   build_and_upload_manifests:
     if: github.ref_type == 'tag'
     permissions:
