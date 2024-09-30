@@ -107,8 +107,11 @@ jobs:
 
   create_helm_release:
     if: github.ref_type == 'tag'
+    needs: build_and_push_docker_image
+    uses: ./.github/workflows/helm-release.yaml
     permissions:
       # required by downstream jobs
       contents: write
-    needs: build_and_push_docker_image
-    uses: ./.github/workflows/helm-release.yaml
+    # this is required so that the workflow can read secrets
+    # from the environment
+    secrets: inherit
