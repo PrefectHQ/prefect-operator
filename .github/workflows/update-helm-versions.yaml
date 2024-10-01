@@ -28,11 +28,11 @@ jobs:
 
       - name: Get current date
         id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
       - name: Create branch for helm version updates
         run: |
-          git checkout -b "helm-version-${{ steps.date.outputs.date }}"
+          git checkout -b "helm-version-$DATE}"
 
       - name: Install updatecli in the runner
         uses: updatecli/updatecli-action@v2
@@ -40,12 +40,23 @@ jobs:
       - name: Run updatecli in apply mode
         run: |
           updatecli apply --config .github/updatecli/manifest.yaml
-          git commit -am "helm-version-${{ steps.date.outputs.date }}"
-          git push --set-upstream origin "helm-version-${{ steps.date.outputs.date }}"
+          git commit -am "helm-version-$DATE}"
+          git push --set-upstream origin "helm-version-$DATE}"
+
+      - name: Install `helm-docs`
+        uses: jdx/mise-action@v2
+        with:
+          install_args: helm-docs
+
+      - name: Run helm-docs
+        run: |
+          helm-docs --template-files=README.md.gotmpl
+          git commit -am "update readme"
+          git push
 
       - name: Create pr
         run: |
-          git checkout "helm-version-${{ steps.date.outputs.date }}"
-          gh pr create --base main --title "helm-version-bump-${{ steps.date.outputs.date }}" -b "please run helm-docs locally to update chart readmes" --label dependencies
+          git checkout "helm-version-$DATE}"
+          gh pr create --base main --title "helm-version-bump-$DATE}" --label dependencies
         env:
           GH_TOKEN: ${{ github.token }}
