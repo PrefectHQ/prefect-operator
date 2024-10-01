@@ -95,6 +95,7 @@ jobs:
       - name: Create Github Release + Tag
         run: |
           gh release create $RELEASE_VERSION \
+            --title $RELEASE_VERSION \
             --latest=false \
             --notes "Packaged with prefect-operator version \
             [v$IMAGE_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/v$IMAGE_VERSION)"
