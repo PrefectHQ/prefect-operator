@@ -60,6 +60,12 @@ spec:
           spec:
             description: PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
             properties:
+              deploymentLabels:
+                additionalProperties:
+                  type: string
+                description: DeploymentLabels defines additional labels to add to
+                  the server deployment
+                type: object
               image:
                 description: Image defines the exact image to deploy for the Prefect
                   Server, overriding Version

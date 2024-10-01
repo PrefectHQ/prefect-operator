@@ -526,7 +526,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 		TTLSecondsAfterFinished: ptr.To(int32(7 * 24 * 60 * 60)), // 7 days
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: server.ServerLabels(),
+				Labels: server.MigrationJobLabels(),
 			},
 			Spec: corev1.PodSpec{
 				InitContainers: []corev1.Container{
@@ -569,7 +569,7 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 			Name:      server.Name,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: server.ServerLabels(),
+			Selector: server.ServiceLabels(),
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "api",

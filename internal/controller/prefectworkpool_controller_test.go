@@ -181,6 +181,10 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 							corev1.ResourceMemory: resource.MustParse("512Mi"),
 						},
 					},
+					DeploymentLabels: map[string]string{
+						"some":    "additional-label",
+						"another": "extra-label",
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectworkpool)).To(Succeed())
@@ -232,6 +236,13 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			It("should have appropriate labels", func() {
 				Expect(deployment.Spec.Selector.MatchLabels).To(Equal(map[string]string{
 					"prefect.io/worker": "example-work-pool",
+					"some":              "additional-label",
+					"another":           "extra-label",
+				}))
+				Expect(deployment.Spec.Template.Labels).To(Equal(map[string]string{
+					"prefect.io/worker": "example-work-pool",
+					"some":              "additional-label",
+					"another":           "extra-label",
 				}))
 			})
 

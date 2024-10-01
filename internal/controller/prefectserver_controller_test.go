@@ -182,6 +182,10 @@ var _ = Describe("PrefectServer controller", func() {
 								corev1.ResourceMemory: resource.MustParse("512Mi"),
 							},
 						},
+						DeploymentLabels: map[string]string{
+							"some":    "additional-label",
+							"another": "extra-label",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -265,6 +269,13 @@ var _ = Describe("PrefectServer controller", func() {
 				It("should have appropriate labels", func() {
 					Expect(deployment.Spec.Selector.MatchLabels).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
+						"some":              "additional-label",
+						"another":           "extra-label",
+					}))
+					Expect(deployment.Spec.Template.Labels).To(Equal(map[string]string{
+						"prefect.io/server": "prefect-on-anything",
+						"some":              "additional-label",
+						"another":           "extra-label",
 					}))
 				})
 
@@ -1093,6 +1104,14 @@ var _ = Describe("PrefectServer controller", func() {
 							Password: ptr.To("this-is-a-bad-idea"),
 							Database: ptr.To("some-prefect"),
 						},
+						DeploymentLabels: map[string]string{
+							"some":    "additional-label",
+							"another": "extra-label",
+						},
+						MigrationJobLabels: map[string]string{
+							"some":    "additional-label-for-migrations",
+							"another": "extra-label-for-migrations",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -1209,6 +1228,12 @@ var _ = Describe("PrefectServer controller", func() {
 							BlockOwnerDeletion: ptr.To(true),
 						},
 					))
+				})
+
+				It("should have the correct labels", func() {
+					Expect(migrateJob.Labels).To(HaveKeyWithValue("prefect.io/server", "prefect-on-postgres"))
+					Expect(migrateJob.Labels).To(HaveKeyWithValue("some", "additional-label-for-migrations"))
+					Expect(migrateJob.Labels).To(HaveKeyWithValue("another", "extra-label-for-migrations"))
 				})
 
 				It("should have an environment pointing to the PostgreSQL database", func() {

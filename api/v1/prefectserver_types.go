@@ -51,6 +51,15 @@ type PrefectServerSpec struct {
 
 	// A list of environment variables to set on the Prefect Server
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
+
+	// DeploymentLabels defines additional labels to add to the server Deployment
+	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
+
+	// ServiceLabels defines additional labels to add to the server Service
+	ServiceLabels map[string]string `json:"serviceLabels,omitempty"`
+
+	// MigrationJobLabels defines additional labels to add to the migration Job
+	MigrationJobLabels map[string]string `json:"migrationJobLabels,omitempty"`
 }
 
 type EphemeralConfiguration struct {
@@ -220,9 +229,33 @@ type PrefectServer struct {
 }
 
 func (s *PrefectServer) ServerLabels() map[string]string {
-	return map[string]string{
+	labels := map[string]string{
 		"prefect.io/server": s.Name,
 	}
+	for k, v := range s.Spec.DeploymentLabels {
+		labels[k] = v
+	}
+	return labels
+}
+
+func (s *PrefectServer) ServiceLabels() map[string]string {
+	labels := map[string]string{
+		"prefect.io/server": s.Name,
+	}
+	for k, v := range s.Spec.ServiceLabels {
+		labels[k] = v
+	}
+	return labels
+}
+
+func (s *PrefectServer) MigrationJobLabels() map[string]string {
+	labels := map[string]string{
+		"prefect.io/server": s.Name,
+	}
+	for k, v := range s.Spec.MigrationJobLabels {
+		labels[k] = v
+	}
+	return labels
 }
 
 func (s *PrefectServer) Image() string {

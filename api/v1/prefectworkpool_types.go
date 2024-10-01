@@ -47,6 +47,9 @@ type PrefectWorkPoolSpec struct {
 
 	// A list of environment variables to set on the Prefect Worker
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
+
+	// DeploymentLabels defines additional labels to add to the server deployment
+	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
 }
 
 type PrefectServerReference struct {
@@ -111,9 +114,15 @@ type PrefectWorkPool struct {
 }
 
 func (s *PrefectWorkPool) WorkerLabels() map[string]string {
-	return map[string]string{
+	labels := map[string]string{
 		"prefect.io/worker": s.Name,
 	}
+
+	for k, v := range s.Spec.DeploymentLabels {
+		labels[k] = v
+	}
+
+	return labels
 }
 
 func (s *PrefectWorkPool) Image() string {

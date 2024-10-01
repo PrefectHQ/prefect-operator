@@ -48,6 +48,12 @@ spec:
           spec:
             description: PrefectServerSpec defines the desired state of a PrefectServer
             properties:
+              deploymentLabels:
+                additionalProperties:
+                  type: string
+                description: DeploymentLabels defines additional labels to add to
+                  the server Deployment
+                type: object
               ephemeral:
                 description: Ephemeral defines whether the server will be deployed
                   with an ephemeral storage backend
@@ -56,6 +62,12 @@ spec:
                 description: Image defines the exact image to deploy for the Prefect
                   Server, overriding Version
                 type: string
+              migrationJobLabels:
+                additionalProperties:
+                  type: string
+                description: MigrationJobLabels defines additional labels to add to
+                  the migration Job
+                type: object
               postgres:
                 description: |-
                   Postgres defines whether the server will be deployed with a PostgreSQL backend connecting to the
@@ -562,6 +574,12 @@ spec:
                       otherwise to an implementation-defined value. Requests cannot exceed Limits.
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
+                type: object
+              serviceLabels:
+                additionalProperties:
+                  type: string
+                description: ServiceLabels defines additional labels to add to the
+                  server Service
                 type: object
               settings:
                 description: A list of environment variables to set on the Prefect
