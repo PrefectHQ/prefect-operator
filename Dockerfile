@@ -30,4 +30,5 @@ WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
 
+# Entrypoint for the container
 ENTRYPOINT ["/manager"]
