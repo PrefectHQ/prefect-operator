@@ -1,0 +1,35 @@
+---
+name: Build and push images for pull requests
+
+"on":
+  pull_request:
+    branches:
+      - main
+    paths:
+      - api/**
+      - cmd/**
+      - internal/**
+      - Dockerfile
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+
+permissions: {}
+
+jobs:
+  run_unit_tests:
+    uses: ./.github/workflows/tests.yaml
+    permissions:
+      # required by downstream jobs
+      contents: read
+
+  build_and_push_image_for_prs:
+    needs: run_unit_tests
+    if: contains(github.event.pull_request.labels.*.name, 'build-image')
+    uses: ./.github/workflows/build-and-push-image.yaml
+    with:
+      environment: dev
+      image: prefect-operator-dev

@@ -1,0 +1,28 @@
+---
+name: Build and push images for merges to main
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - api/**
+      - cmd/**
+      - internal/**
+      - Dockerfile
+
+permissions: {}
+
+jobs:
+  run_unit_tests:
+    uses: ./.github/workflows/tests.yaml
+    permissions:
+      # required by downstream jobs
+      contents: read
+
+  build_and_push_image_for_main:
+    needs: run_unit_tests
+    uses: ./.github/workflows/build-and-push-image.yaml
+    with:
+      environment: dev
+      image: prefect-operator-dev
