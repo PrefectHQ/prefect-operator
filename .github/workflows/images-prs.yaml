@@ -33,3 +33,4 @@ jobs:
     with:
       environment: dev
       image: prefect-operator-dev
+    secrets: inherit
