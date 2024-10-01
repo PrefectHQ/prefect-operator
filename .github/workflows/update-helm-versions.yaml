@@ -32,7 +32,7 @@ jobs:
 
       - name: Create branch for helm version updates
         run: |
-          git checkout -b "helm-version-$DATE}"
+          git checkout -b "helm-version-$DATE"
 
       - name: Install updatecli in the runner
         uses: updatecli/updatecli-action@v2
@@ -40,8 +40,8 @@ jobs:
       - name: Run updatecli in apply mode
         run: |
           updatecli apply --config .github/updatecli/manifest.yaml
-          git commit -am "helm-version-$DATE}"
-          git push --set-upstream origin "helm-version-$DATE}"
+          git commit -am "helm-version-$DATE"
+          git push --set-upstream origin "helm-version-$DATE"
 
       - name: Install `helm-docs`
         uses: jdx/mise-action@v2
@@ -56,7 +56,7 @@ jobs:
 
       - name: Create pr
         run: |
-          git checkout "helm-version-$DATE}"
-          gh pr create --base main --title "helm-version-bump-$DATE}" --label dependencies
+          git checkout "helm-version-$DATE"
+          gh pr create --base main --title "helm-version-bump-$DATE" --label dependencies
         env:
           GH_TOKEN: ${{ github.token }}
