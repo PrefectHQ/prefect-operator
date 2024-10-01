@@ -26,3 +26,5 @@ jobs:
     with:
       environment: dev
       image: prefect-operator-dev
+    # this is required so that the workflow can read secrets rom the environment
+    secrets: inherit

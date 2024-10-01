@@ -58,6 +58,8 @@ jobs:
     with:
       environment: prod
       image: prefect-operator
+    # this is required so that the workflow can read secrets rom the environment
+    secrets: inherit
 
   create_helm_release:
     needs: build_and_push_image_for_tags
@@ -65,6 +67,5 @@ jobs:
     permissions:
       # required by downstream jobs
       contents: write
-    # this is required so that the workflow can read secrets
-    # from the environment
+    # this is required so that the workflow can read secrets rom the environment
     secrets: inherit
