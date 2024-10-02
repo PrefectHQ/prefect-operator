@@ -1,7 +1,6 @@
 ---
 # https://github.com/marketplace/actions/helm-unit-tests
-
-name: Run Helm unit tests
+name: Run Helm Unit Tests
 
 "on":
   pull_request:
