@@ -1,5 +1,5 @@
 ---
-name: Build and push images for tags
+name: Build and Push Images on Tags
 
 "on":
   push:

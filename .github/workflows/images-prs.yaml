@@ -1,5 +1,5 @@
 ---
-name: Build and push images for pull requests
+name: Build and Push Images on Pull Requests
 
 "on":
   pull_request:
