@@ -45,7 +45,7 @@ type PrefectWorkPoolSpec struct {
 	// Resources defines the CPU and memory resources for each worker in the Work Pool
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// ExtraContainers defines additional containers to add to the Prefect Server Deployment
+	// ExtraContainers defines additional containers to add to each worker in the Work Pool
 	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
 	// A list of environment variables to set on the Prefect Worker
