@@ -397,6 +397,13 @@ func (in *PrefectWorkPoolSpec) DeepCopyInto(out *PrefectWorkPoolSpec) {
 	}
 	in.Server.DeepCopyInto(&out.Server)
 	in.Resources.DeepCopyInto(&out.Resources)
+	if in.ExtraContainers != nil {
+		in, out := &in.ExtraContainers, &out.ExtraContainers
+		*out = make([]corev1.Container, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Settings != nil {
 		in, out := &in.Settings, &out.Settings
 		*out = make([]corev1.EnvVar, len(*in))

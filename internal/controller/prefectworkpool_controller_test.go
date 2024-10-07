@@ -398,6 +398,12 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					corev1.ResourceMemory: resource.MustParse("1Gi"),
 				},
 			}
+			prefectworkpool.Spec.ExtraContainers = []corev1.Container{
+				{
+					Name:  "extra-container",
+					Image: "extra-image",
+				},
+			}
 			Expect(k8sClient.Update(ctx, prefectworkpool)).To(Succeed())
 
 			// Reconcile again to update the work pool
@@ -416,7 +422,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				}, deployment)
 			}).Should(Succeed())
 
-			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.Env).To(ContainElement(corev1.EnvVar{
 				Name:  "PREFECT_SOME_SETTING",
@@ -433,7 +439,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				}, deployment)
 			}).Should(Succeed())
 
-			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.Resources.Requests).To(Equal(corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("200m"),
@@ -443,6 +449,20 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				corev1.ResourceCPU:    resource.MustParse("1"),
 				corev1.ResourceMemory: resource.MustParse("1Gi"),
 			}))
+		})
+
+		It("should update the Deployment with the extra container", func() {
+			deployment := &appsv1.Deployment{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "example-work-pool",
+				}, deployment)
+			}).Should(Succeed())
+
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
+			container := deployment.Spec.Template.Spec.Containers[1]
+			Expect(container.Name).To(Equal("extra-container"))
 		})
 	})
 
