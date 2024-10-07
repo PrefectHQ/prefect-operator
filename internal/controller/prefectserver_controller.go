@@ -300,6 +300,11 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 		deploymentSpec = r.ephemeralDeploymentSpec(server)
 	}
 
+	// Append any extra containers into the Deployment if configured.
+	if server.Spec.ExtraContainers != nil {
+		deploymentSpec.Template.Spec.Containers = append(deploymentSpec.Template.Spec.Containers, server.Spec.ExtraContainers...)
+	}
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,

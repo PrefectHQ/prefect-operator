@@ -106,7 +106,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 							},
 						},
 					},
-					Containers: []corev1.Container{
+					Containers: append([]corev1.Container{
 						{
 							Name: "prefect-worker",
 
@@ -131,7 +131,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 						},
-					},
+					}, workPool.Spec.ExtraContainers...),
 				},
 			},
 		}

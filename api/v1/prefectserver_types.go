@@ -39,6 +39,9 @@ type PrefectServerSpec struct {
 	// Resources defines the CPU and memory resources for each replica of the Prefect Server
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
+	// ExtraContainers defines additional containers to add to the Prefect Server Deployment
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+
 	// Ephemeral defines whether the server will be deployed with an ephemeral storage backend
 	Ephemeral *EphemeralConfiguration `json:"ephemeral,omitempty"`
 
