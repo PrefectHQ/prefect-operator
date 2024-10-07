@@ -239,6 +239,13 @@ func (in *PrefectServerSpec) DeepCopyInto(out *PrefectServerSpec) {
 		**out = **in
 	}
 	in.Resources.DeepCopyInto(&out.Resources)
+	if in.ExtraContainers != nil {
+		in, out := &in.ExtraContainers, &out.ExtraContainers
+		*out = make([]corev1.Container, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Ephemeral != nil {
 		in, out := &in.Ephemeral, &out.Ephemeral
 		*out = new(EphemeralConfiguration)
