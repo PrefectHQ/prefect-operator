@@ -7,7 +7,6 @@ sources:
       name: common
       versionFilter:
         kind: semver
-        pattern: 2.x.x
     sourceid: common
 conditions: {}
 targets:
