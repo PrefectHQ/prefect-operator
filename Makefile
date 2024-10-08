@@ -89,10 +89,13 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: helmbuild
-helmbuild: ## Build Helm dependencies
+helmbuild: update-chart-deps ## Build Helm dependencies
 	helm repo add bitnami https://charts.bitnami.com/bitnami
 	helm dependency build $(CHART_PATH)
 
+.PHONY: update-chart-deps
+update-chart-deps:
+	helm dependency update $(CHART_PATH)
 
 GINKGO_OPTIONS ?= -v --skip-package test/e2e -coverprofile cover.out -coverpkg ./api/v1/...,./internal/... -r
 
