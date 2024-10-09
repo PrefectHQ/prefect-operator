@@ -13,6 +13,9 @@ jobs:
       # GitHub considers creating releases and uploading assets as writing contents.
       contents: write
     runs-on: ubuntu-latest
+    outputs:
+      releaseVersion: ${{ steps.output_versions.outputs.releaseVersion }}
+      operatorVersion: ${{ steps.output_versions.outputs.operatorVersion }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,6 +37,12 @@ jobs:
           echo "IMAGE_VERSION=$(\
           git ls-remote --tags --refs --sort="v:refname" \
           origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///' | sed 's/v//')" >> $GITHUB_ENV
+
+      - name: Output versions as GitHub Outputs
+        id: output_versions
+        run: |
+          echo "releaseVersion=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+          echo "operatorVersion=$OPERATOR_VERSION" >> $GITHUB_OUTPUT
 
       - name: Configure Git
         run: |
@@ -101,3 +110,19 @@ jobs:
             [v$IMAGE_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/v$IMAGE_VERSION)"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  update_helm_chart_version_downstream:
+    name: Update Helm Chart version & image version in `cloud2-cluster-deployment`
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run workflow
+        run: |
+          gh workflow run update-prefect-operator-versions.yaml \
+            --repo prefecthq/cloud2-cluster-deployment \
+            --ref main \
+            -f image_version=${{ needs.release.outputs.operatorVersion }} \
+            -f chart_version=${{ needs.release.outputs.releaseVersion }} \
+            -f mode=release
+        env:
+          GH_TOKEN: ${{ secrets.CLOUD2_CLUSTER_DEPLOYMENT_ACTIONS_RW }}
