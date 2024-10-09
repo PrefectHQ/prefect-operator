@@ -133,6 +133,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectServer")
 		os.Exit(1)
 	}
+
 	if err = (&controller.PrefectWorkPoolReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -146,6 +147,7 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
+
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
