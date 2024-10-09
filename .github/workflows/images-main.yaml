@@ -44,7 +44,7 @@ jobs:
       - name: Get image version
         run: |
           short_sha="$(git rev-parse --short=7 HEAD)"
-          echo "SHORT_SHA=$short_sha" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$short_sha" >> $GITHUB_ENV
 
       - name: Run workflow
         run: |
