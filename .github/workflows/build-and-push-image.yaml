@@ -41,8 +41,13 @@ jobs:
         with:
           images: prefecthq/${{ inputs.image }}
           tags: |
+            # always: short sha
+            type=sha,prefix=,format=short
+            # for pull requests: "pr-123"
             type=ref,event=pr
-            type=ref,event=branch
+            # for main merges: latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            # for releases: 1.2.3
             type=semver,pattern={{version}}
           labels: |
             org.opencontainers.image.title=prefect-operator
