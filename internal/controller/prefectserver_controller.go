@@ -585,6 +585,10 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 			},
 		},
 	}
+	// Append any extra ports into the Service if configured.
+	if server.Spec.ExtraServicePorts != nil {
+		service.Spec.Ports = append(service.Spec.Ports, server.Spec.ExtraServicePorts...)
+	}
 
 	// TODO: handle errors from SetControllerReference.
 	_ = ctrl.SetControllerReference(server, &service, r.Scheme)

@@ -246,6 +246,13 @@ func (in *PrefectServerSpec) DeepCopyInto(out *PrefectServerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.ExtraServicePorts != nil {
+		in, out := &in.ExtraServicePorts, &out.ExtraServicePorts
+		*out = make([]corev1.ServicePort, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Ephemeral != nil {
 		in, out := &in.Ephemeral, &out.Ephemeral
 		*out = new(EphemeralConfiguration)

@@ -42,6 +42,9 @@ type PrefectServerSpec struct {
 	// ExtraContainers defines additional containers to add to the Prefect Server Deployment
 	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
+	// ExtraServicePorts defines additional ports to expose on the Prefect Server Service
+	ExtraServicePorts []corev1.ServicePort `json:"extraServicePorts,omitempty"`
+
 	// Ephemeral defines whether the server will be deployed with an ephemeral storage backend
 	Ephemeral *EphemeralConfiguration `json:"ephemeral,omitempty"`
 
