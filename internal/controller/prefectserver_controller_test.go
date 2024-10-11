@@ -550,6 +550,7 @@ var _ = Describe("PrefectServer controller", func() {
 				container := deployment.Spec.Template.Spec.Containers[1]
 				Expect(container.Name).To(Equal("extra-container"))
 			})
+
 			It("should update the Service with the extra port", func() {
 				// Update the PrefectServer with an extra port
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
