@@ -9,10 +9,11 @@ permissions: {}
 
 jobs:
   release:
+    name: Release Helm Chart
+    runs-on: ubuntu-latest
     permissions:
       # GitHub considers creating releases and uploading assets as writing contents.
       contents: write
-    runs-on: ubuntu-latest
     outputs:
       releaseVersion: ${{ steps.output_versions.outputs.releaseVersion }}
       operatorVersion: ${{ steps.output_versions.outputs.operatorVersion }}

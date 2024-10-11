@@ -8,6 +8,7 @@ name: Labeler
 
 jobs:
   apply_label:
+    name: Apply prefect-operator label to all issues
     runs-on: ubuntu-latest
     steps:
       - name: Apply prefect-operator label to all issues
