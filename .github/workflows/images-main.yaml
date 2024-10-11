@@ -29,29 +29,14 @@ jobs:
     # this is required so that the workflow can read secrets rom the environment
     secrets: inherit
 
-  update_image_version_downstream:
-    name: Update dev/stg image versions in `cloud2-cluster-deployment`
+  create_helm_release:
     needs: build_and_push_image_for_main
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/helm-release.yaml
     permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get image version
-        run: |
-          short_sha="$(git rev-parse --short=7 HEAD)"
-          echo "SHORT_SHA=$short_sha" >> $GITHUB_ENV
-
-      - name: Run workflow
-        run: |
-          gh workflow run update-prefect-operator-versions.yaml \
-            --repo prefecthq/cloud2-cluster-deployment \
-            --ref main \
-            -f image_version=$SHORT_SHA \
-            -f mode=main-merge
-        env:
-          GH_TOKEN: ${{ secrets.CLOUD2_CLUSTER_DEPLOYMENT_ACTIONS_RW }}
+      # required by downstream jobs
+      contents: write
+    with:
+      mode: main-merge
+    # this is required so that the workflow can read secrets
+    # from the environment
+    secrets: inherit

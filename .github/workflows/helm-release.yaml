@@ -2,8 +2,12 @@
 name: Release Prefect Operator Helm Chart
 
 "on":
-  workflow_dispatch: {}
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      mode:
+        description: which CI/CD mode?
+        type: string
+        required: true
 
 permissions: {}
 
@@ -32,13 +36,21 @@ jobs:
         run: |
           # Enable pipefail so git command failures do not result in null versions downstream
           set -x
-          echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_ENV
+          if [ "$MODE" == "main-merge" ]; then
+            # append "-dev" to the version so that it's clear that this is a development release
+            echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')-dev" >> $GITHUB_ENV
+            # get the short sha of the latest commit for the operator image
+            short_sha="$(git rev-parse --short=7 HEAD)"
+            echo "SHORT_SHA=$short_sha" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_ENV
 
-          # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
-          echo "OPERATOR_VERSION=$(\
-          git ls-remote --tags --refs --sort="v:refname" \
-          origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///'
-          )" >> $GITHUB_ENV
+            # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
+            echo "OPERATOR_VERSION=$(\
+            git ls-remote --tags --refs --sort="v:refname" \
+            origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///'
+            )" >> $GITHUB_ENV
+          fi
 
       - name: Output versions as GitHub Outputs
         id: output_versions
@@ -64,11 +76,11 @@ jobs:
           passphrase_file="$gpg_dir/passphrase"
           # store passphrase in a file
           echo "$GPG_PASSPHRASE" > "$passphrase_file"
-          echo "SIGN_PASSPHRASE_FILE=$passphrase_file" >> "$GITHUB_ENV"
-          echo "SIGN_KEYRING=$keyring" >> "$GITHUB_ENV"
+          echo "SIGN_PASSPHRASE_FILE=$passphrase_file" >> $GITHUB_ENV
+          echo "SIGN_KEYRING=$keyring" >> $GITHUB_ENV
         env:
-          GPG_KEYRING_BASE64: "${{ secrets.GPG_KEYRING_BASE64 }}"
-          GPG_PASSPHRASE: "${{ secrets.GPG_PASSPHRASE }}"
+          GPG_KEYRING_BASE64: ${{ secrets.GPG_KEYRING_BASE64 }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Add dependency chart repos
         run: |
@@ -120,11 +132,12 @@ jobs:
     steps:
       - name: Run workflow
         run: |
-          gh workflow run update-prefect-operator-versions.yaml \
+          gh workflow run update-operator-versions.yaml \
             --repo prefecthq/cloud2-cluster-deployment \
             --ref main \
             -f image_version=${{ needs.release.outputs.operatorVersion }} \
             -f chart_version=${{ needs.release.outputs.releaseVersion }} \
-            -f mode=release
+            -f mode=${{ github.event.inputs.mode }} \
+            -f operator=prefect-operator
         env:
           GH_TOKEN: ${{ secrets.CLOUD2_CLUSTER_DEPLOYMENT_ACTIONS_RW }}
