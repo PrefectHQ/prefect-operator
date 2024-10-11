@@ -34,8 +34,8 @@ jobs:
       - name: Get the version tags
         id: get_version
         run: |
-          # Enable pipefail so git command failures do not result in null versions downstream
-          set -x
+          # Exit if any commands fail, so git command failures do not result in null versions downstream
+          set -e
           if [ "$MODE" == "main-merge" ]; then
             # append "-dev" to the version so that it's clear that this is a development release
             echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')-dev" >> $GITHUB_ENV
