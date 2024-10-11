@@ -562,6 +562,7 @@ var _ = Describe("PrefectServer controller", func() {
 						Protocol:   corev1.ProtocolTCP,
 					},
 				}
+
 				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
 				// Reconcile to apply the changes
 				controllerReconciler := &PrefectServerReconciler{
