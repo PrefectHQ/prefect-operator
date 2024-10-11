@@ -550,6 +550,41 @@ var _ = Describe("PrefectServer controller", func() {
 				container := deployment.Spec.Template.Spec.Containers[1]
 				Expect(container.Name).To(Equal("extra-container"))
 			})
+			It("should update the Service with the extra port", func() {
+				// Update the PrefectServer with an extra port
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				prefectserver.Spec.ExtraServicePorts = []corev1.ServicePort{
+					{
+						Name:       "extra-port",
+						Port:       4300,
+						TargetPort: intstr.FromString("extra-port"),
+						Protocol:   corev1.ProtocolTCP,
+					},
+				}
+				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
+				// Reconcile to apply the changes
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Check if the Service was updated with the extra port
+				service := &corev1.Service{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      prefectserver.Name,
+					}, service)
+				}).Should(Succeed())
+
+				Expect(service.Spec.Ports).To(HaveLen(2))
+				port := service.Spec.Ports[1]
+				Expect(port.Name).To(Equal("extra-port"))
+			})
 		})
 
 		Context("When evaluating changes with any server", func() {

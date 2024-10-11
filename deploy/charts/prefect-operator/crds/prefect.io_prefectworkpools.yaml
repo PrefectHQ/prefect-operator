@@ -68,7 +68,7 @@ spec:
                 type: object
               extraContainers:
                 description: ExtraContainers defines additional containers to add
-                  to the Prefect Server Deployment
+                  to each worker in the Work Pool
                 items:
                   description: A single application container that you want to run
                     within a pod.
