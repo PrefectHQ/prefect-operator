@@ -77,7 +77,7 @@ tbd
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://charts.bitnami.com/bitnami | common | 2.24.0 |
+| https://charts.bitnami.com/bitnami | common | 2.26.0 |
 
 ## Values
 
