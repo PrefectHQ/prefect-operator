@@ -137,7 +137,7 @@ jobs:
             --ref main \
             -f image_version=${{ needs.release.outputs.operatorVersion }} \
             -f chart_version=${{ needs.release.outputs.releaseVersion }} \
-            -f mode=${{ github.event.inputs.mode }} \
+            -f mode=${{ inputs.mode }} \
             -f operator=prefect-operator
         env:
           GH_TOKEN: ${{ secrets.CLOUD2_CLUSTER_DEPLOYMENT_ACTIONS_RW }}
