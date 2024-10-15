@@ -36,13 +36,15 @@ jobs:
         run: |
           # Exit if any commands fail, so git command failures do not result in null versions downstream
           set -e
-          if [ "$MODE" == "main-merge" ]; then
+          if [ "${{ inputs.mode }}" == "main-merge" ]; then
             # append "-dev" to the version so that it's clear that this is a development release
             echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')-dev" >> $GITHUB_ENV
+
             # get the short sha of the latest commit for the operator image
             short_sha="$(git rev-parse --short=7 HEAD)"
             echo "SHORT_SHA=$short_sha" >> "$GITHUB_ENV"
-          else
+
+          elif [[ "${{ inputs.mode }}" == "release" ]]; then
             echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_ENV
 
             # This ensures that the latest tag we grab will be of the operator image, and not the helm chart
@@ -50,6 +52,9 @@ jobs:
             git ls-remote --tags --refs --sort="v:refname" \
             origin 'v[0-9].[0-9].[0-9]' | tail -n1 | sed 's/.*\///'
             )" >> $GITHUB_ENV
+          else
+            echo "Invalid mode: ${{ inputs.mode }}"
+            exit 1
           fi
 
       - name: Output versions as GitHub Outputs

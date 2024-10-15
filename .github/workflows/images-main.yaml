@@ -2,6 +2,7 @@
 name: Build and Push Images on Merge to Main
 
 "on":
+  workflow_dispatch: {}
   push:
     branches:
       - main
