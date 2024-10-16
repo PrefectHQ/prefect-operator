@@ -13,6 +13,7 @@ permissions: {}
 
 jobs:
   unittest:
+    name: Run Helm Unit Tests
     runs-on: ubuntu-latest
     permissions:
       # required to read from the repo

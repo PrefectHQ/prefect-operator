@@ -67,5 +67,8 @@ jobs:
     permissions:
       # required by downstream jobs
       contents: write
-    # this is required so that the workflow can read secrets rom the environment
+    with:
+      mode: release
+    # this is required so that the workflow can read secrets
+    # from the environment
     secrets: inherit

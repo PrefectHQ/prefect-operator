@@ -9,7 +9,8 @@ name: Updatecli Dependency Updates
 permissions: {}
 
 jobs:
-  updatecli_minor:
+  updatecli:
+    name: Updatecli Dependency Updates
     runs-on: ubuntu-latest
     permissions:
       # required to write to the repo

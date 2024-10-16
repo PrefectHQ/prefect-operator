@@ -12,6 +12,7 @@ permissions: {}
 
 jobs:
   validate_updatecli_configs:
+    name: Validate Updatecli Configs
     runs-on: ubuntu-latest
     permissions:
       # required to read from the repo
