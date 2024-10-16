@@ -42,7 +42,7 @@ jobs:
 
             # get the short sha of the latest commit for the operator image
             short_sha="$(git rev-parse --short=7 HEAD)"
-            echo "SHORT_SHA=$short_sha" >> "$GITHUB_ENV"
+            echo "OPERATOR_VERSION=$short_sha" >> "$GITHUB_ENV"
 
           elif [[ "${{ inputs.mode }}" == "release" ]]; then
             echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_ENV
