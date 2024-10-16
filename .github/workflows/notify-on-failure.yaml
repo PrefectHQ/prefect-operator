@@ -4,6 +4,7 @@ name: Notify on Failure
 "on":
   workflow_run:
     workflows:
+      - Build and Push Images on Merge to Main
       - Build and Push Images on Tags
       - Release Prefect Operator Helm Chart
       - Updatecli Dependency Updates
