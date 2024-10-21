@@ -119,13 +119,15 @@ var _ = Describe("PrefectServer controller", func() {
 		})
 
 		It("should allow specifying a Prefect version", func() {
+			version := "3.3.3.3.3.3.3.3"
+			expectedImage := fmt.Sprintf("prefecthq/prefect:%s-python3.12", version)
 			prefectserver = &prefectiov1.PrefectServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespaceName,
 					Name:      "prefect-on-anything",
 				},
 				Spec: prefectiov1.PrefectServerSpec{
-					Version: ptr.To("3.3.3.3.3.3.3.3"),
+					Version: &version,
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -153,7 +155,9 @@ var _ = Describe("PrefectServer controller", func() {
 
 			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.Image).To(Equal("prefecthq/prefect:3.3.3.3.3.3.3.3-python3.12"))
+			Expect(container.Image).To(Equal(expectedImage))
+			Expect(deployment.Spec.Selector.MatchLabels).To(HaveKeyWithValue("version", version))
+			Expect(deployment.Spec.Template.ObjectMeta.Labels).To(HaveKeyWithValue("version", version))
 		})
 
 		Context("when creating any server", func() {
@@ -269,11 +273,15 @@ var _ = Describe("PrefectServer controller", func() {
 				It("should have appropriate labels", func() {
 					Expect(deployment.Spec.Selector.MatchLabels).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
+						"app":               "prefect-server",
+						"version":           prefectiov1.DEFAULT_PREFECT_VERSION,
 						"some":              "additional-label",
 						"another":           "extra-label",
 					}))
 					Expect(deployment.Spec.Template.Labels).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
+						"app":               "prefect-server",
+						"version":           prefectiov1.DEFAULT_PREFECT_VERSION,
 						"some":              "additional-label",
 						"another":           "extra-label",
 					}))
