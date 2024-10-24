@@ -55,10 +55,6 @@ spec:
           command:
             - /manager
           args:
-            {{- if .Values.kubeRbacProxy.create }}
-            - --health-probe-bind-address=:8081
-            - --metrics-bind-address=127.0.0.1:8080
-            {{- end }}
             - --leader-elect
           env:
             {{- if .Values.operator.extraEnvVars }}
@@ -86,29 +82,3 @@ spec:
               port: 8081
           {{- toYaml .Values.operator.readinessProbe.config | nindent 12 }}
           {{- end }}
-        {{- if .Values.kubeRbacProxy.create }}
-        - name: {{ .Values.kubeRbacProxy.name }}
-          image: {{ .Values.kubeRbacProxy.image }}
-          imagePullPolicy: IfNotPresent
-          args:
-            - "--secure-listen-address=0.0.0.0:8443"
-            - "--upstream=http://127.0.0.1:8080/"
-            - "--logtostderr=true"
-            - "--v=0"
-          ports:
-            - containerPort: 8443
-              name: https
-              protocol: TCP
-          resources:
-            requests:
-              cpu: 5m
-              memory: 64Mi
-            limits:
-              cpu: 500m
-              memory: 128Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-        {{- end }}
