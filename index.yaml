@@ -2,6 +2,34 @@ apiVersion: v1
 entries:
   prefect-operator:
   - apiVersion: v2
+    appVersion: v40601b6
+    created: "2024-10-24T20:35:33.551363031Z"
+    dependencies:
+    - name: common
+      repository: https://charts.bitnami.com/bitnami
+      tags:
+      - bitnami-common
+      version: 2.26.0
+    description: Prefect Operator application bundle
+    digest: db71cda82ca7cdb1ed42994d0bcafb75dceee653ed80c2192cd1c4e570a17706
+    home: https://github.com/PrefectHQ
+    maintainers:
+    - email: jamie@prefect.io
+      name: jamiezieziula
+    - email: jimi@prefect.io
+      name: jimid27
+    - email: edward@prefect.io
+      name: parkedwards
+    - email: mitchell@prefect.io
+      name: mitchnielsen
+    name: prefect-operator
+    sources:
+    - https://github.com/PrefectHQ/prefect-operator
+    type: application
+    urls:
+    - https://prefecthq.github.io/prefect-operator/charts/prefect-operator-2024.10.24203523-dev.tgz
+    version: 2024.10.24203523-dev
+  - apiVersion: v2
     appVersion: vd70245b
     created: "2024-10-21T19:27:34.264554516Z"
     dependencies:
@@ -533,4 +561,4 @@ entries:
     urls:
     - https://prefecthq.github.io/prefect-operator/charts/prefect-operator-2024.9.15203739.tgz
     version: 2024.9.15203739
-generated: "2024-10-21T19:27:34.261796907Z"
+generated: "2024-10-24T20:35:33.549524381Z"
