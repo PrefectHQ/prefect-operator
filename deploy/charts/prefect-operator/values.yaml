@@ -167,19 +167,6 @@ serviceAccount:
   annotations: {}
 
 
-## Kube RBAC Proxy Configuration
-## TODO add some more info here
-## The kube-rbac-proxy protects your /metrics endpoint.
-## ref: https://github.com/brancz/kube-rbac-proxy
-kubeRbacProxy:
-  # -- specifies whether the kube-rbac-proxy should be deployed to the cluster
-  create: false
-  # -- the name of the kube-rbac-proxy to use
-  name: kube-rbac-proxy
-  # -- the image of the kube-rbac-proxy to use
-  image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
-
-
 ## Prometheus Metrics Configuration
 ## This needs to be tested
 metrics:

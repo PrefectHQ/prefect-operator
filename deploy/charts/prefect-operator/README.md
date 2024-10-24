@@ -86,9 +86,6 @@ tbd
 | commonAnnotations | object | `{}` | annotations to add to all deployed objects |
 | commonLabels | object | `{"app.kubernetes.io/component":"operator"}` | labels to add to all deployed objects |
 | fullnameOverride | string | `"prefect-operator"` | fully override common.names.fullname |
-| kubeRbacProxy.create | bool | `false` | specifies whether the kube-rbac-proxy should be deployed to the cluster |
-| kubeRbacProxy.image | string | `"gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0"` | the image of the kube-rbac-proxy to use |
-| kubeRbacProxy.name | string | `"kube-rbac-proxy"` | the name of the kube-rbac-proxy to use |
 | metrics.enabled | bool | `false` | enable the export of Prometheus metrics |
 | metrics.serviceMonitor.enabled | bool | `false` | creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`) |
 | nameOverride | string | `""` | partially overrides common.names.name |
