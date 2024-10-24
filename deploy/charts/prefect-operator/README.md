@@ -86,8 +86,6 @@ tbd
 | commonAnnotations | object | `{}` | annotations to add to all deployed objects |
 | commonLabels | object | `{"app.kubernetes.io/component":"operator"}` | labels to add to all deployed objects |
 | fullnameOverride | string | `"prefect-operator"` | fully override common.names.fullname |
-| metrics.enabled | bool | `false` | enable the export of Prometheus metrics |
-| metrics.serviceMonitor.enabled | bool | `false` | creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`) |
 | nameOverride | string | `""` | partially overrides common.names.name |
 | namespaceOverride | string | `""` | fully override common.names.namespace |
 | operator.affinity | object | `{}` | affinity for operator pods assignment |

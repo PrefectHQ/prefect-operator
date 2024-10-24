@@ -165,14 +165,3 @@ serviceAccount:
   name: ""
   # -- additional service account annotations (evaluated as a template)
   annotations: {}
-
-
-## Prometheus Metrics Configuration
-## This needs to be tested
-metrics:
-  # -- enable the export of Prometheus metrics
-  enabled: false
-  ## Prometheus Operator ServiceMonitor configuration
-  serviceMonitor:
-    # -- creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
-    enabled: false
