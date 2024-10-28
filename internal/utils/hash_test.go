@@ -16,7 +16,7 @@ func MigrationJobStub() *batchv1.Job {
 			Namespace: "default",
 		},
 		Spec: batchv1.JobSpec{
-			TTLSecondsAfterFinished: ptr.To(int32(7 * 24 * 60 * 60)), // 7 days
+			TTLSecondsAfterFinished: ptr.To(int32(60 * 60)), // 1 hour
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"app": "prefect-server"},

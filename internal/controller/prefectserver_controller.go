@@ -528,7 +528,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 
 func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) *batchv1.Job {
 	jobSpec := batchv1.JobSpec{
-		TTLSecondsAfterFinished: ptr.To(int32(7 * 24 * 60 * 60)), // 7 days
+		TTLSecondsAfterFinished: ptr.To(int32(60 * 60)), // 1 hour
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: server.MigrationJobLabels(),
