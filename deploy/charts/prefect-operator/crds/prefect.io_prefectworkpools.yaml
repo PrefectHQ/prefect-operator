@@ -64,7 +64,7 @@ spec:
                 additionalProperties:
                   type: string
                 description: DeploymentLabels defines additional labels to add to
-                  the server deployment
+                  the Prefect Server Deployment
                 type: object
               extraContainers:
                 description: ExtraContainers defines additional containers to add
