@@ -55,8 +55,8 @@ spec:
                   the server Deployment
                 type: object
               ephemeral:
-                description: Ephemeral defines whether the server will be deployed
-                  with an ephemeral storage backend
+                description: Ephemeral defines whether the Prefect Server will be
+                  deployed with an ephemeral storage backend
                 type: object
               extraContainers:
                 description: ExtraContainers defines additional containers to add
