@@ -12,6 +12,8 @@ spec:
     listKind: PrefectWorkPoolList
     plural: prefectworkpools
     singular: prefectworkpool
+    shortNames:
+    - pwp
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
