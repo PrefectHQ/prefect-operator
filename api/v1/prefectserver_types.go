@@ -66,6 +66,9 @@ type PrefectServerSpec struct {
 
 	// MigrationJobLabels defines additional labels to add to the migration Job
 	MigrationJobLabels map[string]string `json:"migrationJobLabels,omitempty"`
+
+	// NodeSelector defines the node selector for the Prefect Server Deployment and migration Job
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 }
 
 type EphemeralConfiguration struct {

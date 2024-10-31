@@ -339,6 +339,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 				Labels: server.ServerLabels(),
 			},
 			Spec: corev1.PodSpec{
+				NodeSelector: server.Spec.NodeSelector,
 				Volumes: []corev1.Volume{
 					{
 						Name: "prefect-data",
@@ -419,6 +420,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 				Labels: server.ServerLabels(),
 			},
 			Spec: corev1.PodSpec{
+				NodeSelector: server.Spec.NodeSelector,
 				Volumes: []corev1.Volume{
 					{
 						Name: "prefect-data",
@@ -486,6 +488,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 				Labels: server.ServerLabels(),
 			},
 			Spec: corev1.PodSpec{
+				NodeSelector: server.Spec.NodeSelector,
 				InitContainers: []corev1.Container{
 					r.initContainerWaitForPostgres(server),
 				},
@@ -534,6 +537,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 				Labels: server.MigrationJobLabels(),
 			},
 			Spec: corev1.PodSpec{
+				NodeSelector: server.Spec.NodeSelector,
 				InitContainers: []corev1.Container{
 					r.initContainerWaitForPostgres(server),
 				},
