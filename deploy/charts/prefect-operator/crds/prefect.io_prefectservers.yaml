@@ -11,9 +11,9 @@ spec:
     kind: PrefectServer
     listKind: PrefectServerList
     plural: prefectservers
-    singular: prefectserver
     shortNames:
     - ps
+    singular: prefectserver
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
