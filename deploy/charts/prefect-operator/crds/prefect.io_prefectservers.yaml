@@ -1482,6 +1482,12 @@ spec:
                 description: MigrationJobLabels defines additional labels to add to
                   the migration Job
                 type: object
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                description: NodeSelector defines the node selector for the Prefect
+                  Server Deployment and migration Job
+                type: object
               postgres:
                 description: |-
                   Postgres defines whether the server will be deployed with a PostgreSQL backend connecting to the

@@ -190,6 +190,9 @@ var _ = Describe("PrefectServer controller", func() {
 							"some":    "additional-label",
 							"another": "extra-label",
 						},
+						NodeSelector: map[string]string{
+							"some": "node-selector",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -376,6 +379,10 @@ var _ = Describe("PrefectServer controller", func() {
 						SuccessThreshold:    1,
 						FailureThreshold:    2,
 					}))
+				})
+
+				It("should have the correct nodeSelector value", func() {
+					Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("some", "node-selector"))
 				})
 			})
 
@@ -1192,6 +1199,9 @@ var _ = Describe("PrefectServer controller", func() {
 							"some":    "additional-label-for-migrations",
 							"another": "extra-label-for-migrations",
 						},
+						NodeSelector: map[string]string{
+							"some": "node-selector",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -1330,6 +1340,10 @@ var _ = Describe("PrefectServer controller", func() {
 						{Name: "PREFECT_API_DATABASE_NAME", Value: "some-prefect"},
 						{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "False"},
 					}))
+				})
+
+				It("should have the correct nodeSelector value", func() {
+					Expect(migrateJob.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("some", "node-selector"))
 				})
 			})
 		})
