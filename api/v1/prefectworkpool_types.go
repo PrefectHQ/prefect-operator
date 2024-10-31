@@ -51,7 +51,7 @@ type PrefectWorkPoolSpec struct {
 	// A list of environment variables to set on the Prefect Worker
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 
-	// DeploymentLabels defines additional labels to add to the server deployment
+	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
 }
 
@@ -101,6 +101,7 @@ type PrefectWorkPoolStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:path="prefectworkpools",singular="prefectworkpool",shortName="pwp",scope="Namespaced"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type",description="The type of this work pool"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this work pool"

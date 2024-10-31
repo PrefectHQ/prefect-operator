@@ -45,7 +45,7 @@ type PrefectServerSpec struct {
 	// ExtraServicePorts defines additional ports to expose on the Prefect Server Service
 	ExtraServicePorts []corev1.ServicePort `json:"extraServicePorts,omitempty"`
 
-	// Ephemeral defines whether the server will be deployed with an ephemeral storage backend
+	// Ephemeral defines whether the Prefect Server will be deployed with an ephemeral storage backend
 	Ephemeral *EphemeralConfiguration `json:"ephemeral,omitempty"`
 
 	// SQLite defines whether the server will be deployed with a SQLite backend with persistent volume storage
@@ -225,6 +225,7 @@ type PrefectServerStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:path="prefectservers",singular="prefectserver",shortName="ps",scope="Namespaced"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version",description="The version of this Prefect server"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready",description="Whether this Prefect server is ready to receive requests"
