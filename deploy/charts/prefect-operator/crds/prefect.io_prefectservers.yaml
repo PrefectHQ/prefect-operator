@@ -60,6 +60,12 @@ spec:
                 description: Ephemeral defines whether the Prefect Server will be
                   deployed with an ephemeral storage backend
                 type: object
+              extraArgs:
+                description: ExtraArgs defines additional arguments to pass to the
+                  Prefect Server Deployment
+                items:
+                  type: string
+                type: array
               extraContainers:
                 description: ExtraContainers defines additional containers to add
                   to the Prefect Server Deployment
