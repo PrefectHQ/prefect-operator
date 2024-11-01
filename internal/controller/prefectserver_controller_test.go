@@ -602,6 +602,35 @@ var _ = Describe("PrefectServer controller", func() {
 				port := service.Spec.Ports[1]
 				Expect(port.Name).To(Equal("extra-port"))
 			})
+
+			It("should update the Command with the extra args", func() {
+				// Update the PrefectServer with an extra args
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				prefectserver.Spec.ExtraArgs = []string{"--some-arg", "some-value"}
+
+				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
+				// Reconcile to apply the changes
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: name,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Check if the Deployment was updated with the extra args
+				deployment := &appsv1.Deployment{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: namespaceName,
+						Name:      "prefect-on-anything",
+					}, deployment)
+				}).Should(Succeed())
+
+				container := deployment.Spec.Template.Spec.Containers[0]
+				Expect(container.Command).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0", "--some-arg", "some-value"}))
+			})
 		})
 
 		Context("When evaluating changes with any server", func() {

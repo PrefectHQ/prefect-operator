@@ -253,6 +253,11 @@ func (in *PrefectServerSpec) DeepCopyInto(out *PrefectServerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.ExtraArgs != nil {
+		in, out := &in.ExtraArgs, &out.ExtraArgs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Ephemeral != nil {
 		in, out := &in.Ephemeral, &out.Ephemeral
 		*out = new(EphemeralConfiguration)

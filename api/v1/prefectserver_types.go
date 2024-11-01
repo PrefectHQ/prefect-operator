@@ -45,6 +45,9 @@ type PrefectServerSpec struct {
 	// ExtraServicePorts defines additional ports to expose on the Prefect Server Service
 	ExtraServicePorts []corev1.ServicePort `json:"extraServicePorts,omitempty"`
 
+	// ExtraArgs defines additional arguments to pass to the Prefect Server Deployment
+	ExtraArgs []string `json:"extraArgs,omitempty"`
+
 	// Ephemeral defines whether the Prefect Server will be deployed with an ephemeral storage backend
 	Ephemeral *EphemeralConfiguration `json:"ephemeral,omitempty"`
 
@@ -281,7 +284,10 @@ func (s *PrefectServer) Image() string {
 }
 
 func (s *PrefectServer) Command() []string {
-	return []string{"prefect", "server", "start", "--host", "0.0.0.0"}
+	command := []string{"prefect", "server", "start", "--host", "0.0.0.0"}
+	command = append(command, s.Spec.ExtraArgs...)
+
+	return command
 }
 
 func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
