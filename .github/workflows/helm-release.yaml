@@ -101,7 +101,7 @@ jobs:
             --destination /tmp/chart \
             --dependency-update \
             --version $RELEASE_VERSION \
-            --app-version v$OPERATOR_VERSION \
+            --app-version $OPERATOR_VERSION \
             --sign --key 'jamie@prefect.io' \
             --keyring $SIGN_KEYRING \
             --passphrase-file $SIGN_PASSPHRASE_FILE
@@ -121,12 +121,13 @@ jobs:
           git push origin gh-pages
 
       - name: Create Github Release + Tag
+        if: ${{ inputs.mode == 'release' }}
         run: |
           gh release create $RELEASE_VERSION \
             --title $RELEASE_VERSION \
             --latest=false \
             --notes "Packaged with prefect-operator version \
-            [v$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/v$OPERATOR_VERSION)"
+            [$OPERATOR_VERSION](https://github.com/PrefectHQ/prefect-operator/releases/tag/$OPERATOR_VERSION)"
         env:
           GH_TOKEN: ${{ github.token }}
 
