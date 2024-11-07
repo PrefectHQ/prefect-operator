@@ -138,10 +138,19 @@ jobs:
     steps:
       - name: Run workflow
         run: |
+          operator_version=${{ needs.release.outputs.operatorVersion }}
+
+          # Trim the 'v' prefix from the version to match the image tag.
+          # Only do this when mode is 'release', in other scenarios the
+          # value here is a short SHA, which could also start with a 'v'.
+          if [[ "${{ inputs.mode }}" == "release" ]]; then
+            operator_version=${operator_version#v}
+          fi
+
           gh workflow run update-operator-versions.yaml \
             --repo prefecthq/cloud2-cluster-deployment \
             --ref main \
-            -f image_version=${{ needs.release.outputs.operatorVersion }} \
+            -f image_version=${image_version} \
             -f chart_version=${{ needs.release.outputs.releaseVersion }} \
             -f mode=${{ inputs.mode }} \
             -f operator=prefect-operator
