@@ -188,8 +188,6 @@ deploy: helmbuild ## Install CRDs & the Helm Chart to the K8s cluster specified 
 undeploy: ## Uninstall the Helm Chart to the K8s cluster specified in ~/.kube/config.
 	helm uninstall $(RELEASE_NAME) --namespace $(NAMESPACE)
 
-##@ Dependencies
-
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
