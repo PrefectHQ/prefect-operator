@@ -9,6 +9,8 @@ name: Build and Push Images on Pull Requests
       - api/**
       - cmd/**
       - internal/**
+      - test/**
+      - Makefile
       - Dockerfile
       - .github/workflows/images-prs.yaml
       - .github/workflows/build-and-push-image.yaml
