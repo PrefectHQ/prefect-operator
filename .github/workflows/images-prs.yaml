@@ -40,8 +40,8 @@ jobs:
       id-token: write
       security-events: write
     with:
+      push: false
       environment: dev
       image: prefect-operator-dev
-      push: false
     # this is required so that the workflow can read secrets from the environment
     secrets: inherit
