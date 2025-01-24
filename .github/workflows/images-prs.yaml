@@ -9,7 +9,12 @@ name: Build and Push Images on Pull Requests
       - api/**
       - cmd/**
       - internal/**
+      - test/**
       - Dockerfile
+      - Makefile
+      - .github/workflows/images-prs.yaml
+      - .github/workflows/build-and-push-image.yaml
+      - .github/workflows/tests.yaml
     types:
       - opened
       - reopened
@@ -27,11 +32,16 @@ jobs:
       contents: read
 
   build_and_push_image_for_prs:
-    needs: run_unit_tests
-    if: contains(github.event.pull_request.labels.*.name, 'build-image')
     uses: ./.github/workflows/build-and-push-image.yaml
+    permissions:
+      # required by downstream jobs
+      actions: read
+      contents: read
+      id-token: write
+      security-events: write
     with:
+      push: false
       environment: dev
       image: prefect-operator-dev
-    # this is required so that the workflow can read secrets rom the environment
+    # this is required so that the workflow can read secrets from the environment
     secrets: inherit
