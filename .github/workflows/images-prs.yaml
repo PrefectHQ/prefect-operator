@@ -10,8 +10,8 @@ name: Build and Push Images on Pull Requests
       - cmd/**
       - internal/**
       - test/**
-      - Makefile
       - Dockerfile
+      - Makefile
       - .github/workflows/images-prs.yaml
       - .github/workflows/build-and-push-image.yaml
       - .github/workflows/tests.yaml
@@ -42,6 +42,6 @@ jobs:
     with:
       environment: dev
       image: prefect-operator-dev
-      push: ${{ contains(github.event.pull_request.labels.*.name, 'push-dev-image') }}
+      push: false
     # this is required so that the workflow can read secrets from the environment
     secrets: inherit
