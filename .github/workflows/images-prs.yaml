@@ -32,11 +32,16 @@ jobs:
       contents: read
 
   build_and_push_image_for_prs:
-    needs: run_unit_tests
     uses: ./.github/workflows/build-and-push-image.yaml
+    permissions:
+      # required by downstream jobs
+      actions: read
+      contents: read
+      id-token: write
+      security-events: write
     with:
       environment: dev
       image: prefect-operator-dev
       push: ${{ contains(github.event.pull_request.labels.*.name, 'push-dev-image') }}
-    # this is required so that the workflow can read secrets rom the environment
+    # this is required so that the workflow can read secrets from the environment
     secrets: inherit
