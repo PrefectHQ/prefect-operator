@@ -245,7 +245,6 @@ func (s *PrefectServer) ServerLabels() map[string]string {
 	labels := map[string]string{
 		"prefect.io/server": s.Name,
 		"app":               "prefect-server",
-		"version":           s.getVersion(),
 	}
 	for k, v := range s.Spec.DeploymentLabels {
 		labels[k] = v
@@ -283,7 +282,7 @@ func (s *PrefectServer) Image() string {
 	return DEFAULT_PREFECT_IMAGE
 }
 
-func (s *PrefectServer) Command() []string {
+func (s *PrefectServer) EntrypointArugments() []string {
 	command := []string{"prefect", "server", "start", "--host", "0.0.0.0"}
 	command = append(command, s.Spec.ExtraArgs...)
 
@@ -350,15 +349,4 @@ type PrefectServerList struct {
 
 func init() {
 	SchemeBuilder.Register(&PrefectServer{}, &PrefectServerList{})
-}
-
-// getVersion returns the version of Prefect.
-// The `.spec.version` field is optional, so if it is
-// not configured, we return the default version.
-func (s *PrefectServer) getVersion() string {
-	if s.Spec.Version != nil && *s.Spec.Version != "" {
-		return *s.Spec.Version
-	}
-
-	return DEFAULT_PREFECT_VERSION
 }

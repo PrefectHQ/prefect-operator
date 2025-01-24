@@ -144,7 +144,7 @@ func (s *PrefectWorkPool) Image() string {
 	return DEFAULT_PREFECT_IMAGE + suffix
 }
 
-func (s *PrefectWorkPool) Command() []string {
+func (s *PrefectWorkPool) EntrypointArguments() []string {
 	workPoolName := s.Name
 	if strings.HasPrefix(workPoolName, "prefect") {
 		workPoolName = "pool-" + workPoolName

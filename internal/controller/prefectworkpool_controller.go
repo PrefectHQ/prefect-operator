@@ -113,7 +113,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 							Image:           workPool.Image(),
 							ImagePullPolicy: corev1.PullIfNotPresent,
 
-							Command: workPool.Command(),
+							Args: workPool.EntrypointArguments(),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "prefect-data",
