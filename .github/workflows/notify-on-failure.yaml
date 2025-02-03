@@ -8,6 +8,7 @@ name: Notify on Failure
       - Build and Push Images on Tags
       - Release Prefect Operator Helm Chart
       - Updatecli Dependency Updates
+      - Update mise tool versions
     types: [completed]
 
 permissions: {}
