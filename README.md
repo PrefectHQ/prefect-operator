@@ -14,6 +14,9 @@ It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts
 Dependencies can be installed with [`mise`](https://mise.jdx.dev):
 
 ```shell
+mise settings experimental=true
+mise use -g python
+pip install --user pipx
 mise install
 ```
 
