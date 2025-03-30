@@ -10,6 +10,8 @@ It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+- Mise Tooling Dependencies
+  - Setup python dependencies such as `yamllint` require python tooling like `pipx` (see https://github.com/jdx/mise/issues/2536)
 
 Dependencies can be installed with [`mise`](https://mise.jdx.dev):
 
