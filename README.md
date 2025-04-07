@@ -3,6 +3,16 @@
 The Prefect Operator is an application that can manage instances of Prefect.
 It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
 
+## Custom Resource Definintions
+
+### PrefectServer
+
+The [PrefectServer CRD](./PrefectServer.md)
+
+### PrefectWorkPool
+
+The [PrefectWorkPool CRD](./PrefectWorkPool.md)
+
 ## Getting Started
 
 ### Prerequisites
