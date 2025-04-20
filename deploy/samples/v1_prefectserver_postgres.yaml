@@ -83,6 +83,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: prefect-postgres
 spec:
+  deploymentLabels:
+    deployment: label
+    foo: bar
+  serviceLabels:
+    service: label
+    fuzz: buzz
   postgres:
     host: postgres
     port: 5432

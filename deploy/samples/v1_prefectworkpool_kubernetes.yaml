@@ -6,6 +6,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: sample-k8s-pool
 spec:
+  deploymentLabels:
+    deployment: label
   type: kubernetes
   server:
     name: prefect-ephemeral
