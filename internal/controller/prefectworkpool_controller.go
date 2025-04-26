@@ -77,6 +77,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: workPool.Namespace,
 			Name:      workPool.Name,
+			Labels:    workPool.WorkerLabels(),
 		},
 	}
 

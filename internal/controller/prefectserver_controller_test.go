@@ -188,6 +188,11 @@ var _ = Describe("PrefectServer controller", func() {
 							"some":    "additional-label",
 							"another": "extra-label",
 						},
+						ServiceLabels: map[string]string{
+							"app":  "prefect-server",
+							"foo":  "bar",
+							"fuzz": "buzz",
+						},
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
@@ -398,8 +403,17 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 
 				It("should have matching labels", func() {
+					Expect(service.Labels).To(Equal(map[string]string{
+						"prefect.io/server": "prefect-on-anything",
+						"app":               "prefect-server",
+						"foo":               "bar",
+						"fuzz":              "buzz",
+					}))
 					Expect(service.Spec.Selector).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
+						"some":              "additional-label",
+						"another":           "extra-label",
+						"app":               "prefect-server",
 					}))
 				})
 

@@ -9,3 +9,9 @@ spec:
   sqlite:
     storageClassName: standard
     size: 1Gi
+  deploymentLabels:
+    deployment: label
+    foo: bar
+  serviceLabels:
+    service: label
+    fuzz: buzz

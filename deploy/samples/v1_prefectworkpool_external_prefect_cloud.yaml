@@ -14,6 +14,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: external-pool
 spec:
+  deploymentLabels:
+    deployment: label
   type: process
   server:
     remoteApiUrl: https://api.prefect.cloud
