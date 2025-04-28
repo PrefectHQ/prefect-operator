@@ -77,6 +77,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: workPool.Namespace,
 			Name:      workPool.Name,
+			Labels:    workPool.WorkerLabels(),
 		},
 	}
 
@@ -113,7 +114,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 							Image:           workPool.Image(),
 							ImagePullPolicy: corev1.PullIfNotPresent,
 
-							Command: workPool.Command(),
+							Args: workPool.EntrypointArguments(),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "prefect-data",

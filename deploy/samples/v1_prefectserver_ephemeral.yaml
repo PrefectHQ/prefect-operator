@@ -6,3 +6,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: prefect-ephemeral
 spec:
+  deploymentLabels:
+    deployment: label
+    foo: bar
+  serviceLabels:
+    service: label
+    fuzz: buzz

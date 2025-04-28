@@ -6,6 +6,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: sample-pool
 spec:
+  deploymentLabels:
+    deployment: label
   type: process
   server:
     name: prefect-sqlite

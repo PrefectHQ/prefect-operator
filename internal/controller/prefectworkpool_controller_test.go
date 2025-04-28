@@ -252,7 +252,8 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 				Expect(container.Name).To(Equal("prefect-worker"))
 				Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0-python3.12-kubernetes"))
-				Expect(container.Command).To(Equal([]string{
+				Expect(container.Command).To(BeNil())
+				Expect(container.Args).To(Equal([]string{
 					"prefect", "worker", "start",
 					"--pool", "example-work-pool", "--type", "kubernetes",
 					"--with-healthcheck",

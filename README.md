@@ -3,17 +3,31 @@
 The Prefect Operator is an application that can manage instances of Prefect.
 It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
 
+## Custom Resource Definintions
+
+### PrefectServer
+
+The [PrefectServer CRD](./PrefectServer.md)
+
+### PrefectWorkPool
+
+The [PrefectWorkPool CRD](./PrefectWorkPool.md)
+
 ## Getting Started
 
 ### Prerequisites
-- go version v1.22.0+
+- go version v1.23.0+
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
-
-Dependencies can be installed with [`mise`](https://mise.jdx.dev):
+- Local Tooling Dependencies
+  - `mise` |  `curl https://mise.run | sh`
+    - Dependencies for local development can be installed with [`mise`](https://mise.jdx.dev):
+  - `pipx` | `pip install --user pipx`
+    -  Setup python dependencies such as `yamllint` require python tooling like `pipx` (see https://github.com/jdx/mise/issues/2536)
 
 ```shell
+mise trust
 mise install
 ```
 
@@ -116,4 +130,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-

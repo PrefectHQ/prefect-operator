@@ -24,7 +24,7 @@ jobs:
       - name: Install tool dependencies
         uses: jdx/mise-action@v2
         with:
-          experimental: true # enables the go installation backend
+          experimental: true  # enables the go installation backend
 
       - name: Build
         run: make build

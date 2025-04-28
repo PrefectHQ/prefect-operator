@@ -156,8 +156,6 @@ var _ = Describe("PrefectServer controller", func() {
 			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.Image).To(Equal(expectedImage))
-			Expect(deployment.Spec.Selector.MatchLabels).To(HaveKeyWithValue("version", version))
-			Expect(deployment.Spec.Template.ObjectMeta.Labels).To(HaveKeyWithValue("version", version))
 		})
 
 		Context("when creating any server", func() {
@@ -189,6 +187,11 @@ var _ = Describe("PrefectServer controller", func() {
 						DeploymentLabels: map[string]string{
 							"some":    "additional-label",
 							"another": "extra-label",
+						},
+						ServiceLabels: map[string]string{
+							"app":  "prefect-server",
+							"foo":  "bar",
+							"fuzz": "buzz",
 						},
 						NodeSelector: map[string]string{
 							"some": "node-selector",
@@ -277,26 +280,25 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(deployment.Spec.Selector.MatchLabels).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
 						"app":               "prefect-server",
-						"version":           prefectiov1.DEFAULT_PREFECT_VERSION,
 						"some":              "additional-label",
 						"another":           "extra-label",
 					}))
 					Expect(deployment.Spec.Template.Labels).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
 						"app":               "prefect-server",
-						"version":           prefectiov1.DEFAULT_PREFECT_VERSION,
 						"some":              "additional-label",
 						"another":           "extra-label",
 					}))
 				})
 
-				It("should have a server container with the right image and command", func() {
+				It("should have a server container with the right image and entrypoint arguments", func() {
 					Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 					container := deployment.Spec.Template.Spec.Containers[0]
 
 					Expect(container.Name).To(Equal("prefect-server"))
-					Expect(container.Image).To(Equal("prefecthq/prefect:3.0.0-python3.12"))
-					Expect(container.Command).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
+					Expect(container.Image).To(Equal("prefecthq/prefect:3.1.13-python3.12"))
+					Expect(container.Command).To(BeNil())
+					Expect(container.Args).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
 				})
 
 				It("should have an environment with PREFECT_HOME set", func() {
@@ -401,8 +403,17 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 
 				It("should have matching labels", func() {
+					Expect(service.Labels).To(Equal(map[string]string{
+						"prefect.io/server": "prefect-on-anything",
+						"app":               "prefect-server",
+						"foo":               "bar",
+						"fuzz":              "buzz",
+					}))
 					Expect(service.Spec.Selector).To(Equal(map[string]string{
 						"prefect.io/server": "prefect-on-anything",
+						"some":              "additional-label",
+						"another":           "extra-label",
+						"app":               "prefect-server",
 					}))
 				})
 
@@ -603,7 +614,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(port.Name).To(Equal("extra-port"))
 			})
 
-			It("should update the Command with the extra args", func() {
+			It("should update the entrypoint arguments with the extra args", func() {
 				// Update the PrefectServer with an extra args
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 				prefectserver.Spec.ExtraArgs = []string{"--some-arg", "some-value"}
@@ -629,7 +640,8 @@ var _ = Describe("PrefectServer controller", func() {
 				}).Should(Succeed())
 
 				container := deployment.Spec.Template.Spec.Containers[0]
-				Expect(container.Command).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0", "--some-arg", "some-value"}))
+				Expect(container.Command).To(BeNil())
+				Expect(container.Args).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0", "--some-arg", "some-value"}))
 			})
 		})
 

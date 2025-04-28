@@ -12,6 +12,11 @@ name: Build and Push Image
         description: Image name (without the tag & registry)
         required: true
         type: string
+      push:
+        description: Whether to push the image to the registry
+        required: false
+        type: boolean
+        default: true
 
 permissions: {}
 
@@ -54,10 +59,10 @@ jobs:
             org.opencontainers.image.description=Prefect Operator image
             org.opencontainers.image.vendor=Prefect
 
-      - name: Build and push
+      - name: ${{ inputs.push && 'Build and push' || 'Build' }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ inputs.push }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

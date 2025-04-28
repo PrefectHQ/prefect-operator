@@ -122,6 +122,7 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      desiredPVC.Name,
 			Namespace: server.Namespace,
+			Labels:    server.ServerLabels(),
 		},
 	}
 
@@ -200,6 +201,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
 			Namespace: server.Namespace,
+			Labels:    server.ServerLabels(),
 		},
 	}
 
@@ -246,6 +248,7 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
 			Namespace: server.Namespace,
+			Labels:    server.ServiceLabels(),
 		},
 	}
 
@@ -309,6 +312,7 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
 			Namespace: server.Namespace,
+			Labels:    server.ServerLabels(),
 		},
 		Spec: deploymentSpec,
 	}
@@ -355,14 +359,14 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
-						Command: server.Command(),
+						Args: server.EntrypointArugments(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "prefect-data",
 								MountPath: "/var/lib/prefect/",
 							},
 						},
-						Env: append(append(server.ToEnvVars(), server.Spec.Ephemeral.ToEnvVars()...), server.Spec.Settings...),
+						Env: server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -391,6 +395,7 @@ func (r *PrefectServerReconciler) sqlitePersistentVolumeClaim(server *prefectiov
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: server.Namespace,
 			Name:      server.Name + "-data",
+			Labels:    server.ServerLabels(),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &server.Spec.SQLite.StorageClassName,
@@ -438,19 +443,14 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
-						Command: server.Command(),
+						Args: server.EntrypointArugments(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "prefect-data",
 								MountPath: "/var/lib/prefect/",
 							},
 						},
-						Env: append(
-							append(
-								server.ToEnvVars(),
-								server.Spec.SQLite.ToEnvVars()...),
-							server.Spec.Settings...,
-						),
+						Env: server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -499,13 +499,8 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
-						Command: server.Command(),
-						Env: append(
-							append(
-								server.ToEnvVars(),
-								server.Spec.Postgres.ToEnvVars()...),
-							server.Spec.Settings...,
-						),
+						Args: server.EntrypointArugments(),
+						Env:  server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{
 								Name:          "api",
@@ -546,13 +541,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 						Name:    "prefect-server-migration",
 						Image:   server.Image(),
 						Command: []string{"prefect", "server", "database", "upgrade", "--yes"},
-						Env: append(
-							append(
-								server.ToEnvVars(),
-								server.Spec.Postgres.ToEnvVars()...,
-							),
-							server.Spec.Settings...,
-						),
+						Env:     server.ToEnvVars(),
 					},
 				},
 				RestartPolicy: corev1.RestartPolicyOnFailure,
@@ -566,6 +555,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: server.Namespace,
 			Name:      fmt.Sprintf("%s-migration-%s", server.Name, hashSuffix),
+			Labels:    server.MigrationJobLabels(),
 		},
 		Spec: jobSpec,
 	}
@@ -576,9 +566,10 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: server.Namespace,
 			Name:      server.Name,
+			Labels:    server.ServiceLabels(),
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: server.ServiceLabels(),
+			Selector: server.ServerLabels(),
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "api",
