@@ -1,21 +1,22 @@
 [tools]
-actionlint = '1.7.1'
+actionlint = "1.7.7"
 ginkgo = '2.22.2'
 golang = '1.23'
-golangci-lint = '1.61.0'
-'go:golang.org/x/tools/cmd/goimports' = '0.25.0'
+golangci-lint = "2.1.5"
+"go:golang.org/x/tools/cmd/goimports" = "0.32.0"
 'go:fybrik.io/crdoc' = 'latest'
-helm = '3.15'
-helm-ct = '3.11.0'
-helm-docs = '1.13.1'
-kube-controller-tools = '0.16.5'
-kubectl = '1.31'
-kustomize = '5.3.0'
-pre-commit = '3.8.0'
-setup-envtest = '0.17.0'
+helm = "3.17"
+helm-ct = "3.12.0"
+helm-docs = "1.14.2"
+kube-controller-tools = "0.17.3"
+kubectl = "1.33"
+kustomize = "5.6.0"
+pre-commit = "4.2.0"
+setup-envtest = "0.20.4"
 shellcheck = '0.10.0'
-yamllint = '1.35.1'
-yq = '4.44.3'
+yamllint = "1.37.0"
+yq = "4.45.1"
+go = "1.24"
 
 [settings]
 experimental = true
