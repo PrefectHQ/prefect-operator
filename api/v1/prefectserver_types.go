@@ -232,7 +232,7 @@ type RedisConfiguration struct {
 }
 
 func (r *RedisConfiguration) ToEnvVars() []corev1.EnvVar {
-	var envVars []corev1.EnvVar = []corev1.EnvVar{
+	var envVars = []corev1.EnvVar{
 		{
 			Name:  "PREFECT_MESSAGING_BROKER",
 			Value: "prefect_redis.messaging",
