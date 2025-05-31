@@ -1,0 +1,12 @@
+apiVersion: prefect.io/v1
+kind: PrefectWorkPool
+metadata:
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sample-pool
+spec:
+  type: process
+  server:
+    name: prefect-sqlite
+  workers: 3
