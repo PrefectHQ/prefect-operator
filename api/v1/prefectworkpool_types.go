@@ -178,7 +178,50 @@ func (s *PrefectWorkPool) PrefectAPIURL() string {
 	return "http://" + s.Spec.Server.Name + "." + serverNamespace + ".svc:4200/api"
 }
 
+func lookupEnvVar(envVars []corev1.EnvVar, name string) (string, bool) {
+	for _, envVar := range envVars {
+		if envVar.Name == name {
+			return envVar.Value, true
+		}
+	}
+	return "", false
+}
+
+// ToEnvVars generates a list of environment variables based on the PrefectWorkPool configuration
+// including PREFECT_HOME, PREFECT_API_URL, PREFECT_WORKER_WEBSERVER_PORT, EXTRA_PIP_PACKAGES, and
+// optionally PREFECT_API_KEY if specified with preference on ValueFrom over Value
 func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
+	typeMap := map[string]string{
+		"kubernetes":               "kubernetes",
+		"ecs":                      "aws",
+		"process":                  "process",
+		"docker":                   "docker",
+		"cloud-run-v2":             "cloud-run-v2",
+		"vertex-ai":                "vertex-ai",
+		"azure-container-instance": "azure-container-instance",
+		"coiled":                   "coiled",
+	}
+
+	extraPipPackages, envVarExists := lookupEnvVar(s.Spec.Settings, "EXTRA_PIP_PACKAGES")
+
+	if envVarExists {
+		fmt.Printf("The package %s from EXTRA_PIP_PACKAGES will be installed at runtime.\n", extraPipPackages)
+	} else {
+		if s.Spec.Type != "" {
+			mappedValue, typeExists := typeMap[s.Spec.Type]
+			if typeExists {
+				fmt.Printf("WorkPool type of %s will download pip package prefect[%s].\n", s.Spec.Type, mappedValue)
+				extraPipPackages = fmt.Sprintf("prefect[%s]", mappedValue)
+			} else {
+				fmt.Printf("WARNING: Invalid type: %s. Runtime installation skipped. Valid values include kubernetes, process, docker, ecs, cloud-run-v2, vertex-ai, azure-container-instance, or coiled.\n", s.Spec.Type)
+				extraPipPackages = ""
+			}
+		} else {
+			fmt.Print("Runtime installation skipped as a result of neither PrefectWorkPool.Type nor EXTRA_PIP_PACKAGES being defined.\n")
+			extraPipPackages = ""
+		}
+	}
+
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "PREFECT_HOME",
@@ -192,20 +235,26 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 			Name:  "PREFECT_WORKER_WEBSERVER_PORT",
 			Value: "8080",
 		},
+		{
+			Name:  "EXTRA_PIP_PACKAGES",
+			Value: extraPipPackages,
+		},
 	}
 
 	// If the API key is specified, add it to the environment variables.
 	// If both are set, we favor ValueFrom > Value as it is more secure.
-	if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.ValueFrom != nil {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:      "PREFECT_API_KEY",
-			ValueFrom: s.Spec.Server.APIKey.ValueFrom,
-		})
-	} else if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.Value != nil {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  "PREFECT_API_KEY",
-			Value: *s.Spec.Server.APIKey.Value,
-		})
+	if s.Spec.Server.APIKey != nil {
+		if s.Spec.Server.APIKey.ValueFrom != nil {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:      "PREFECT_API_KEY",
+				ValueFrom: s.Spec.Server.APIKey.ValueFrom,
+			})
+		} else if s.Spec.Server.APIKey.Value != nil {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "PREFECT_API_KEY",
+				Value: *s.Spec.Server.APIKey.Value,
+			})
+		}
 	}
 
 	return envVars
