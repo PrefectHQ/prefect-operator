@@ -139,6 +139,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 docs: tools
 	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectservers.yaml --output PrefectServer.md
 	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectworkpools.yaml --output PrefectWorkPool.md
+	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectdeployments.yaml --output PrefectDeployment.md
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.

@@ -747,7 +747,7 @@ More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/nam
 
 
 
-EnvFromSource represents the source of a set of ConfigMaps
+EnvFromSource represents the source of a set of ConfigMaps or Secrets
 
 <table>
     <thead>
@@ -769,7 +769,7 @@ EnvFromSource represents the source of a set of ConfigMaps
         <td><b>prefix</b></td>
         <td>string</td>
         <td>
-          An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.<br/>
+          Optional text to prepend to the name of each environment variable. Must be a C_IDENTIFIER.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -903,6 +903,15 @@ container will eventually terminate within the Pod's termination grace
 period (unless delayed by finalizers). Other management of the container blocks until the hook completes
 or until the termination grace period is reached.
 More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>stopSignal</b></td>
+        <td>string</td>
+        <td>
+          StopSignal defines which signal will be sent to a container when it is being stopped.
+If not specified, the default is defined by the container runtime in use.
+StopSignal can only be set for Pods with a non-empty .spec.os.name<br/>
         </td>
         <td>false</td>
       </tr></tbody>

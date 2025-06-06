@@ -137,6 +137,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkPool")
 		os.Exit(1)
 	}
+
+	if err = (&controller.PrefectDeploymentReconciler{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		PrefectClient: nil, // Will create client dynamically from deployment config
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PrefectDeployment")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

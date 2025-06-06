@@ -6,3 +6,6 @@ resources:
   - v1_prefectserver_sqlite.yaml
   - v1_prefectworkpool_kubernetes.yaml
 #  - v1_prefectworkpool_process.yaml
+#  - v1_prefectdeployment_cloud.yaml
+#  - v1_prefectdeployment_self_hosted.yaml
+#  - v1_prefectdeployment_minimal.yaml

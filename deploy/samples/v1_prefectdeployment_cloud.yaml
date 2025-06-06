@@ -1,0 +1,72 @@
+apiVersion: prefect.io/v1
+kind: PrefectDeployment
+metadata:
+  name: prefectdeployment-cloud-sample
+  namespace: default
+spec:
+  # Prefect Cloud configuration
+  server:
+    remoteApiUrl: "https://api.prefect.cloud/api/accounts/ACCOUNT_ID/workspaces/WORKSPACE_ID"
+    accountId: "ACCOUNT_ID"
+    workspaceId: "WORKSPACE_ID"
+    apiKey:
+      valueFrom:
+        secretKeyRef:
+          name: prefect-cloud-api-key
+          key: api-key
+
+  # Work pool configuration
+  workPool:
+    name: "kubernetes-work-pool"
+    workQueue: "default"
+
+  # Deployment configuration
+  deployment:
+    description: "Sample ETL deployment running on Prefect Cloud"
+    tags:
+      - "etl"
+      - "production"
+      - "kubernetes"
+    labels:
+      environment: "production"
+      team: "data-engineering"
+      version: "1.0.0"
+
+    entrypoint: "flows/etl_flow.py:main_etl_flow"
+    path: "/opt/prefect/flows"
+
+    # Configure schedules
+    schedules:
+      - slug: "daily-etl"
+        schedule:
+          interval: 86400  # 24 hours in seconds
+          anchorDate: "2024-01-01T02:00:00Z"
+          timezone: "UTC"
+          active: true
+          maxScheduledRuns: 5
+
+    # Configure concurrency
+    concurrencyLimit: 3
+    globalConcurrencyLimit:
+      active: true
+      name: "etl-global-limit"
+      limit: 10
+      slotDecayPerSecond: "0.5"
+      collisionStrategy: "ENQUEUE"
+
+    # Flow parameters
+    parameters:
+      source_table: "raw_data"
+      target_table: "processed_data"
+      batch_size: 1000
+
+    # Job variables for infrastructure
+    jobVariables:
+      image: "my-registry/etl-flows:latest"
+      cpu: "500m"
+      memory: "1Gi"
+      env:
+        - name: "LOG_LEVEL"
+          value: "INFO"
+
+    paused: false

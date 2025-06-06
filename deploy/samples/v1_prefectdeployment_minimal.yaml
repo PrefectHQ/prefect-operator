@@ -1,0 +1,22 @@
+apiVersion: prefect.io/v1
+kind: PrefectDeployment
+metadata:
+  name: prefectdeployment-minimal-sample
+  namespace: default
+spec:
+  # Minimal Prefect Cloud configuration
+  server:
+    remoteApiUrl: "https://api.prefect.cloud/api/accounts/ACCOUNT_ID/workspaces/WORKSPACE_ID"
+    apiKey:
+      valueFrom:
+        secretKeyRef:
+          name: prefect-api-key
+          key: api-key
+
+  # Work pool configuration
+  workPool:
+    name: "process-work-pool"
+
+  # Minimal deployment configuration
+  deployment:
+    entrypoint: "hello_world.py:say_hello"
