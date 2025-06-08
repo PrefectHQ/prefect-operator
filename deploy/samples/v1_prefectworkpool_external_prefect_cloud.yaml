@@ -14,7 +14,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: external-pool
 spec:
-  type: process
+  settings:
+    - name: EXTRA_PIP_PACKAGES
+      value: aws
+  deploymentLabels:
+    deployment: label
+  type: process # aws / gcp / azure
   server:
     remoteApiUrl: https://api.prefect.cloud
     accountId: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa

@@ -144,15 +144,16 @@ func lookupEnvVar(envVars []corev1.EnvVar, name string) (string, bool) {
 // including PREFECT_HOME, PREFECT_API_URL, PREFECT_WORKER_WEBSERVER_PORT, EXTRA_PIP_PACKAGES, and
 // optionally PREFECT_API_KEY if specified with preference on ValueFrom over Value
 func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
+
+	// https://docs-3.prefect.io/v3/deploy/infrastructure-concepts/workers#worker-types
 	typeMap := map[string]string{
-		"kubernetes":               "kubernetes",
-		"ecs":                      "aws",
-		"process":                  "process",
-		"docker":                   "docker",
-		"cloud-run-v2":             "cloud-run-v2",
-		"vertex-ai":                "vertex-ai",
-		"azure-container-instance": "azure-container-instance",
-		"coiled":                   "coiled",
+		"kubernetes":               "prefect[kubernetes]",
+		"ecs":                      "prefect[aws]",
+		"docker":                   "prefect[docker]",
+		"cloud-run-v2":             "prefect-gcp[all_extras]",
+		"vertex-ai":                "prefect-gcp[all_extras]",
+		"azure-container-instance": "prefect-azure[all_extras]",
+		"coiled":                   "prefect-coiled",
 	}
 
 	extraPipPackages, envVarExists := lookupEnvVar(s.Spec.Settings, "EXTRA_PIP_PACKAGES")
@@ -164,7 +165,7 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 			mappedValue, typeExists := typeMap[s.Spec.Type]
 			if typeExists {
 				fmt.Printf("WorkPool type of %s will download pip package prefect[%s].\n", s.Spec.Type, mappedValue)
-				extraPipPackages = fmt.Sprintf("prefect[%s]", mappedValue)
+				extraPipPackages = mappedValue
 			} else {
 				fmt.Printf("WARNING: Invalid type: %s. Runtime installation skipped. Valid values include kubernetes, process, docker, ecs, cloud-run-v2, vertex-ai, azure-container-instance, or coiled.\n", s.Spec.Type)
 				extraPipPackages = ""
