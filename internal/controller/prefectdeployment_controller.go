@@ -68,12 +68,12 @@ type PrefectDeploymentReconciler struct {
 // Reconcile handles the reconciliation of a PrefectDeployment
 func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.Info("Reconciling PrefectDeployment", "request", req)
+	log.V(1).Info("Reconciling PrefectDeployment", "request", req)
 
 	var deployment prefectiov1.PrefectDeployment
 	if err := r.Get(ctx, req.NamespacedName, &deployment); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("PrefectDeployment not found, ignoring", "request", req)
+			log.V(1).Info("PrefectDeployment not found, ignoring", "request", req)
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get PrefectDeployment", "request", req)

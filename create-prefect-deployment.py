@@ -19,13 +19,13 @@ Prerequisites:
 
 Basic Usage:
     # Output to stdout
-    uv run prefect-to-k8s.py flows/my_flow.py:my_flow_function \\
+    uv run create-prefect-deployment.py flows/my_flow.py:my_flow_function \\
         --work-pool my-pool \\
         --server my-prefect-server \\
         --name my-deployment
 
     # Pipe to a file
-    uv run prefect-to-k8s.py flows/my_flow.py:my_flow_function \\
+    uv run create-prefect-deployment.py flows/my_flow.py:my_flow_function \\
         --work-pool my-pool \\
         --server my-prefect-server \\
         --name my-deployment > deployment.yaml
@@ -37,7 +37,7 @@ Features:
 - Can be piped directly to `kubectl apply -f -`
 
 Example with all options:
-    uv run prefect-to-k8s.py flows/my_flow.py:my_flow \\
+    uv run create-prefect-deployment.py flows/my_flow.py:my_flow \\
         --work-pool kubernetes-pool \\
         --server my-prefect-server \\
         --name hello-deployment \\
@@ -68,18 +68,18 @@ app = typer.Typer(
 Examples:
 
   # Basic usage - output to stdout
-  uv run prefect-to-k8s.py flows/my_flow.py:my_flow \\
+  uv run create-prefect-deployment.py flows/my_flow.py:my_flow \\
     --work-pool my-pool --server my-server --name my-deployment
 
   # Pipe to file or kubectl
-  uv run prefect-to-k8s.py flows/my_flow.py:my_flow \\
+  uv run create-prefect-deployment.py flows/my_flow.py:my_flow \\
     --work-pool my-pool --server my-server --name my-deployment > deployment.yaml
 
-  uv run prefect-to-k8s.py flows/my_flow.py:my_flow \\
+  uv run create-prefect-deployment.py flows/my_flow.py:my_flow \\
     --work-pool my-pool --server my-server --name my-deployment | kubectl apply -f -
 
   # Full configuration
-  uv run prefect-to-k8s.py flows/my_flow.py:my_flow \\
+  uv run create-prefect-deployment.py flows/my_flow.py:my_flow \\
     --work-pool kubernetes-pool --server my-prefect-server \\
     --name hello-deployment --namespace production \\
     --description "Production deployment" --tag production --tag api \\
@@ -93,29 +93,6 @@ Features:
 )
 
 
-def get_flow_parameter_schema(entrypoint: str) -> Optional[Dict[str, Any]]:
-    """Extract OpenAPI schema for flow parameters using Prefect's built-in function"""
-    try:
-        # Use Prefect's built-in parameter schema generation from entrypoint
-        schema = parameter_schema_from_entrypoint(entrypoint)
-
-        # Convert to the format expected by our CRD
-        if schema.parameters:
-            openapi_schema = {
-                "type": "object",
-                "properties": {}
-            }
-
-            for param_name, param_info in schema.parameters.items():
-                param_schema = param_info.json_schema()
-                openapi_schema["properties"][param_name] = param_schema
-
-            return openapi_schema
-
-        return None
-    except Exception:
-        # If schema generation fails, return None
-        return None
 
 
 def generate_prefect_deployment_crd(
@@ -135,7 +112,8 @@ def generate_prefect_deployment_crd(
     """Generate a PrefectDeployment CRD manifest"""
 
     # Get parameter schema from the entrypoint
-    parameter_schema = get_flow_parameter_schema(entrypoint)
+    parameter_schema_obj = parameter_schema_from_entrypoint(entrypoint)
+    parameter_schema = parameter_schema_obj.model_dump() if parameter_schema_obj else None
 
     # Build the CRD
     crd = {

@@ -79,7 +79,7 @@ func main() {
 	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
 	// - https://github.com/advisories/GHSA-4374-p667-p6c8
 	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("disabling http/2")
+		setupLog.V(1).Info("disabling http/2")
 		c.NextProtos = []string{"http/1.1"}
 	}
 

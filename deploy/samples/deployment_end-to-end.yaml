@@ -31,3 +31,16 @@ spec:
       - prefect.deployments.steps.git_clone:
           repository: https://github.com/PrefectHQ/examples.git
           branch: main
+    parameters:
+      name: "prefect-operator!"
+    parameterOpenApiSchema:
+      title: Parameters
+      type: object
+      properties:
+        name:
+          default: Marvin
+          position: 0
+          title: name
+          type: string
+      required: []
+      definitions: {}

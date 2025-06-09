@@ -87,7 +87,7 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 	if needsPortForwarding {
 		// When port-forwarding, use localhost with port 14200
 		baseURL = "http://localhost:14200/api"
-		log.Info("Using localhost for port-forwarding", "url", baseURL)
+		log.V(1).Info("Using localhost for port-forwarding", "url", baseURL)
 	} else {
 		// Use the server's namespace as fallback if not specified
 		fallbackNamespace := serverRef.Namespace
@@ -95,7 +95,7 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 			fallbackNamespace = "default" // Default to "default" namespace if not specified
 		}
 		baseURL = serverRef.GetAPIURL(fallbackNamespace)
-		log.Info("Using in-cluster URL", "url", baseURL)
+		log.V(1).Info("Using in-cluster URL", "url", baseURL)
 	}
 
 	client := NewClient(baseURL, apiKey, log)
@@ -118,7 +118,7 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 		case err := <-errCh:
 			return nil, err
 		case <-readyCh:
-			log.Info("Port-forwarding is ready")
+			log.V(1).Info("Port-forwarding is ready")
 		}
 	}
 
@@ -203,7 +203,7 @@ type Flow struct {
 // CreateOrUpdateDeployment creates or updates a deployment using the Prefect API
 func (c *Client) CreateOrUpdateDeployment(ctx context.Context, deployment *DeploymentSpec) (*Deployment, error) {
 	url := fmt.Sprintf("%s/deployments/", c.BaseURL)
-	c.log.Info("Creating or updating deployment", "url", url, "deployment", deployment.Name)
+	c.log.V(1).Info("Creating or updating deployment", "url", url, "deployment", deployment.Name)
 
 	jsonData, err := json.Marshal(deployment)
 	if err != nil {
@@ -240,14 +240,14 @@ func (c *Client) CreateOrUpdateDeployment(ctx context.Context, deployment *Deplo
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	c.log.Info("Deployment created or updated successfully", "deploymentId", result.ID)
+	c.log.V(1).Info("Deployment created or updated successfully", "deploymentId", result.ID)
 	return &result, nil
 }
 
 // GetDeployment retrieves a deployment by ID
 func (c *Client) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
 	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.Info("Getting deployment", "url", url, "deploymentId", id)
+	c.log.V(1).Info("Getting deployment", "url", url, "deploymentId", id)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -278,7 +278,7 @@ func (c *Client) GetDeployment(ctx context.Context, id string) (*Deployment, err
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	c.log.Info("Deployment retrieved successfully", "deploymentId", result.ID)
+	c.log.V(1).Info("Deployment retrieved successfully", "deploymentId", result.ID)
 	return &result, nil
 }
 
@@ -293,7 +293,7 @@ func (c *Client) GetDeploymentByName(ctx context.Context, name, flowID string) (
 // UpdateDeployment updates an existing deployment
 func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error) {
 	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.Info("Updating deployment", "url", url, "deploymentId", id)
+	c.log.V(1).Info("Updating deployment", "url", url, "deploymentId", id)
 
 	jsonData, err := json.Marshal(deployment)
 	if err != nil {
@@ -334,14 +334,14 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	c.log.Info("Deployment updated successfully", "deploymentId", id)
+	c.log.V(1).Info("Deployment updated successfully", "deploymentId", id)
 	return &result, nil
 }
 
 // DeleteDeployment deletes a deployment
 func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.Info("Deleting deployment", "url", url, "deploymentId", id)
+	c.log.V(1).Info("Deleting deployment", "url", url, "deploymentId", id)
 
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {
@@ -367,7 +367,7 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	c.log.Info("Deployment deleted successfully", "deploymentId", id)
+	c.log.V(1).Info("Deployment deleted successfully", "deploymentId", id)
 	return nil
 }
 
@@ -379,13 +379,13 @@ func (c *Client) CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, er
 		return nil, fmt.Errorf("failed to check for existing flow: %w", err)
 	}
 	if existingFlow != nil {
-		c.log.Info("Flow already exists, returning existing flow", "flowName", flow.Name, "flowId", existingFlow.ID)
+		c.log.V(1).Info("Flow already exists, returning existing flow", "flowName", flow.Name, "flowId", existingFlow.ID)
 		return existingFlow, nil
 	}
 
 	// If flow doesn't exist, create it
 	url := fmt.Sprintf("%s/flows/", c.BaseURL)
-	c.log.Info("Creating new flow", "url", url, "flowName", flow.Name)
+	c.log.V(1).Info("Creating new flow", "url", url, "flowName", flow.Name)
 
 	jsonData, err := json.Marshal(flow)
 	if err != nil {
@@ -426,14 +426,14 @@ func (c *Client) CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, er
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	c.log.Info("Flow created successfully", "flowName", flow.Name, "flowId", result.ID)
+	c.log.V(1).Info("Flow created successfully", "flowName", flow.Name, "flowId", result.ID)
 	return &result, nil
 }
 
 // GetFlowByName retrieves a flow by name
 func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) {
 	url := fmt.Sprintf("%s/flows/name/%s", c.BaseURL, name)
-	c.log.Info("Getting flow by name", "url", url, "flowName", name)
+	c.log.V(1).Info("Getting flow by name", "url", url, "flowName", name)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -473,7 +473,7 @@ func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) 
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	c.log.Info("Flow retrieved successfully", "flowName", name, "flowId", result.ID)
+	c.log.V(1).Info("Flow retrieved successfully", "flowName", name, "flowId", result.ID)
 	return &result, nil
 }
 
