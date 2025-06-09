@@ -29,6 +29,7 @@ import (
 	"github.com/PrefectHQ/prefect-operator/internal/portforward"
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PrefectClient defines the interface for interacting with the Prefect API
@@ -123,6 +124,19 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 	}
 
 	return client, nil
+}
+
+// NewClientFromK8s creates a new PrefectClient from a PrefectServerReference and Kubernetes client
+// This combines API key retrieval with client creation for convenience
+func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
+	// Get the API key from the server reference
+	apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %w", err)
+	}
+
+	// Create client using the existing factory function
+	return NewClientFromServerReference(serverRef, apiKey, log)
 }
 
 // DeploymentSpec represents the request payload for creating/updating deployments

@@ -37,6 +37,7 @@ import (
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
+	"github.com/PrefectHQ/prefect-operator/internal/utils"
 )
 
 var _ = Describe("PrefectDeployment controller", func() {
@@ -355,13 +356,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 				},
 			}
 
-			hash1, err := reconciler.calculateSpecHash(deployment1)
+			hash1, err := utils.Hash(deployment1.Spec, 16)
 			Expect(err).NotTo(HaveOccurred())
 
-			hash2, err := reconciler.calculateSpecHash(deployment2)
+			hash2, err := utils.Hash(deployment2.Spec, 16)
 			Expect(err).NotTo(HaveOccurred())
 
-			hash3, err := reconciler.calculateSpecHash(deployment3)
+			hash3, err := utils.Hash(deployment3.Spec, 16)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(hash1).To(Equal(hash2), "identical specs should produce identical hashes")
@@ -396,68 +397,79 @@ var _ = Describe("PrefectDeployment controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
 
-			By("Testing getAPIKey function directly")
-			apiKeySpec := &prefectiov1.APIKeySpec{
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-config"},
-						Key:                  "api-key",
+			By("Testing GetAPIKey function directly")
+			serverRef := &prefectiov1.PrefectServerReference{
+				APIKey: &prefectiov1.APIKeySpec{
+					ValueFrom: &corev1.EnvVarSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-config"},
+							Key:                  "api-key",
+						},
 					},
 				},
 			}
 
-			apiKey, err := reconciler.getAPIKey(ctx, apiKeySpec, namespaceName)
+			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespaceName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiKey).To(Equal("configmap-api-key-value"))
 		})
 
 		It("Should handle API key from direct value", func() {
-			By("Testing getAPIKey with direct value")
-			apiKeySpec := &prefectiov1.APIKeySpec{
-				Value: ptr.To("direct-api-key-value"),
+			By("Testing GetAPIKey with direct value")
+			serverRef := &prefectiov1.PrefectServerReference{
+				APIKey: &prefectiov1.APIKeySpec{
+					Value: ptr.To("direct-api-key-value"),
+				},
 			}
 
-			apiKey, err := reconciler.getAPIKey(ctx, apiKeySpec, namespaceName)
+			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespaceName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiKey).To(Equal("direct-api-key-value"))
 		})
 
 		It("Should handle missing API key spec", func() {
-			By("Testing getAPIKey with nil spec")
-			apiKey, err := reconciler.getAPIKey(ctx, nil, namespaceName)
+			By("Testing GetAPIKey with nil APIKey")
+			serverRef := &prefectiov1.PrefectServerReference{
+				APIKey: nil,
+			}
+			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespaceName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiKey).To(Equal(""))
 		})
 
 		It("Should handle missing Secret reference", func() {
-			By("Testing getAPIKey with missing secret")
-			apiKeySpec := &prefectiov1.APIKeySpec{
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "missing-secret"},
-						Key:                  "api-key",
+			By("Testing GetAPIKey with missing secret")
+			serverRef := &prefectiov1.PrefectServerReference{
+				APIKey: &prefectiov1.APIKeySpec{
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "missing-secret"},
+							Key:                  "api-key",
+						},
 					},
 				},
 			}
 
-			apiKey, err := reconciler.getAPIKey(ctx, apiKeySpec, namespaceName)
+			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespaceName)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get secret missing-secret"))
 			Expect(apiKey).To(Equal(""))
 		})
 
 		It("Should handle missing ConfigMap reference", func() {
-			By("Testing getAPIKey with missing configmap")
-			apiKeySpec := &prefectiov1.APIKeySpec{
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "missing-configmap"},
-						Key:                  "api-key",
+			By("Testing GetAPIKey with missing configmap")
+			serverRef := &prefectiov1.PrefectServerReference{
+				APIKey: &prefectiov1.APIKeySpec{
+					ValueFrom: &corev1.EnvVarSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "missing-configmap"},
+							Key:                  "api-key",
+						},
 					},
 				},
 			}
 
-			apiKey, err := reconciler.getAPIKey(ctx, apiKeySpec, namespaceName)
+			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespaceName)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get configmap missing-configmap"))
 			Expect(apiKey).To(Equal(""))
@@ -476,17 +488,19 @@ var _ = Describe("PrefectDeployment controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-			By("Testing getAPIKey with wrong key")
-			apiKeySpec := &prefectiov1.APIKeySpec{
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "secret-wrong-key"},
-						Key:                  "api-key",
+			By("Testing GetAPIKey with wrong key")
+			serverRef := &prefectiov1.PrefectServerReference{
+				APIKey: &prefectiov1.APIKeySpec{
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "secret-wrong-key"},
+							Key:                  "api-key",
+						},
 					},
 				},
 			}
 
-			apiKey, err := reconciler.getAPIKey(ctx, apiKeySpec, namespaceName)
+			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespaceName)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("key api-key not found in secret secret-wrong-key"))
 			Expect(apiKey).To(Equal(""))
@@ -860,65 +874,6 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 		})
 
-		It("Should handle calculateSpecHash errors in Reconcile", func() {
-			By("Creating deployment with potentially problematic spec")
-			// Create a deployment that might cause hash calculation issues
-			problematicDeployment := &prefectiov1.PrefectDeployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "problematic-deployment",
-					Namespace: namespaceName,
-				},
-				Spec: prefectiov1.PrefectDeploymentSpec{
-					Server: prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
-						APIKey: &prefectiov1.APIKeySpec{
-							Value: ptr.To("test-key"),
-						},
-					},
-					WorkPool: prefectiov1.PrefectWorkPoolReference{
-						Name: "test-pool",
-					},
-					Deployment: prefectiov1.PrefectDeploymentConfiguration{
-						Entrypoint: "flows.py:my_flow",
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, problematicDeployment)).To(Succeed())
-
-			By("Reconciling deployment - hash calculation should succeed")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "problematic-deployment",
-				},
-			})
-			// Our hash calculation is robust, so this should succeed
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-		})
-
-		It("Should handle calculateSpecHash errors in syncWithPrefect", func() {
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
-
-			By("Modifying deployment to potentially cause hash error after initial sync")
-			// First, do a successful sync
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-
-			By("Getting updated deployment and modifying it")
-			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
-
-			// Force another sync by changing the spec
-			prefectDeployment.Spec.Deployment.Description = ptr.To("Updated description")
-			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
-
-			By("Reconciling again should succeed despite potential hash calculation")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-		})
 	})
 
 	Context("When testing conditions and status", func() {

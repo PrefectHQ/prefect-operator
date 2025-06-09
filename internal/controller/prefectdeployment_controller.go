@@ -18,15 +18,12 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,7 +32,6 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
-	"github.com/go-logr/logr"
 )
 
 const (
@@ -99,7 +95,7 @@ func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	specHash, err := r.calculateSpecHash(&deployment)
+	specHash, err := utils.Hash(deployment.Spec, 16)
 	if err != nil {
 		log.Error(err, "Failed to calculate spec hash", "deployment", deployment.Name)
 		return ctrl.Result{}, err
@@ -148,7 +144,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	prefectClient := r.PrefectClient
 	if prefectClient == nil {
 		var err error
-		prefectClient, err = r.createPrefectClient(ctx, deployment, log)
+		prefectClient, err = prefect.NewClientFromK8s(ctx, &deployment.Spec.Server, r.Client, deployment.Namespace, log)
 		if err != nil {
 			log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
 			return ctrl.Result{}, err
@@ -178,7 +174,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 
 	prefect.UpdateDeploymentStatus(deployment, prefectDeployment)
 
-	specHash, err := r.calculateSpecHash(deployment)
+	specHash, err := utils.Hash(deployment.Spec, 16)
 	if err != nil {
 		log.Error(err, "Failed to calculate spec hash", "deployment", deployment.Name)
 		return ctrl.Result{}, err
@@ -196,76 +192,6 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 
 	log.Info("Successfully synced deployment with Prefect", "deploymentId", prefectDeployment.ID)
 	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
-}
-
-// createPrefectClient creates a new Prefect client
-func (r *PrefectDeploymentReconciler) createPrefectClient(ctx context.Context, deployment *prefectiov1.PrefectDeployment, log logr.Logger) (prefect.PrefectClient, error) {
-	apiKey, err := r.getAPIKey(ctx, deployment.Spec.Server.APIKey, deployment.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	return prefect.NewClientFromServerReference(&deployment.Spec.Server, apiKey, log)
-}
-
-// getAPIKey retrieves the API key from the configured source
-func (r *PrefectDeploymentReconciler) getAPIKey(ctx context.Context, apiKeySpec *prefectiov1.APIKeySpec, namespace string) (string, error) {
-	if apiKeySpec == nil {
-		return "", nil
-	}
-
-	if apiKeySpec.Value != nil {
-		return *apiKeySpec.Value, nil
-	}
-
-	if apiKeySpec.ValueFrom != nil {
-		if apiKeySpec.ValueFrom.SecretKeyRef != nil {
-			secretRef := apiKeySpec.ValueFrom.SecretKeyRef
-			secret := &corev1.Secret{}
-			secretKey := types.NamespacedName{
-				Name:      secretRef.Name,
-				Namespace: namespace,
-			}
-
-			if err := r.Get(ctx, secretKey, secret); err != nil {
-				return "", fmt.Errorf("failed to get secret %s: %w", secretRef.Name, err)
-			}
-
-			value, exists := secret.Data[secretRef.Key]
-			if !exists {
-				return "", fmt.Errorf("key %s not found in secret %s", secretRef.Key, secretRef.Name)
-			}
-
-			return string(value), nil
-		}
-
-		if apiKeySpec.ValueFrom.ConfigMapKeyRef != nil {
-			configMapRef := apiKeySpec.ValueFrom.ConfigMapKeyRef
-			configMap := &corev1.ConfigMap{}
-			configMapKey := types.NamespacedName{
-				Name:      configMapRef.Name,
-				Namespace: namespace,
-			}
-
-			if err := r.Get(ctx, configMapKey, configMap); err != nil {
-				return "", fmt.Errorf("failed to get configmap %s: %w", configMapRef.Name, err)
-			}
-
-			value, exists := configMap.Data[configMapRef.Key]
-			if !exists {
-				return "", fmt.Errorf("key %s not found in configmap %s", configMapRef.Key, configMapRef.Name)
-			}
-
-			return value, nil
-		}
-	}
-
-	return "", nil
-}
-
-// calculateSpecHash calculates a hash of the deployment spec for change detection
-func (r *PrefectDeploymentReconciler) calculateSpecHash(deployment *prefectiov1.PrefectDeployment) (string, error) {
-	return utils.Hash(deployment.Spec, 16)
 }
 
 // setCondition sets a condition on the deployment status
@@ -297,7 +223,7 @@ func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deploy
 		prefectClient := r.PrefectClient
 		if prefectClient == nil {
 			var err error
-			prefectClient, err = r.createPrefectClient(ctx, deployment, log)
+			prefectClient, err = prefect.NewClientFromK8s(ctx, &deployment.Spec.Server, r.Client, deployment.Namespace, log)
 			if err != nil {
 				log.Error(err, "Failed to create Prefect client for deletion", "deployment", deployment.Name)
 				// Continue with finalizer removal even if client creation fails

@@ -17,10 +17,13 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PrefectServerReference defines how to connect to a Prefect server
@@ -92,4 +95,59 @@ func (s *PrefectServerReference) IsInCluster() bool {
 // IsPrefectCloud returns true if this is configured for Prefect Cloud
 func (s *PrefectServerReference) IsPrefectCloud() bool {
 	return s.AccountID != nil && *s.AccountID != "" && s.WorkspaceID != nil && *s.WorkspaceID != ""
+}
+
+// GetAPIKey retrieves the API key from the configured source
+func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
+	if s.APIKey == nil {
+		return "", nil
+	}
+
+	if s.APIKey.Value != nil {
+		return *s.APIKey.Value, nil
+	}
+
+	if s.APIKey.ValueFrom != nil {
+		if s.APIKey.ValueFrom.SecretKeyRef != nil {
+			secretRef := s.APIKey.ValueFrom.SecretKeyRef
+			secret := &corev1.Secret{}
+			secretKey := types.NamespacedName{
+				Name:      secretRef.Name,
+				Namespace: namespace,
+			}
+
+			if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
+				return "", fmt.Errorf("failed to get secret %s: %w", secretRef.Name, err)
+			}
+
+			value, exists := secret.Data[secretRef.Key]
+			if !exists {
+				return "", fmt.Errorf("key %s not found in secret %s", secretRef.Key, secretRef.Name)
+			}
+
+			return string(value), nil
+		}
+
+		if s.APIKey.ValueFrom.ConfigMapKeyRef != nil {
+			configMapRef := s.APIKey.ValueFrom.ConfigMapKeyRef
+			configMap := &corev1.ConfigMap{}
+			configMapKey := types.NamespacedName{
+				Name:      configMapRef.Name,
+				Namespace: namespace,
+			}
+
+			if err := k8sClient.Get(ctx, configMapKey, configMap); err != nil {
+				return "", fmt.Errorf("failed to get configmap %s: %w", configMapRef.Name, err)
+			}
+
+			value, exists := configMap.Data[configMapRef.Key]
+			if !exists {
+				return "", fmt.Errorf("key %s not found in configmap %s", configMapRef.Key, configMapRef.Name)
+			}
+
+			return value, nil
+		}
+	}
+
+	return "", nil
 }
