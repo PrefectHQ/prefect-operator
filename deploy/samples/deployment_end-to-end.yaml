@@ -1,0 +1,33 @@
+apiVersion: prefect.io/v1
+kind: PrefectServer
+metadata:
+  name: prefect-ephemeral
+spec:
+---
+apiVersion: prefect.io/v1
+kind: PrefectWorkPool
+metadata:
+  name: process-pool
+spec:
+  type: process
+  server:
+    name: prefect-ephemeral
+  workers: 1
+---
+apiVersion: prefect.io/v1
+kind: PrefectDeployment
+metadata:
+  name: hello-there
+spec:
+  server:
+    name: prefect-ephemeral
+
+  workPool:
+    name: process-pool
+
+  deployment:
+    entrypoint: "flows/hello_world.py:hello"
+    pull_steps:
+      - prefect.deployments.steps.git_clone:
+          repository: https://github.com/PrefectHQ/examples.git
+          branch: main

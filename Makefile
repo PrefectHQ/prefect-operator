@@ -84,6 +84,8 @@ manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourc
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	@echo "Adding coverage ignore directive to generated files..."
+	@sed -i '1a\\n//go:coverage ignore' api/v1/zz_generated.deepcopy.go
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

@@ -32,11 +32,12 @@ type MockClient struct {
 	flows       map[string]*Flow
 
 	// Test configuration
-	ShouldFailCreate bool
-	ShouldFailUpdate bool
-	ShouldFailGet    bool
-	ShouldFailDelete bool
-	FailureMessage   string
+	ShouldFailCreate     bool
+	ShouldFailUpdate     bool
+	ShouldFailGet        bool
+	ShouldFailDelete     bool
+	ShouldFailFlowCreate bool
+	FailureMessage       string
 }
 
 // NewMockClient creates a new mock Prefect client
@@ -184,71 +185,38 @@ func (m *MockClient) GetDeploymentByName(ctx context.Context, name, flowID strin
 }
 
 // UpdateDeployment updates an existing deployment in the mock store
-func (m *MockClient) UpdateDeployment(ctx context.Context, deploymentID string, updates *DeploymentSpec) error {
-	if m.ShouldFailUpdate {
-		return fmt.Errorf("mock error: %s", m.FailureMessage)
-	}
-
+func (m *MockClient) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	deployment, exists := m.deployments[deploymentID]
-	if !exists {
-		return fmt.Errorf("deployment %s not found", deploymentID)
+	existing, ok := m.deployments[id]
+	if !ok {
+		return nil, fmt.Errorf("deployment not found")
 	}
 
-	// Update fields
-	deployment.Updated = time.Now()
-	if updates.Version != nil {
-		deployment.Version = updates.Version
+	existing.Updated = time.Now()
+	existing.Version = deployment.Version
+	existing.Description = deployment.Description
+	existing.Tags = deployment.Tags
+	existing.Parameters = deployment.Parameters
+	existing.JobVariables = deployment.JobVariables
+	existing.WorkQueueName = deployment.WorkQueueName
+	existing.WorkPoolName = deployment.WorkPoolName
+	if deployment.Paused != nil {
+		existing.Paused = *deployment.Paused
 	}
-	if updates.Description != nil {
-		deployment.Description = updates.Description
-	}
-	if updates.Tags != nil {
-		deployment.Tags = updates.Tags
-	}
-	if updates.Parameters != nil {
-		deployment.Parameters = updates.Parameters
-	}
-	if updates.JobVariables != nil {
-		deployment.JobVariables = updates.JobVariables
-	}
-	if updates.WorkQueueName != nil {
-		deployment.WorkQueueName = updates.WorkQueueName
-	}
-	if updates.WorkPoolName != nil {
-		deployment.WorkPoolName = updates.WorkPoolName
-	}
-	if updates.Paused != nil {
-		deployment.Paused = *updates.Paused
-	}
-	if updates.Schedules != nil {
-		deployment.Schedules = updates.Schedules
-	}
-	if updates.ConcurrencyLimit != nil {
-		deployment.ConcurrencyLimit = updates.ConcurrencyLimit
-	}
-	if updates.GlobalConcurrencyLimits != nil {
-		deployment.GlobalConcurrencyLimits = updates.GlobalConcurrencyLimits
-	}
-	if updates.Entrypoint != nil {
-		deployment.Entrypoint = updates.Entrypoint
-	}
-	if updates.Path != nil {
-		deployment.Path = updates.Path
-	}
-	if updates.PullSteps != nil {
-		deployment.PullSteps = updates.PullSteps
-	}
-	if updates.ParameterOpenAPISchema != nil {
-		deployment.ParameterOpenAPISchema = updates.ParameterOpenAPISchema
-	}
-	if updates.EnforceParameterSchema != nil {
-		deployment.EnforceParameterSchema = *updates.EnforceParameterSchema
+	existing.Schedules = deployment.Schedules
+	existing.ConcurrencyLimit = deployment.ConcurrencyLimit
+	existing.GlobalConcurrencyLimits = deployment.GlobalConcurrencyLimits
+	existing.Entrypoint = deployment.Entrypoint
+	existing.Path = deployment.Path
+	existing.PullSteps = deployment.PullSteps
+	existing.ParameterOpenAPISchema = deployment.ParameterOpenAPISchema
+	if deployment.EnforceParameterSchema != nil {
+		existing.EnforceParameterSchema = *deployment.EnforceParameterSchema
 	}
 
-	return nil
+	return existing, nil
 }
 
 // DeleteDeployment removes a deployment from the mock store
@@ -284,10 +252,12 @@ func (m *MockClient) Reset() {
 	defer m.mu.Unlock()
 
 	m.deployments = make(map[string]*Deployment)
+	m.flows = make(map[string]*Flow)
 	m.ShouldFailCreate = false
 	m.ShouldFailUpdate = false
 	m.ShouldFailGet = false
 	m.ShouldFailDelete = false
+	m.ShouldFailFlowCreate = false
 	m.FailureMessage = ""
 }
 
@@ -306,6 +276,8 @@ func (m *MockClient) SetError(operation string, shouldFail bool, message string)
 		m.ShouldFailGet = shouldFail
 	case "delete":
 		m.ShouldFailDelete = shouldFail
+	case "flow":
+		m.ShouldFailFlowCreate = shouldFail
 	}
 }
 
@@ -371,7 +343,7 @@ func (m *MockClient) copyDeployment(d *Deployment) *Deployment {
 
 // CreateOrGetFlow creates or gets a flow in the mock store
 func (m *MockClient) CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error) {
-	if m.ShouldFailCreate {
+	if m.ShouldFailFlowCreate {
 		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
 	}
 

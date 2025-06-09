@@ -138,18 +138,14 @@ func UpdateDeploymentStatus(k8sDeployment *prefectiov1.PrefectDeployment, prefec
 
 // GetFlowIDFromDeployment extracts or generates a flow ID for the deployment
 func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeployment *prefectiov1.PrefectDeployment) (string, error) {
-	// Create flow spec from deployment
 	flowSpec := &FlowSpec{
 		Name:   k8sDeployment.Name,
 		Tags:   k8sDeployment.Spec.Deployment.Tags,
 		Labels: k8sDeployment.Spec.Deployment.Labels,
 	}
-
-	// Create or get the flow
 	flow, err := client.CreateOrGetFlow(ctx, flowSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to create or get flow: %w", err)
 	}
-
 	return flow.ID, nil
 }

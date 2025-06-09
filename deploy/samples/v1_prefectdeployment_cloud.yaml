@@ -2,7 +2,6 @@ apiVersion: prefect.io/v1
 kind: PrefectDeployment
 metadata:
   name: prefectdeployment-cloud-sample
-  namespace: default
 spec:
   # Prefect Cloud configuration
   server:

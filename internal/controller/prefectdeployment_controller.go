@@ -22,14 +22,14 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -65,53 +65,38 @@ type PrefectDeploymentReconciler struct {
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
+// Reconcile handles the reconciliation of a PrefectDeployment
 func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := ctrllog.FromContext(ctx)
+	log := log.FromContext(ctx)
+	log.Info("Reconciling PrefectDeployment", "request", req)
 
-	log.Info("Reconciling PrefectDeployment")
-
-	deployment := &prefectiov1.PrefectDeployment{}
-	err := r.Get(ctx, req.NamespacedName, deployment)
-	if errors.IsNotFound(err) {
-		return ctrl.Result{}, nil
-	} else if err != nil {
+	var deployment prefectiov1.PrefectDeployment
+	if err := r.Get(ctx, req.NamespacedName, &deployment); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("PrefectDeployment not found, ignoring", "request", req)
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Failed to get PrefectDeployment", "request", req)
 		return ctrl.Result{}, err
 	}
 
-	// Defer a final status update at the end of the reconciliation loop
-	defer func() {
-		if statusErr := r.Status().Update(ctx, deployment); statusErr != nil {
-			log.Error(statusErr, "Failed to update PrefectDeployment status")
-		}
-	}()
-
-	// Check if we need to sync with Prefect API based on spec changes
-	currentSpecHash, err := r.calculateSpecHash(deployment)
+	// Calculate the spec hash
+	specHash, err := r.calculateSpecHash(&deployment)
 	if err != nil {
-		log.Error(err, "Failed to calculate spec hash")
-		r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionFalse, "HashError", err.Error())
-		return ctrl.Result{RequeueAfter: RequeueIntervalError}, nil
+		log.Error(err, "Failed to calculate spec hash", "deployment", deployment.Name)
+		return ctrl.Result{}, err
 	}
 
-	// Determine if we need to make API calls to Prefect
-	needsSync := r.needsSync(deployment, currentSpecHash)
-
-	if needsSync {
-		log.Info("Deployment needs sync with Prefect API", "reason", r.getSyncReason(deployment, currentSpecHash))
-		return r.syncWithPrefect(ctx, deployment, currentSpecHash, log), nil
+	// Check if we need to sync with the Prefect API
+	if r.needsSync(&deployment, specHash) {
+		log.Info("Starting sync with Prefect API", "deployment", deployment.Name)
+		result, err := r.syncWithPrefect(ctx, &deployment)
+		if err != nil {
+			return result, err
+		}
+		return result, nil
 	}
 
-	// No sync needed, update status if deployment is ready
-	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
-		r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionTrue, "DeploymentReady", "Deployment is ready and synced")
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionTrue, "SyncComplete", "Deployment is synced with Prefect")
-		deployment.Status.Ready = true
-		deployment.Status.ObservedGeneration = deployment.Generation
-	}
-
-	// Requeue after a longer interval for ready deployments to periodically check for drift
 	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
 }
 
@@ -141,108 +126,89 @@ func (r *PrefectDeploymentReconciler) needsSync(deployment *prefectiov1.PrefectD
 	return timeSinceLastSync > 10*time.Minute
 }
 
-// getSyncReason returns a human-readable reason for why sync is needed
-func (r *PrefectDeploymentReconciler) getSyncReason(deployment *prefectiov1.PrefectDeployment, currentSpecHash string) string {
-	if deployment.Status.Id == nil || *deployment.Status.Id == "" {
-		return "deployment does not exist in Prefect"
-	}
-	if deployment.Status.SpecHash != currentSpecHash {
-		return "spec has changed"
-	}
-	if deployment.Status.ObservedGeneration < deployment.Generation {
-		return "generation has changed"
-	}
-	if deployment.Status.LastSyncTime == nil {
-		return "never synced"
-	}
-	timeSinceLastSync := time.Since(deployment.Status.LastSyncTime.Time)
-	if timeSinceLastSync > 10*time.Minute {
-		return fmt.Sprintf("last sync was %v ago", timeSinceLastSync)
-	}
-	return "unknown"
-}
+// syncWithPrefect syncs the deployment with the Prefect API
+func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deployment *prefectiov1.PrefectDeployment) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
 
-// syncWithPrefect handles synchronization with the Prefect API
-func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deployment *prefectiov1.PrefectDeployment, specHash string, log logr.Logger) ctrl.Result {
-	log.Info("Starting sync with Prefect API")
-
-	// Set syncing condition
-	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "Syncing", "Syncing deployment with Prefect API")
-	deployment.Status.Ready = false
-
-	// Create Prefect client if not provided (for testing)
+	// Use injected client if available (for testing), otherwise create a new one
 	prefectClient := r.PrefectClient
 	if prefectClient == nil {
 		var err error
 		prefectClient, err = r.createPrefectClient(ctx, deployment, log)
 		if err != nil {
-			r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ClientError", err.Error())
-			return ctrl.Result{RequeueAfter: RequeueIntervalError}
+			log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
+			return ctrl.Result{}, err
 		}
 	}
 
 	// Get flow ID for the deployment
 	flowID, err := prefect.GetFlowIDFromDeployment(ctx, prefectClient, deployment)
 	if err != nil {
+		log.Error(err, "Failed to get flow ID", "deployment", deployment.Name)
 		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "FlowIDError", err.Error())
-		return ctrl.Result{RequeueAfter: RequeueIntervalError}
+		return ctrl.Result{}, err
 	}
 
-	// Convert K8s deployment to Prefect API format
+	// Convert to Prefect deployment spec
 	deploymentSpec, err := prefect.ConvertToDeploymentSpec(deployment, flowID)
 	if err != nil {
+		log.Error(err, "Failed to convert deployment spec", "deployment", deployment.Name)
 		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
-		return ctrl.Result{RequeueAfter: RequeueIntervalError}
+		return ctrl.Result{}, err
 	}
 
 	// Create or update deployment in Prefect
 	prefectDeployment, err := prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
 	if err != nil {
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "APIError", err.Error())
-		return ctrl.Result{RequeueAfter: RequeueIntervalError}
+		log.Error(err, "Failed to create or update deployment in Prefect", "deployment", deployment.Name)
+		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
+		return ctrl.Result{}, err
 	}
 
-	// Update K8s deployment status
+	// Update deployment status
 	prefect.UpdateDeploymentStatus(deployment, prefectDeployment)
+
+	// Update spec hash
+	specHash, err := r.calculateSpecHash(deployment)
+	if err != nil {
+		log.Error(err, "Failed to calculate spec hash", "deployment", deployment.Name)
+		return ctrl.Result{}, err
+	}
 	deployment.Status.SpecHash = specHash
 	deployment.Status.ObservedGeneration = deployment.Generation
-	now := metav1.Now()
-	deployment.Status.LastSyncTime = &now
 
-	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionTrue, "SyncComplete", "Successfully synced with Prefect API")
-	r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionTrue, "DeploymentReady", "Deployment is ready")
-	deployment.Status.Ready = true
+	// Set success conditions
+	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Deployment successfully synced with Prefect API")
+	r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionTrue, "DeploymentReady", "Deployment is ready and operational")
+
+	// Update deployment status
+	if err := r.Status().Update(ctx, deployment); err != nil {
+		log.Error(err, "Failed to update deployment status", "deployment", deployment.Name)
+		return ctrl.Result{}, err
+	}
 
 	log.Info("Successfully synced deployment with Prefect", "deploymentId", prefectDeployment.ID)
-	return ctrl.Result{RequeueAfter: RequeueIntervalReady}
+	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
 }
 
-// createPrefectClient creates a Prefect API client based on the deployment's server configuration
+// createPrefectClient creates a new Prefect client
 func (r *PrefectDeploymentReconciler) createPrefectClient(ctx context.Context, deployment *prefectiov1.PrefectDeployment, log logr.Logger) (prefect.PrefectClient, error) {
-	serverRef := deployment.Spec.Server
-
-	// Get API URL
-	apiURL := serverRef.GetAPIURL(deployment.Namespace)
-	if apiURL == "" {
-		return nil, fmt.Errorf("no API URL configured for Prefect server")
+	// Get API key
+	apiKey, err := r.getAPIKey(ctx, deployment.Spec.Server.APIKey, deployment.Namespace)
+	if err != nil {
+		return nil, err
 	}
 
-	// Get API key if configured
-	var apiKey string
-	if serverRef.APIKey != nil {
-		var err error
-		apiKey, err = r.getAPIKey(ctx, serverRef.APIKey, deployment.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get API key: %w", err)
-		}
-	}
-
-	log.Info("Creating Prefect client", "apiURL", apiURL, "hasAPIKey", apiKey != "")
-	return prefect.NewClient(apiURL, apiKey, log), nil
+	// Create client
+	return prefect.NewClientFromServerReference(&deployment.Spec.Server, apiKey, log)
 }
 
 // getAPIKey retrieves the API key from the configured source
 func (r *PrefectDeploymentReconciler) getAPIKey(ctx context.Context, apiKeySpec *prefectiov1.APIKeySpec, namespace string) (string, error) {
+	if apiKeySpec == nil {
+		return "", nil // No API key configured
+	}
+
 	// Direct value takes precedence
 	if apiKeySpec.Value != nil {
 		return *apiKeySpec.Value, nil

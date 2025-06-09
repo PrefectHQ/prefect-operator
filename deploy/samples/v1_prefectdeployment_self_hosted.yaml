@@ -2,7 +2,6 @@ apiVersion: prefect.io/v1
 kind: PrefectDeployment
 metadata:
   name: prefectdeployment-selfhosted-sample
-  namespace: default
 spec:
   # Self-hosted Prefect server configuration
   server:
