@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
@@ -38,6 +39,9 @@ import (
 )
 
 const (
+	// PrefectDeploymentFinalizer is the finalizer used to ensure cleanup of Prefect deployments
+	PrefectDeploymentFinalizer = "prefect.io/deployment-cleanup"
+
 	// PrefectDeploymentConditionReady indicates the deployment is ready
 	PrefectDeploymentConditionReady = "Ready"
 
@@ -78,6 +82,21 @@ func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		log.Error(err, "Failed to get PrefectDeployment", "request", req)
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion
+	if deployment.DeletionTimestamp != nil {
+		return r.handleDeletion(ctx, &deployment)
+	}
+
+	// Ensure finalizer is present
+	if !controllerutil.ContainsFinalizer(&deployment, PrefectDeploymentFinalizer) {
+		controllerutil.AddFinalizer(&deployment, PrefectDeploymentFinalizer)
+		if err := r.Update(ctx, &deployment); err != nil {
+			log.Error(err, "Failed to add finalizer", "deployment", deployment.Name)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	specHash, err := r.calculateSpecHash(&deployment)
@@ -260,6 +279,51 @@ func (r *PrefectDeploymentReconciler) setCondition(deployment *prefectiov1.Prefe
 	}
 
 	meta.SetStatusCondition(&deployment.Status.Conditions, condition)
+}
+
+// handleDeletion handles the cleanup of a PrefectDeployment that is being deleted
+func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deployment *prefectiov1.PrefectDeployment) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+	log.Info("Handling deletion of PrefectDeployment", "deployment", deployment.Name)
+
+	// If finalizer is not present, nothing to do
+	if !controllerutil.ContainsFinalizer(deployment, PrefectDeploymentFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	// Only attempt cleanup if we have a deployment ID in Prefect
+	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
+		// Create Prefect client for cleanup
+		prefectClient := r.PrefectClient
+		if prefectClient == nil {
+			var err error
+			prefectClient, err = r.createPrefectClient(ctx, deployment, log)
+			if err != nil {
+				log.Error(err, "Failed to create Prefect client for deletion", "deployment", deployment.Name)
+				// Continue with finalizer removal even if client creation fails
+				// to avoid blocking deletion indefinitely
+			} else {
+				// Attempt to delete from Prefect API
+				if err := prefectClient.DeleteDeployment(ctx, *deployment.Status.Id); err != nil {
+					log.Error(err, "Failed to delete deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
+					// Continue with finalizer removal even if Prefect deletion fails
+					// to avoid blocking Kubernetes deletion indefinitely
+				} else {
+					log.Info("Successfully deleted deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
+				}
+			}
+		}
+	}
+
+	// Remove finalizer to allow Kubernetes to complete deletion
+	controllerutil.RemoveFinalizer(deployment, PrefectDeploymentFinalizer)
+	if err := r.Update(ctx, deployment); err != nil {
+		log.Error(err, "Failed to remove finalizer", "deployment", deployment.Name)
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Finalizer removed, deletion will proceed", "deployment", deployment.Name)
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

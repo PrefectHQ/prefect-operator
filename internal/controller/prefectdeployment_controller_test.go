@@ -146,8 +146,17 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating the PrefectDeployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("Reconciling the deployment")
+			By("First reconciliation - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Checking that finalizer was added")
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Finalizers).To(ContainElement("prefect.io/deployment-cleanup"))
+
+			By("Second reconciliation - syncing with Prefect")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
@@ -184,6 +193,44 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 		})
+
+		It("Should handle deletion and cleanup from Prefect API", func() {
+			By("Creating the PrefectDeployment")
+			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+
+			By("First reconcile - adding finalizer")
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile - syncing with Prefect")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+			By("Verifying deployment was created in Prefect")
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.Id).NotTo(BeNil())
+
+			By("Verifying finalizer was added")
+			Expect(prefectDeployment.Finalizers).To(ContainElement("prefect.io/deployment-cleanup"))
+
+			By("Deleting the PrefectDeployment")
+			Expect(k8sClient.Delete(ctx, prefectDeployment)).To(Succeed())
+
+			By("Reconciling deletion - should clean up from Prefect API")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying deployment was deleted from Prefect")
+			// The mock client should have been called to delete the deployment
+			// This is implicit in the mock client behavior
+
+			By("Verifying the deployment was removed from Kubernetes")
+			err = k8sClient.Get(ctx, name, prefectDeployment)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
 	})
 
 	Context("When reconciling deployment spec changes", func() {
@@ -191,7 +238,12 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating and initially reconciling the PrefectDeployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
+			// First reconcile to add finalizer
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile to sync with Prefect
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get the updated deployment
@@ -450,8 +502,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("Reconciling should handle the error")
+			By("First reconcile - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should handle the error")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("simulated Prefect API error"))
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))

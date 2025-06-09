@@ -600,8 +600,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Expect(r.Method).To(Equal("DELETE"))
 				Expect(r.URL.Path).To(Equal("/deployments/deployment-12345"))
 
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`{"detail": "Deployment deleted successfully"}`))
+				// Return 204 No Content like the real Prefect API
+				w.WriteHeader(http.StatusNoContent)
 			}))
 
 			By("Creating client with mock server URL")
@@ -611,6 +611,39 @@ var _ = Describe("Prefect HTTP Client", func() {
 			err := client.DeleteDeployment(ctx, "deployment-12345")
 
 			By("Verifying deployment was deleted")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should handle both 200 and 204 status codes for deletion", func() {
+			By("Testing 200 status code first")
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				Expect(r.Method).To(Equal("DELETE"))
+				Expect(r.URL.Path).To(Equal("/deployments/deployment-200"))
+
+				// Some APIs might return 200 with a response body
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"detail": "Deployment deleted"}`))
+			}))
+
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+			err := client.DeleteDeployment(ctx, "deployment-200")
+			Expect(err).NotTo(HaveOccurred())
+
+			mockServer.Close()
+
+			By("Testing 204 status code")
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				Expect(r.Method).To(Equal("DELETE"))
+				Expect(r.URL.Path).To(Equal("/deployments/deployment-204"))
+
+				// Standard response for successful deletion
+				w.WriteHeader(http.StatusNoContent)
+			}))
+
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+			err = client.DeleteDeployment(ctx, "deployment-204")
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
