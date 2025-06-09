@@ -80,14 +80,12 @@ func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	// Calculate the spec hash
 	specHash, err := r.calculateSpecHash(&deployment)
 	if err != nil {
 		log.Error(err, "Failed to calculate spec hash", "deployment", deployment.Name)
 		return ctrl.Result{}, err
 	}
 
-	// Check if we need to sync with the Prefect API
 	if r.needsSync(&deployment, specHash) {
 		log.Info("Starting sync with Prefect API", "deployment", deployment.Name)
 		result, err := r.syncWithPrefect(ctx, &deployment)
@@ -102,22 +100,19 @@ func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 // needsSync determines if the deployment needs to be synced with Prefect API
 func (r *PrefectDeploymentReconciler) needsSync(deployment *prefectiov1.PrefectDeployment, currentSpecHash string) bool {
-	// Always sync if deployment doesn't exist in Prefect yet
 	if deployment.Status.Id == nil || *deployment.Status.Id == "" {
 		return true
 	}
 
-	// Sync if spec has changed
 	if deployment.Status.SpecHash != currentSpecHash {
 		return true
 	}
 
-	// Sync if observed generation is behind
 	if deployment.Status.ObservedGeneration < deployment.Generation {
 		return true
 	}
 
-	// Sync if last sync was too long ago (drift detection)
+	// Drift detection: sync if last sync was too long ago
 	if deployment.Status.LastSyncTime == nil {
 		return true
 	}
@@ -130,7 +125,7 @@ func (r *PrefectDeploymentReconciler) needsSync(deployment *prefectiov1.PrefectD
 func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deployment *prefectiov1.PrefectDeployment) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	// Use injected client if available (for testing), otherwise create a new one
+	// Use injected client if available (for testing)
 	prefectClient := r.PrefectClient
 	if prefectClient == nil {
 		var err error
@@ -141,7 +136,6 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		}
 	}
 
-	// Get flow ID for the deployment
 	flowID, err := prefect.GetFlowIDFromDeployment(ctx, prefectClient, deployment)
 	if err != nil {
 		log.Error(err, "Failed to get flow ID", "deployment", deployment.Name)
@@ -149,7 +143,6 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 
-	// Convert to Prefect deployment spec
 	deploymentSpec, err := prefect.ConvertToDeploymentSpec(deployment, flowID)
 	if err != nil {
 		log.Error(err, "Failed to convert deployment spec", "deployment", deployment.Name)
@@ -157,7 +150,6 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 
-	// Create or update deployment in Prefect
 	prefectDeployment, err := prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
 	if err != nil {
 		log.Error(err, "Failed to create or update deployment in Prefect", "deployment", deployment.Name)
@@ -165,10 +157,8 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 
-	// Update deployment status
 	prefect.UpdateDeploymentStatus(deployment, prefectDeployment)
 
-	// Update spec hash
 	specHash, err := r.calculateSpecHash(deployment)
 	if err != nil {
 		log.Error(err, "Failed to calculate spec hash", "deployment", deployment.Name)
@@ -177,11 +167,9 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	deployment.Status.SpecHash = specHash
 	deployment.Status.ObservedGeneration = deployment.Generation
 
-	// Set success conditions
 	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Deployment successfully synced with Prefect API")
 	r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionTrue, "DeploymentReady", "Deployment is ready and operational")
 
-	// Update deployment status
 	if err := r.Status().Update(ctx, deployment); err != nil {
 		log.Error(err, "Failed to update deployment status", "deployment", deployment.Name)
 		return ctrl.Result{}, err
@@ -193,28 +181,24 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 
 // createPrefectClient creates a new Prefect client
 func (r *PrefectDeploymentReconciler) createPrefectClient(ctx context.Context, deployment *prefectiov1.PrefectDeployment, log logr.Logger) (prefect.PrefectClient, error) {
-	// Get API key
 	apiKey, err := r.getAPIKey(ctx, deployment.Spec.Server.APIKey, deployment.Namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create client
 	return prefect.NewClientFromServerReference(&deployment.Spec.Server, apiKey, log)
 }
 
 // getAPIKey retrieves the API key from the configured source
 func (r *PrefectDeploymentReconciler) getAPIKey(ctx context.Context, apiKeySpec *prefectiov1.APIKeySpec, namespace string) (string, error) {
 	if apiKeySpec == nil {
-		return "", nil // No API key configured
+		return "", nil
 	}
 
-	// Direct value takes precedence
 	if apiKeySpec.Value != nil {
 		return *apiKeySpec.Value, nil
 	}
 
-	// Get from environment variable source
 	if apiKeySpec.ValueFrom != nil {
 		if apiKeySpec.ValueFrom.SecretKeyRef != nil {
 			secretRef := apiKeySpec.ValueFrom.SecretKeyRef
@@ -257,7 +241,7 @@ func (r *PrefectDeploymentReconciler) getAPIKey(ctx context.Context, apiKeySpec 
 		}
 	}
 
-	return "", nil // No API key configured
+	return "", nil
 }
 
 // calculateSpecHash calculates a hash of the deployment spec for change detection
