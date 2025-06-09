@@ -27,7 +27,7 @@ spec:
 
   deployment:
     entrypoint: "flows/hello_world.py:hello"
-    pull_steps:
+    pullSteps:
       - prefect.deployments.steps.git_clone:
           repository: https://github.com/PrefectHQ/examples.git
           branch: main
