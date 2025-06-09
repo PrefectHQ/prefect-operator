@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -525,8 +526,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("Reconciling should handle the flow creation error")
+			By("First reconcile - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should handle the flow creation error")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to create or get flow"))
 			Expect(err.Error()).To(ContainSubstring("simulated flow creation error"))
@@ -591,8 +597,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 			mockClient.ShouldFailCreate = true
 			mockClient.FailureMessage = "CreateOrUpdateDeployment error"
 
-			By("Reconciling should handle the CreateOrUpdateDeployment error")
+			By("First reconcile - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should handle the CreateOrUpdateDeployment error")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("CreateOrUpdateDeployment error"))
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
@@ -608,8 +619,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("First successful reconcile to establish deployment")
+			By("First reconcile - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile to establish deployment")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
@@ -619,13 +635,29 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Deleting the deployment to cause status update to fail")
 			Expect(k8sClient.Delete(ctx, prefectDeployment)).To(Succeed())
 
+			By("Triggering reconcile to process deletion")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for deployment deletion to complete")
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, name, prefectDeployment)
+				return errors.IsNotFound(err)
+			}, "10s", "100ms").Should(BeTrue())
+
 			By("Creating a new deployment with same name to trigger status update error")
 			newDeployment := prefectDeployment.DeepCopy()
 			newDeployment.ResourceVersion = ""
 			newDeployment.Status = prefectiov1.PrefectDeploymentStatus{}
+			newDeployment.Finalizers = nil // Clear finalizers for clean state
 			Expect(k8sClient.Create(ctx, newDeployment)).To(Succeed())
 
-			By("Reconciling should succeed even without status update")
+			By("First reconcile on new deployment - adding finalizer")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should succeed even without status update")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
@@ -720,8 +752,18 @@ var _ = Describe("PrefectDeployment controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
 
-			By("Reconciling should handle anchor date parsing error")
+			By("First reconcile - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: namespaceName,
+					Name:      "invalid-schedule-deployment",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should handle anchor date parsing error")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: namespaceName,
 					Name:      "invalid-schedule-deployment",
@@ -786,8 +828,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("Reconciling should attempt to create real client and fail gracefully")
+			By("First reconcile - adding finalizer")
 			result, err := realReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should attempt to create real client and fail gracefully")
+			result, err = realReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			// This should fail because we don't have a real Prefect server
 			// but it exercises the createPrefectClient path
 			Expect(err).To(HaveOccurred())
@@ -880,8 +927,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 		})
 
 		It("Should set appropriate conditions during reconciliation", func() {
-			By("Reconciling the deployment")
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			By("First reconcile - adding finalizer")
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile - syncing with Prefect")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Checking conditions are set correctly")
