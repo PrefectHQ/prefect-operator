@@ -84,6 +84,8 @@ manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourc
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	@echo "Adding coverage ignore directive to generated files..."
+	@sed -i '1a\\n//go:coverage ignore' api/v1/zz_generated.deepcopy.go
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -139,6 +141,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 docs: tools
 	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectservers.yaml --output PrefectServer.md
 	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectworkpools.yaml --output PrefectWorkPool.md
+	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectdeployments.yaml --output PrefectDeployment.md
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.

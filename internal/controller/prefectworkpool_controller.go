@@ -53,7 +53,7 @@ type PrefectWorkPoolReconciler struct {
 func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	log.Info("Reconciling PrefectWorkPool")
+	log.V(1).Info("Reconciling PrefectWorkPool")
 
 	workPool := &prefectiov1.PrefectWorkPool{}
 	err := r.Get(ctx, req.NamespacedName, workPool)
@@ -139,7 +139,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return nil
 	})
 
-	log.Info("CreateOrUpdate", "object", objName, "name", workPool.Name, "result", result)
+	log.V(1).Info("CreateOrUpdate", "object", objName, "name", workPool.Name, "result", result)
 
 	meta.SetStatusCondition(
 		&workPool.Status.Conditions,

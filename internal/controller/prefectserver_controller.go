@@ -58,7 +58,7 @@ type PrefectServerReconciler struct {
 func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 
-	log.Info("Reconciling PrefectServer")
+	log.V(1).Info("Reconciling PrefectServer")
 
 	server := &prefectiov1.PrefectServer{}
 	err := r.Get(ctx, req.NamespacedName, server)
@@ -133,7 +133,7 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 		return mergo.Merge(pvc, desiredPVC, mergo.WithOverride)
 	})
 
-	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+	log.V(1).Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
 	meta.SetStatusCondition(
 		&server.Status.Conditions,
@@ -211,7 +211,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		return mergo.Merge(deploy, desiredDeployment, mergo.WithOverride)
 	})
 
-	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+	log.V(1).Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
 	meta.SetStatusCondition(
 		&server.Status.Conditions,
@@ -257,7 +257,7 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 		return mergo.Merge(service, desiredService, mergo.WithOverride)
 	})
 
-	log.Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
+	log.V(1).Info("CreateOrUpdate", "object", objName, "name", server.Name, "result", result)
 
 	meta.SetStatusCondition(
 		&server.Status.Conditions,
