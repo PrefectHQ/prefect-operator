@@ -1,8 +1,0 @@
-resources:
-#  - v1_prefectserver_sqlite.yaml
-  - v1_prefectworkpool_process.yaml
-  - v1_prefectserver_ephemeral.yaml
-  - v1_prefectserver_postgres.yaml
-  - v1_prefectserver_sqlite.yaml
-  - v1_prefectworkpool_kubernetes.yaml
-#  - v1_prefectworkpool_process.yaml

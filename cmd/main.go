@@ -79,7 +79,7 @@ func main() {
 	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
 	// - https://github.com/advisories/GHSA-4374-p667-p6c8
 	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("disabling http/2")
+		setupLog.V(1).Info("disabling http/2")
 		c.NextProtos = []string{"http/1.1"}
 	}
 
@@ -135,6 +135,15 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkPool")
+		os.Exit(1)
+	}
+
+	if err = (&controller.PrefectDeploymentReconciler{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		PrefectClient: nil, // Will create client dynamically from deployment config
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PrefectDeployment")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

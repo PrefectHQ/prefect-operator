@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -53,36 +52,6 @@ type PrefectWorkPoolSpec struct {
 
 	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
-}
-
-type PrefectServerReference struct {
-	// Namespace is the namespace where the in-cluster Prefect Server is running
-	Namespace string `json:"namespace,omitempty"`
-
-	// Name is the name of the in-cluster Prefect Server in the given namespace
-	Name string `json:"name,omitempty"`
-
-	// RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud
-	RemoteAPIURL *string `json:"remoteApiUrl,omitempty"`
-
-	// APIKey is the API key to use to connect to a remote Prefect Server
-	APIKey *APIKeySpec `json:"apiKey,omitempty"`
-
-	// AccountID is the ID of the account to use to connect to Prefect Cloud
-	AccountID *string `json:"accountId,omitempty"`
-	// AccountID *uuid.UUID `json:"accountId,omitempty"`
-
-	// WorkspaceID is the ID of the workspace to use to connect to Prefect Cloud
-	WorkspaceID *string `json:"workspaceId,omitempty"`
-}
-
-// APIKeySpec is the API key to use to connect to a remote Prefect Server
-type APIKeySpec struct {
-	// Value is the literal value of the API key
-	Value *string `json:"value,omitempty"`
-
-	// ValueFrom is a reference to a secret containing the API key
-	ValueFrom *corev1.EnvVarSource `json:"valueFrom,omitempty"`
 }
 
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
@@ -159,23 +128,7 @@ func (s *PrefectWorkPool) EntrypointArguments() []string {
 // PrefectAPIURL returns the API URL for the Prefect Server, either from the RemoteAPIURL or
 // from the in-cluster server
 func (s *PrefectWorkPool) PrefectAPIURL() string {
-	if s.Spec.Server.RemoteAPIURL != nil {
-		remote := *s.Spec.Server.RemoteAPIURL
-		if !strings.HasSuffix(remote, "/api") {
-			remote = fmt.Sprintf("%s/api", remote)
-		}
-
-		if s.Spec.Server.AccountID != nil && s.Spec.Server.WorkspaceID != nil {
-			remote = fmt.Sprintf("%s/accounts/%s/workspaces/%s", remote, *s.Spec.Server.AccountID, *s.Spec.Server.WorkspaceID)
-		}
-		return remote
-	}
-
-	serverNamespace := s.Spec.Server.Namespace
-	if serverNamespace == "" {
-		serverNamespace = s.Namespace
-	}
-	return "http://" + s.Spec.Server.Name + "." + serverNamespace + ".svc:4200/api"
+	return s.Spec.Server.GetAPIURL(s.Namespace)
 }
 
 func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
