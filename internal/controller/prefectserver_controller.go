@@ -76,8 +76,15 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}()
 
-	desiredDeployment, desiredPVC, desiredMigrationJob := r.prefectServerDeployment(server)
-	desiredService := r.prefectServerService(server)
+	desiredDeployment, desiredPVC, desiredMigrationJob, err := r.prefectServerDeployment(server)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	desiredService, err := r.prefectServerService(server)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	var result *ctrl.Result
 
@@ -285,7 +292,7 @@ func isMigrationJobFinished(foundMigrationJob *batchv1.Job) bool {
 	}
 }
 
-func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job) {
+func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job, error) {
 	var pvc *corev1.PersistentVolumeClaim
 	var migrationJob *batchv1.Job
 	var deploymentSpec appsv1.DeploymentSpec
@@ -318,15 +325,23 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 	}
 
 	// Set PrefectServer instance as the owner and controller
-	// TODO: handle errors from SetControllerReference.
-	_ = ctrl.SetControllerReference(server, dep, r.Scheme)
+	if r.Scheme == nil {
+		return appsv1.Deployment{}, nil, nil, fmt.Errorf("scheme is nil, cannot set controller reference for deployment")
+	}
+	if err := ctrl.SetControllerReference(server, dep, r.Scheme); err != nil {
+		return appsv1.Deployment{}, nil, nil, fmt.Errorf("failed to set controller reference for deployment: %w", err)
+	}
 	if pvc != nil {
-		_ = ctrl.SetControllerReference(server, pvc, r.Scheme)
+		if err := ctrl.SetControllerReference(server, pvc, r.Scheme); err != nil {
+			return appsv1.Deployment{}, nil, nil, fmt.Errorf("failed to set controller reference for PVC: %w", err)
+		}
 	}
 	if migrationJob != nil {
-		_ = ctrl.SetControllerReference(server, migrationJob, r.Scheme)
+		if err := ctrl.SetControllerReference(server, migrationJob, r.Scheme); err != nil {
+			return appsv1.Deployment{}, nil, nil, fmt.Errorf("failed to set controller reference for migration job: %w", err)
+		}
 	}
-	return *dep, pvc, migrationJob
+	return *dep, pvc, migrationJob, nil
 }
 
 func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
@@ -561,7 +576,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 	}
 }
 
-func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.PrefectServer) corev1.Service {
+func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.PrefectServer) (corev1.Service, error) {
 	service := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: server.Namespace,
@@ -585,10 +600,14 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 		service.Spec.Ports = append(service.Spec.Ports, server.Spec.ExtraServicePorts...)
 	}
 
-	// TODO: handle errors from SetControllerReference.
-	_ = ctrl.SetControllerReference(server, &service, r.Scheme)
+	if r.Scheme == nil {
+		return corev1.Service{}, fmt.Errorf("scheme is nil, cannot set controller reference for service")
+	}
+	if err := ctrl.SetControllerReference(server, &service, r.Scheme); err != nil {
+		return corev1.Service{}, fmt.Errorf("failed to set controller reference for service: %w", err)
+	}
 
-	return service
+	return service, nil
 }
 
 func (r *PrefectServerReconciler) initContainerWaitForPostgres(server *prefectiov1.PrefectServer) corev1.Container {
