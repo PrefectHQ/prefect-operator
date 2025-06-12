@@ -1244,7 +1244,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
-				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1433,7 +1433,7 @@ var _ = Describe("PrefectServer controller", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1544,7 +1544,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				// Set the first migration Job to be complete
-				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob := &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1567,7 +1567,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Set the second migration Job to be complete
-				_, _, desiredMigrationJob = controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _ = controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1597,7 +1597,7 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			It("should create new migration Job with the new setting", func() {
-				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				job := &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1614,7 +1614,7 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			It("should do nothing if an active migration Job already exists", func() {
-				_, _, desiredMigrationJob := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob := &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1815,6 +1815,122 @@ var _ = Describe("PrefectServer controller", func() {
 
 			Expect(k8sClient.Get(ctx, name, updatedPrefectServer)).To(Succeed())
 			Expect(updatedPrefectServer.Status.Ready).To(Equal(true))
+		})
+	})
+
+	Context("error handling scenarios", func() {
+		var (
+			ctx           context.Context
+			namespace     *corev1.Namespace
+			namespaceName string
+			name          types.NamespacedName
+			prefectserver *prefectiov1.PrefectServer
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			namespaceName = fmt.Sprintf("error-ns-%d", time.Now().UnixNano())
+
+			namespace = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+			}
+			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+			name = types.NamespacedName{
+				Namespace: namespaceName,
+				Name:      "prefect-server-test",
+			}
+
+			prefectserver = &prefectiov1.PrefectServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: namespaceName,
+				},
+				Spec: prefectiov1.PrefectServerSpec{
+					Image: ptr.To("prefecthq/prefect:2.11.0-python3.11"),
+				},
+			}
+		})
+
+		AfterEach(func() {
+			Expect(k8sClient.Delete(ctx, namespace)).To(Succeed())
+		})
+
+		It("should handle SetControllerReference errors when creating deployment specs", func() {
+			// Create a server without a proper scheme (simulates SetControllerReference error)
+			badReconciler := &PrefectServerReconciler{
+				Client: k8sClient,
+				Scheme: nil, // This will cause SetControllerReference to fail
+			}
+
+			// This test verifies that when the helper functions are called with an invalid scheme,
+			// errors are now properly handled and returned
+			_, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("scheme is nil, cannot set controller reference"))
+
+			// Test service creation with invalid scheme
+			_, err = badReconciler.prefectServerService(prefectserver)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("scheme is nil, cannot set controller reference"))
+		})
+
+		It("should handle SetControllerReference errors in PostgreSQL configurations", func() {
+			prefectserver.Spec.Postgres = &prefectiov1.PostgresConfiguration{
+				Host:     ptr.To("localhost"),
+				Port:     ptr.To(5432),
+				User:     ptr.To("prefect"),
+				Password: ptr.To("password"),
+				Database: ptr.To("prefect"),
+			}
+
+			badReconciler := &PrefectServerReconciler{
+				Client: k8sClient,
+				Scheme: nil, // This will cause SetControllerReference to fail
+			}
+
+			_, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
+
+			// Verify that SetControllerReference error is now properly handled
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("scheme is nil, cannot set controller reference"))
+		})
+
+		It("should handle SetControllerReference errors in SQLite configurations", func() {
+			prefectserver.Spec.SQLite = &prefectiov1.SQLiteConfiguration{
+				StorageClassName: "standard",
+				Size:             resource.MustParse("1Gi"),
+			}
+
+			badReconciler := &PrefectServerReconciler{
+				Client: k8sClient,
+				Scheme: nil, // This will cause SetControllerReference to fail
+			}
+
+			_, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
+
+			// Verify that SetControllerReference error is now properly handled
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("scheme is nil, cannot set controller reference"))
+		})
+
+		It("should demonstrate proper error propagation from helper functions", func() {
+			// Create server and attempt reconciliation
+			Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
+
+			// Create a reconciler with invalid scheme to trigger SetControllerReference errors
+			badReconciler := &PrefectServerReconciler{
+				Client: k8sClient,
+				Scheme: nil,
+			}
+
+			// Now this reconciliation should fail early when the helper functions encounter
+			// SetControllerReference errors, rather than panicking later
+			_, err := badReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+
+			// The error should be properly propagated from the helper functions
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("scheme is nil, cannot set controller reference"))
 		})
 	})
 })
