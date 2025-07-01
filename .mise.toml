@@ -2,11 +2,11 @@
 actionlint = "1.7.7"
 ginkgo = '2.23.4'
 golang = '1.24'
-golangci-lint = "2.1.6"
-"go:golang.org/x/tools/cmd/goimports" = "0.33.0"
+golangci-lint = "2.2.1"
+"go:golang.org/x/tools/cmd/goimports" = "0.34.0"
 'go:fybrik.io/crdoc' = 'latest'
 helm = "3.18"
-helm-ct = "3.12.0"
+helm-ct = "3.13.0"
 helm-docs = "1.14.2"
 kube-controller-tools = "0.18.0"
 kubectl = "1.33"
