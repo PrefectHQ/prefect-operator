@@ -105,6 +105,17 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectdeployments/status"]
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectdeployments/finalizers"]
+    verbs:
+      - update
+
 ---
 kind: ClusterRoleBinding
 apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
