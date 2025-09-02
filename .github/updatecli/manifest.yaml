@@ -8,6 +8,16 @@ sources:
       versionFilter:
         kind: semver
     sourceid: common
+  prefect:
+    name: Prefect GitHub releases
+    kind: githubrelease
+    spec:
+      owner: PrefectHQ
+      repository: prefect
+      token: {{requiredEnv "GITHUB_TOKEN"}}
+      versionFilter:
+        kind: semver
+    sourceid: prefect
 conditions: {}
 targets:
   operator:
@@ -15,5 +25,13 @@ targets:
     kind: yaml
     spec:
       file: deploy/charts/prefect-operator/Chart.yaml
-      key: dependencies[0].version
+      key: $.dependencies[0].version
     sourceid: common
+  prefect-version:
+    name: update Prefect version constant
+    kind: file
+    spec:
+      file: api/v1/versioning.go
+      matchpattern: 'const DEFAULT_PREFECT_VERSION = "(.+)"'
+      replacepattern: 'const DEFAULT_PREFECT_VERSION = "{{ source "prefect" }}"'
+    sourceid: prefect
