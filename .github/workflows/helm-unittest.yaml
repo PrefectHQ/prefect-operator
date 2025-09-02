@@ -19,7 +19,7 @@ jobs:
       # required to read from the repo
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # - uses: d3adb5/helm-unittest-action@v2
       #   with:
       #     helm-version: v3.15.3
