@@ -48,6 +48,8 @@ type PrefectClient interface {
 	CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error)
 	// GetFlowByName retrieves a flow by name
 	GetFlowByName(ctx context.Context, name string) (*Flow, error)
+	// DeleteWorkPool deletes a work pool
+	DeleteWorkPool(ctx context.Context, id string) error
 }
 
 // HTTPClient represents an HTTP client interface for testing
@@ -489,6 +491,39 @@ func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) 
 
 	c.log.V(1).Info("Flow retrieved successfully", "flowName", name, "flowId", result.ID)
 	return &result, nil
+}
+
+// DeleteWorkPool deletes a work pool by ID
+func (c *Client) DeleteWorkPool(ctx context.Context, name string) error {
+	url := fmt.Sprintf("%s/work_pools/%s", c.BaseURL, name)
+	c.log.V(1).Info("Deleting work pool", "url", url, "workPoolName", name)
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	c.log.V(1).Info("Work pool deleted successfully", "workPoolName", name)
+	return nil
 }
 
 // isRunningInCluster checks if the operator is running in-cluster
