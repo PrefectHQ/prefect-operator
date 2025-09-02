@@ -433,3 +433,11 @@ func (m *MockClient) copyFlow(f *Flow) *Flow {
 
 	return &copy
 }
+
+// DeleteWorkPool removes a work pool
+func (m *MockClient) DeleteWorkPool(ctx context.Context, name string) error {
+	if m.ShouldFailDelete {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	return nil
+}
