@@ -295,8 +295,9 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 					container := deployment.Spec.Template.Spec.Containers[0]
 
+					expectedImage := fmt.Sprintf("prefecthq/prefect:%s-python3.12", prefectiov1.DEFAULT_PREFECT_VERSION)
 					Expect(container.Name).To(Equal("prefect-server"))
-					Expect(container.Image).To(Equal("prefecthq/prefect:3.1.13-python3.12"))
+					Expect(container.Image).To(Equal(expectedImage))
 					Expect(container.Command).To(BeNil())
 					Expect(container.Args).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
 				})
