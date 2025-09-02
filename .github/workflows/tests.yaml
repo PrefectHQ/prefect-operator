@@ -19,10 +19,10 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install tool dependencies
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v3
         with:
           experimental: true  # enables the go installation backend
 
