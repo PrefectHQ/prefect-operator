@@ -149,3 +149,38 @@ func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeplo
 	}
 	return flow.ID, nil
 }
+
+// ConvertToWorkPoolSpec converts a K8s PrefectWorkPool to a Prefect API WorkPool
+func ConvertToWorkPoolUpdateSpec(k8sWorkPool *prefectiov1.PrefectWorkPool) (*WorkPoolSpec, error) {
+	return convertToWorkPoolSpec(k8sWorkPool, true)
+}
+
+func ConvertToWorkPoolSpec(k8sWorkPool *prefectiov1.PrefectWorkPool) (*WorkPoolSpec, error) {
+	return convertToWorkPoolSpec(k8sWorkPool, false)
+}
+
+func convertToWorkPoolSpec(k8sWorkPool *prefectiov1.PrefectWorkPool, update bool) (*WorkPoolSpec, error) {
+	spec := &WorkPoolSpec{}
+
+	workPool := k8sWorkPool.Spec
+
+	if !update {
+		spec.Name = k8sWorkPool.Name
+		spec.Type = workPool.Type
+	}
+
+	if workPool.BaseJobTemplate != nil {
+		var baseJobTemplate map[string]interface{}
+		if err := json.Unmarshal(workPool.BaseJobTemplate.Raw, &baseJobTemplate); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal parameters: %w", err)
+		}
+		spec.BaseJobTemplate = baseJobTemplate
+	}
+	return spec, nil
+}
+
+// UpdateDeploymentStatus updates the K8s PrefectDeployment status from a Prefect API Deployment
+func UpdateWorkPoolStatus(k8sWorkPool *prefectiov1.PrefectWorkPool, prefectWorkPool *WorkPool) {
+	k8sWorkPool.Status.Id = &prefectWorkPool.ID
+	k8sWorkPool.Status.Ready = prefectWorkPool.Status == "READY"
+}
