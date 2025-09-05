@@ -48,6 +48,12 @@ type PrefectClient interface {
 	CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error)
 	// GetFlowByName retrieves a flow by name
 	GetFlowByName(ctx context.Context, name string) (*Flow, error)
+	// CreateWorkPool creates a new work pool
+	CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*WorkPool, error)
+	// GetWorkPool retrieves a work pool by name
+	GetWorkPool(ctx context.Context, name string) (*WorkPool, error)
+	// UpdateWorkPool updates an existing work pool
+	UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error
 	// DeleteWorkPool deletes a work pool
 	DeleteWorkPool(ctx context.Context, id string) error
 }
@@ -214,6 +220,31 @@ type Flow struct {
 	Name    string            `json:"name"`
 	Tags    []string          `json:"tags"`
 	Labels  map[string]string `json:"labels"`
+}
+
+type WorkPoolSpec struct {
+	Name             string                 `json:"name,omitempty"`
+	Description      *string                `json:"description,omitempty"`
+	Type             string                 `json:"type,omitempty"`
+	BaseJobTemplate  map[string]interface{} `json:"base_job_template,omitempty"`
+	IsPaused         *bool                  `json:"is_paused,omitempty"`
+	ConcurrencyLimit *int                   `json:"concurrency_limit,omitempty"`
+	// StorageConfiguration map[string]interface{} `json:"storage_configuration,omitempty"`
+}
+
+type WorkPool struct {
+	ID               string                 `json:"id"`
+	Created          time.Time              `json:"created"`
+	Updated          time.Time              `json:"updated"`
+	Name             string                 `json:"name"`
+	Type             string                 `json:"type"`
+	Description      *string                `json:"description"`
+	BaseJobTemplate  map[string]interface{} `json:"base_job_template"`
+	IsPaused         bool                   `json:"is_paused"`
+	ConcurrencyLimit *int                   `json:"concurrency_limit"`
+	Status           string                 `json:"status"`
+	DefaultQueueID   *string                `json:"default_queue_id"`
+	// StorageConfiguration map[string]interface{} `json:"storage_configuration,omitempty"`
 }
 
 // CreateOrUpdateDeployment creates or updates a deployment using the Prefect API
@@ -491,6 +522,134 @@ func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) 
 
 	c.log.V(1).Info("Flow retrieved successfully", "flowName", name, "flowId", result.ID)
 	return &result, nil
+}
+
+// GetWorkPool retrieves a deployment by ID
+func (c *Client) GetWorkPool(ctx context.Context, name string) (*WorkPool, error) {
+	url := fmt.Sprintf("%s/work_pools/%s", c.BaseURL, name)
+	c.log.V(1).Info("Getting work pool", "url", url, "name", name)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result WorkPool
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	c.log.V(1).Info("Work pool retrieved successfully", "workPool", result.ID)
+	return &result, nil
+}
+
+func (c *Client) CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*WorkPool, error) {
+	url := fmt.Sprintf("%s/work_pools/", c.BaseURL)
+	c.log.V(1).Info("Creating or updating work pool", "url", url, "workPool", workPool.Name)
+
+	jsonData, err := json.Marshal(workPool)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal work pool: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result WorkPool
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	c.log.V(1).Info("Work pool created successfully", "workPoolID", result.ID)
+	return &result, nil
+}
+
+// UpdateWorkPool updates an existing work pool
+func (c *Client) UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error {
+	url := fmt.Sprintf("%s/work_pools/%s", c.BaseURL, name)
+	c.log.V(1).Info("Updating work pool", "url", url, "name", name)
+
+	jsonData, err := json.Marshal(workPool)
+	if err != nil {
+		return fmt.Errorf("failed to marshal work pool updates: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.Error(err, "failed to close response body")
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	c.log.V(1).Info("Work pool updated successfully", "name", workPool.Name)
+	return nil
 }
 
 // DeleteWorkPool deletes a work pool by ID
