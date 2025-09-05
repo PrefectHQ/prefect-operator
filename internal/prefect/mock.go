@@ -46,6 +46,7 @@ func NewMockClient() *MockClient {
 	return &MockClient{
 		deployments: make(map[string]*Deployment),
 		flows:       make(map[string]*Flow),
+		workPools:   make(map[string]*WorkPool),
 	}
 }
 
@@ -482,7 +483,7 @@ func (m *MockClient) GetWorkPool(ctx context.Context, name string) (*WorkPool, e
 
 	workPool, exists := m.workPools[name]
 	if !exists {
-		return nil, fmt.Errorf("work pool not found: %s", workPool.Name)
+		return nil, nil
 	}
 
 	// Return a copy to avoid race conditions
