@@ -52,10 +52,17 @@ type PrefectWorkPoolSpec struct {
 
 	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
+
+	// Base job template for flow runs on this Work Pool
+	BaseJobTemplate *RawValueSource `json:"baseJobTemplate,omitempty"`
 }
 
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
 type PrefectWorkPoolStatus struct {
+	// Id is the workPool ID from Prefect
+	// +optional
+	Id *string `json:"id,omitempty"`
+
 	// Version is the version of the Prefect Worker that is currently running
 	Version string `json:"version"`
 
@@ -64,6 +71,21 @@ type PrefectWorkPoolStatus struct {
 
 	// Ready is true if the work pool is ready to accept work
 	Ready bool `json:"ready"`
+
+	// SpecHash tracks changes to the spec to minimize API calls
+	SpecHash string `json:"specHash,omitempty"`
+
+	// LastSyncTime is the last time the workPool was synced with Prefect
+	// +optional
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+
+	// ObservedGeneration tracks the last processed generation
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// BaseJobTemplateVersion tracks the version of BaseJobTemplate ConfigMap, if any is defined
+	// +optional
+	BaseJobTemplateVersion string `json:"baseJobTemplateVersion,omitempty"`
 
 	// Conditions store the status conditions of the PrefectWorkPool instances
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`

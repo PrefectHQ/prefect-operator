@@ -4,6 +4,7 @@ go 1.24.2
 
 require (
 	dario.cat/mergo v1.0.2
+	github.com/evanphx/json-patch v0.5.2
 	github.com/go-logr/logr v1.4.3
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.25.2

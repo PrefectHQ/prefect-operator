@@ -62,6 +62,50 @@ spec:
           spec:
             description: PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
             properties:
+              baseJobTemplate:
+                description: Base job template for flow runs on this Work Pool
+                properties:
+                  configMap:
+                    description: Selects a key from a ConfigMap.
+                    properties:
+                      key:
+                        description: The key to select.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the ConfigMap or its key must
+                          be defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  patches:
+                    items:
+                      properties:
+                        op:
+                          type: string
+                        path:
+                          type: string
+                        value:
+                          x-kubernetes-preserve-unknown-fields: true
+                      required:
+                      - op
+                      - path
+                      type: object
+                    type: array
+                  value:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
               deploymentLabels:
                 additionalProperties:
                   type: string
@@ -1991,6 +2035,10 @@ spec:
           status:
             description: PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
             properties:
+              baseJobTemplateVersion:
+                description: BaseJobTemplateVersion tracks the version of BaseJobTemplate
+                  ConfigMap, if any is defined
+                type: string
               conditions:
                 description: Conditions store the status conditions of the PrefectWorkPool
                   instances
@@ -2049,6 +2097,18 @@ spec:
                   - type
                   type: object
                 type: array
+              id:
+                description: Id is the workPool ID from Prefect
+                type: string
+              lastSyncTime:
+                description: LastSyncTime is the last time the workPool was synced
+                  with Prefect
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration tracks the last processed generation
+                format: int64
+                type: integer
               ready:
                 description: Ready is true if the work pool is ready to accept work
                 type: boolean
@@ -2057,6 +2117,9 @@ spec:
                   ready
                 format: int32
                 type: integer
+              specHash:
+                description: SpecHash tracks changes to the spec to minimize API calls
+                type: string
               version:
                 description: Version is the version of the Prefect Worker that is
                   currently running

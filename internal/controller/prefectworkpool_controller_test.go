@@ -66,12 +66,13 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
+		mockClient = prefect.NewMockClient()
+
 		reconciler = &PrefectWorkPoolReconciler{
 			Client:        k8sClient,
 			Scheme:        k8sClient.Scheme(),
 			PrefectClient: mockClient,
 		}
-		mockClient = prefect.NewMockClient()
 	})
 
 	AfterEach(func() {
@@ -219,6 +220,20 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Expect(deploymentReconciled.Status).To(Equal(metav1.ConditionTrue))
 				Expect(deploymentReconciled.Reason).To(Equal("DeploymentCreated"))
 				Expect(deploymentReconciled.Message).To(Equal("Deployment was created"))
+			})
+
+			It("should have the Synced condition", func() {
+				syncedCondition := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, "Synced")
+				Expect(syncedCondition).NotTo(BeNil())
+				Expect(syncedCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(syncedCondition.Reason).To(Equal("SyncSuccessful"))
+			})
+
+			It("should have the Ready condition", func() {
+				readyCondition := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, "Ready")
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(readyCondition.Reason).To(Equal("WorkPoolReady"))
 			})
 		})
 
@@ -904,6 +919,41 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			err = k8sClient.Get(ctx, name, prefectWorkPool)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+	})
+
+	Context("When testing error scenarios", func() {
+		BeforeEach(func() {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: name.Namespace,
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{},
+			}
+		})
+
+		It("should handle sync errors from mock client", func() {
+			By("Configuring mock client to fail")
+			mockClient.ShouldFailCreate = true
+			mockClient.FailureMessage = "simulated Prefect API error"
+
+			By("Creating deployment")
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+			By("First reconcile - adding finalizer")
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should handle the error")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("simulated Prefect API error"))
+			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+
+			By("Resetting mock client")
+			mockClient.ShouldFailCreate = false
 		})
 	})
 })
