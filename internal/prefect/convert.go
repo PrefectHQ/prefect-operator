@@ -23,6 +23,7 @@ import (
 	"time"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	jsonpatch "github.com/evanphx/json-patch"
 )
 
 // ConvertToDeploymentSpec converts a K8s PrefectDeployment to a Prefect API DeploymentSpec
@@ -151,15 +152,15 @@ func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeplo
 }
 
 // ConvertToWorkPoolSpec converts a K8s PrefectWorkPool to a Prefect API WorkPool
-func ConvertToWorkPoolUpdateSpec(k8sWorkPool *prefectiov1.PrefectWorkPool) (*WorkPoolSpec, error) {
-	return convertToWorkPoolSpec(k8sWorkPool, true)
+func ConvertToWorkPoolUpdateSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient) (*WorkPoolSpec, error) {
+	return convertToWorkPoolSpec(ctx, k8sWorkPool, baseJobTemplate, client, true)
 }
 
-func ConvertToWorkPoolSpec(k8sWorkPool *prefectiov1.PrefectWorkPool) (*WorkPoolSpec, error) {
-	return convertToWorkPoolSpec(k8sWorkPool, false)
+func ConvertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient) (*WorkPoolSpec, error) {
+	return convertToWorkPoolSpec(ctx, k8sWorkPool, baseJobTemplate, client, false)
 }
 
-func convertToWorkPoolSpec(k8sWorkPool *prefectiov1.PrefectWorkPool, update bool) (*WorkPoolSpec, error) {
+func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient, update bool) (*WorkPoolSpec, error) {
 	spec := &WorkPoolSpec{}
 
 	workPool := k8sWorkPool.Spec
@@ -169,13 +170,71 @@ func convertToWorkPoolSpec(k8sWorkPool *prefectiov1.PrefectWorkPool, update bool
 		spec.Type = workPool.Type
 	}
 
-	if workPool.BaseJobTemplate != nil {
-		var baseJobTemplate map[string]interface{}
-		if err := json.Unmarshal(workPool.BaseJobTemplate.Raw, &baseJobTemplate); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal parameters: %w", err)
+	if baseJobTemplate == nil {
+		// if no template was passed, try to source it from the workpool spec
+		if workPool.BaseJobTemplate != nil && workPool.BaseJobTemplate.Value != nil {
+			baseJobTemplate = workPool.BaseJobTemplate.Value.Raw
+		} else {
+			// if no template was specified, retrieve the default template
+			metadata, err := client.GetWorkerMetadata(ctx)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve worker metadata: %w", err)
+			}
+
+			worker, exists := metadata[workPool.Type]
+
+			if !exists {
+				return nil, fmt.Errorf("worker type not found in worker metadata: %s", workPool.Type)
+			}
+
+			baseJobTemplate, err = json.Marshal(worker.DefaultBaseJobTemplate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal base job template: %w", err)
+			}
 		}
-		spec.BaseJobTemplate = baseJobTemplate
 	}
+
+	if workPool.BaseJobTemplate != nil && workPool.BaseJobTemplate.Patches != nil {
+		if baseJobTemplate == nil {
+			metadata, err := client.GetWorkerMetadata(ctx)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve worker metadata: %w", err)
+			}
+
+			worker, exists := metadata[workPool.Type]
+
+			if !exists {
+				return nil, fmt.Errorf("worker type not found in worker metadata: %s", workPool.Type)
+			}
+
+			baseJobTemplate, err = json.Marshal(worker.DefaultBaseJobTemplate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal base job template: %w", err)
+			}
+		}
+
+		patchSource, err := json.Marshal(workPool.BaseJobTemplate.Patches)
+		if err != nil {
+			return nil, fmt.Errorf("can't marshal job template patches: %w", err)
+		}
+
+		patch, err := jsonpatch.DecodePatch(patchSource)
+		if err != nil {
+			return nil, fmt.Errorf("can't decode RFC6902 patch: %s", err)
+		}
+
+		baseJobTemplate, err = patch.Apply(baseJobTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("job template patch failed: %w", err)
+		}
+	}
+
+	if err := json.Unmarshal(baseJobTemplate, &spec.BaseJobTemplate); err != nil {
+		return nil, fmt.Errorf("failed to marshal patched job template: %w", err)
+	}
+
 	return spec, nil
 }
 

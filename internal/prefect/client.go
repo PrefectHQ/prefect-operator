@@ -56,6 +56,8 @@ type PrefectClient interface {
 	UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error
 	// DeleteWorkPool deletes a work pool
 	DeleteWorkPool(ctx context.Context, id string) error
+	// GetWorkerMetadata retrieves aggregate metadata for all worker types
+	GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error)
 }
 
 // HTTPClient represents an HTTP client interface for testing
@@ -689,4 +691,66 @@ func (c *Client) DeleteWorkPool(ctx context.Context, name string) error {
 func (c *Client) isRunningInCluster() bool {
 	_, err := rest.InClusterConfig()
 	return err == nil
+}
+
+type WorkerMetadata struct {
+	Type                   string                 `json:"type"`
+	Description            string                 `json:"description"`
+	DisplayName            string                 `json:"display_name"`
+	DocumentationURL       string                 `json:"documentation_url"`
+	InstallCommand         string                 `json:"install_command"`
+	IsBeta                 bool                   `json:"is_beta"`
+	LogoURL                string                 `json:"logo_url"`
+	DefaultBaseJobTemplate map[string]interface{} `json:"default_base_job_configuration"`
+}
+
+// GetWorkerMetadata retrieves aggregate metadata for all worker types
+func (c *Client) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error) {
+	url := fmt.Sprintf("%s/collections/views/aggregate-worker-metadata", c.BaseURL)
+	c.log.V(1).Info("Getting aggregate worker metadata", "url", url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]map[string]WorkerMetadata
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	c.log.V(1).Info("Worker metadata retrieved successfully")
+
+	metadata := map[string]WorkerMetadata{}
+
+	for _, integration := range result {
+		for workerType, worker := range integration {
+			metadata[workerType] = worker
+		}
+	}
+
+	return metadata, nil
 }

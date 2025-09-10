@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -28,10 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
@@ -108,15 +112,25 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
+	var baseJobTemplateConfigMap corev1.ConfigMap
+
+	if workPool.Spec.BaseJobTemplate != nil && workPool.Spec.BaseJobTemplate.ConfigMap != nil {
+		configMapRef := workPool.Spec.BaseJobTemplate.ConfigMap
+		err := r.Get(ctx, types.NamespacedName{Name: configMapRef.Name, Namespace: workPool.Namespace}, &baseJobTemplateConfigMap)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	specHash, err := utils.Hash(workPool.Spec, 16)
 	if err != nil {
 		log.Error(err, "Failed to calculate spec hash", "workPool", workPool.Name)
 		return ctrl.Result{}, err
 	}
 
-	if r.needsSync(&workPool, specHash) {
+	if r.needsSync(&workPool, specHash, &baseJobTemplateConfigMap) {
 		log.Info("Starting sync with Prefect API", "deployment", workPool.Name)
-		err := r.syncWithPrefect(ctx, &workPool)
+		err := r.syncWithPrefect(ctx, &workPool, &baseJobTemplateConfigMap)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -221,7 +235,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkPool, currentSpecHash string) bool {
+func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkPool, currentSpecHash string, baseJobTemplateConfigMap *corev1.ConfigMap) bool {
 	if workPool.Status.Id == nil || *workPool.Status.Id == "" {
 		return true
 	}
@@ -234,6 +248,10 @@ func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkP
 		return true
 	}
 
+	if workPool.Status.BaseJobTemplateVersion != baseJobTemplateConfigMap.ResourceVersion {
+		return true
+	}
+
 	// Drift detection: sync if last sync was too long ago
 	if workPool.Status.LastSyncTime == nil {
 		return true
@@ -243,7 +261,7 @@ func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkP
 	return timeSinceLastSync > 10*time.Minute
 }
 
-func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPool *prefectiov1.PrefectWorkPool) error {
+func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPool *prefectiov1.PrefectWorkPool, baseJobTemplateConfigMap *corev1.ConfigMap) error {
 	name := workPool.Name
 	log := log.FromContext(ctx)
 
@@ -259,8 +277,21 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 		return err
 	}
 
+	var baseJobTemplate []byte
+
+	if baseJobTemplateConfigMap.Name != "" {
+		key := workPool.Spec.BaseJobTemplate.ConfigMap.Key
+
+		baseJobTemplateJson, exists := baseJobTemplateConfigMap.Data[key]
+		if !exists {
+			return fmt.Errorf("can't find key %s in ConfigMap %s", key, baseJobTemplateConfigMap.Name)
+		}
+
+		baseJobTemplate = []byte(baseJobTemplateJson)
+	}
+
 	if prefectWorkPool == nil {
-		workPoolSpec, err := prefect.ConvertToWorkPoolSpec(workPool)
+		workPoolSpec, err := prefect.ConvertToWorkPoolSpec(ctx, workPool, baseJobTemplate, prefectClient)
 		if err != nil {
 			log.Error(err, "Failed to convert work pool spec", "workPool", name)
 			r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
@@ -274,7 +305,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 			return err
 		}
 	} else {
-		workPoolSpec, err := prefect.ConvertToWorkPoolUpdateSpec(workPool)
+		workPoolSpec, err := prefect.ConvertToWorkPoolUpdateSpec(ctx, workPool, baseJobTemplate, prefectClient)
 		if err != nil {
 			log.Error(err, "Failed to convert work pool spec", "workPool", name)
 			r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
@@ -302,6 +333,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	workPool.Status.SpecHash = specHash
 	workPool.Status.ObservedGeneration = workPool.Generation
 	workPool.Status.LastSyncTime = &now
+	workPool.Status.BaseJobTemplateVersion = baseJobTemplateConfigMap.ResourceVersion
 
 	r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Work pool successfully synced with Prefect API")
 
@@ -384,10 +416,43 @@ func (r *PrefectWorkPoolReconciler) getPrefectClient(ctx context.Context, workPo
 	return prefectClient, nil
 }
 
+func (r *PrefectWorkPoolReconciler) mapConfigMapToWorkPools(ctx context.Context, obj client.Object) []reconcile.Request {
+	configMap, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return nil
+	}
+
+	workPools := &prefectiov1.PrefectWorkPoolList{}
+	if err := r.List(ctx, workPools, client.InNamespace(configMap.Namespace)); err != nil {
+		return nil
+	}
+
+	if len(workPools.Items) == 0 {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, workPool := range workPools.Items {
+		if workPool.Spec.BaseJobTemplate != nil &&
+			workPool.Spec.BaseJobTemplate.ConfigMap != nil &&
+			workPool.Spec.BaseJobTemplate.ConfigMap.Name == configMap.Name {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      workPool.Name,
+					Namespace: workPool.Namespace,
+				},
+			})
+		}
+	}
+
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PrefectWorkPoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&prefectiov1.PrefectWorkPool{}).
 		Owns(&appsv1.Deployment{}).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToWorkPools)).
 		Complete(r)
 }

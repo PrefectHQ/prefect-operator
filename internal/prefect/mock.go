@@ -512,7 +512,6 @@ func (m *MockClient) UpdateWorkPool(ctx context.Context, name string, workPool *
 	return nil
 }
 
-// DeleteWorkPool removes a work pool
 func (m *MockClient) DeleteWorkPool(ctx context.Context, name string) error {
 	if m.ShouldFailDelete {
 		return fmt.Errorf("mock error: %s", m.FailureMessage)
@@ -531,4 +530,16 @@ func (m *MockClient) copyWorkPool(w *WorkPool) *WorkPool {
 	}
 
 	return &copy
+}
+
+// TODO - implement when implementing unit tests
+func (m *MockClient) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error) {
+	return map[string]WorkerMetadata{
+		"": {
+			DefaultBaseJobTemplate: map[string]interface{}{},
+		},
+		"kubernetes": {
+			DefaultBaseJobTemplate: map[string]interface{}{},
+		},
+	}, nil
 }

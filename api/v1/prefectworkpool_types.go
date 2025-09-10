@@ -21,7 +21,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -55,7 +54,7 @@ type PrefectWorkPoolSpec struct {
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
 
 	// Base job template for flow runs on this Work Pool
-	BaseJobTemplate *runtime.RawExtension `json:"baseJobTemplate,omitempty"`
+	BaseJobTemplate *RawValueSource `json:"baseJobTemplate,omitempty"`
 }
 
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
@@ -83,6 +82,10 @@ type PrefectWorkPoolStatus struct {
 	// ObservedGeneration tracks the last processed generation
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// BaseJobTemplateVersion tracks the version of BaseJobTemplate ConfigMap, if any is defined
+	// +optional
+	BaseJobTemplateVersion string `json:"baseJobTemplateVersion,omitempty"`
 
 	// Conditions store the status conditions of the PrefectWorkPool instances
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
