@@ -532,14 +532,15 @@ func (m *MockClient) copyWorkPool(w *WorkPool) *WorkPool {
 	return &copy
 }
 
+var MockDefaultBaseJobTemplate = map[string]interface{}{
+	"foo":  "bar",
+	"quux": true,
+	"boz":  []interface{}{"baz", "bot", "biz"},
+}
+
 // TODO - implement when implementing unit tests
 func (m *MockClient) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error) {
 	return map[string]WorkerMetadata{
-		"": {
-			DefaultBaseJobTemplate: map[string]interface{}{},
-		},
-		"kubernetes": {
-			DefaultBaseJobTemplate: map[string]interface{}{},
-		},
+		"kubernetes": {DefaultBaseJobTemplate: MockDefaultBaseJobTemplate},
 	}, nil
 }
