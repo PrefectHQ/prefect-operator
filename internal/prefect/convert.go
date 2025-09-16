@@ -23,6 +23,7 @@ import (
 	"time"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	jsonpatch "github.com/evanphx/json-patch"
 )
 
 // ConvertToDeploymentSpec converts a K8s PrefectDeployment to a Prefect API DeploymentSpec
@@ -148,4 +149,84 @@ func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeplo
 		return "", fmt.Errorf("failed to create or get flow: %w", err)
 	}
 	return flow.ID, nil
+}
+
+// ConvertToWorkPoolSpec converts a K8s PrefectWorkPool to a Prefect API WorkPool
+func ConvertToWorkPoolUpdateSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient) (*WorkPoolSpec, error) {
+	return convertToWorkPoolSpec(ctx, k8sWorkPool, baseJobTemplate, client, true)
+}
+
+func ConvertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient) (*WorkPoolSpec, error) {
+	return convertToWorkPoolSpec(ctx, k8sWorkPool, baseJobTemplate, client, false)
+}
+
+func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient, update bool) (*WorkPoolSpec, error) {
+	spec := &WorkPoolSpec{}
+
+	workPool := k8sWorkPool.Spec
+
+	if !update {
+		spec.Name = k8sWorkPool.Name
+		spec.Type = workPool.Type
+	}
+
+	if baseJobTemplate == nil {
+		// if no template was passed, try to source it from the workpool spec
+		if workPool.BaseJobTemplate != nil && workPool.BaseJobTemplate.Value != nil {
+			baseJobTemplate = workPool.BaseJobTemplate.Value.Raw
+		} else {
+			// if no template was specified, retrieve the default template
+			metadata, err := client.GetWorkerMetadata(ctx)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve worker metadata: %w", err)
+			}
+
+			workPoolType := "kubernetes"
+
+			if workPool.Type != "" {
+				workPoolType = workPool.Type
+			}
+
+			worker, exists := metadata[workPoolType]
+
+			if !exists {
+				return nil, fmt.Errorf("worker type not found in worker metadata: %s", workPool.Type)
+			}
+
+			baseJobTemplate, err = json.Marshal(worker.DefaultBaseJobTemplate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal base job template: %w", err)
+			}
+		}
+	}
+
+	if workPool.BaseJobTemplate != nil && workPool.BaseJobTemplate.Patches != nil {
+		patchSource, err := json.Marshal(workPool.BaseJobTemplate.Patches)
+		if err != nil {
+			return nil, fmt.Errorf("can't marshal job template patches: %w", err)
+		}
+
+		patch, err := jsonpatch.DecodePatch(patchSource)
+		if err != nil {
+			return nil, fmt.Errorf("can't decode RFC6902 patch: %s", err)
+		}
+
+		baseJobTemplate, err = patch.Apply(baseJobTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("job template patch failed: %w", err)
+		}
+	}
+
+	if err := json.Unmarshal(baseJobTemplate, &spec.BaseJobTemplate); err != nil {
+		return nil, fmt.Errorf("failed to marshal patched job template: %w", err)
+	}
+
+	return spec, nil
+}
+
+// UpdateDeploymentStatus updates the K8s PrefectDeployment status from a Prefect API Deployment
+func UpdateWorkPoolStatus(k8sWorkPool *prefectiov1.PrefectWorkPool, prefectWorkPool *WorkPool) {
+	k8sWorkPool.Status.Id = &prefectWorkPool.ID
+	k8sWorkPool.Status.Ready = prefectWorkPool.Status == "READY"
 }

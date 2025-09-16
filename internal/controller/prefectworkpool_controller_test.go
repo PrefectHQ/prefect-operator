@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -42,13 +44,15 @@ import (
 
 var _ = Describe("PrefectWorkPool Controller", func() {
 	var (
-		ctx             context.Context
-		namespace       *corev1.Namespace
-		namespaceName   string
-		name            types.NamespacedName
-		prefectWorkPool *prefectiov1.PrefectWorkPool
-		reconciler      *PrefectWorkPoolReconciler
-		mockClient      *prefect.MockClient
+		ctx                 context.Context
+		namespace           *corev1.Namespace
+		namespaceName       string
+		name                types.NamespacedName
+		prefectWorkPool     *prefectiov1.PrefectWorkPool
+		reconciler          *PrefectWorkPoolReconciler
+		mockClient          *prefect.MockClient
+		baseJobTemplate     map[string]interface{}
+		baseJobTemplateJson []byte
 	)
 
 	BeforeEach(func() {
@@ -66,12 +70,22 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
+		mockClient = prefect.NewMockClient()
+
 		reconciler = &PrefectWorkPoolReconciler{
 			Client:        k8sClient,
 			Scheme:        k8sClient.Scheme(),
 			PrefectClient: mockClient,
 		}
-		mockClient = prefect.NewMockClient()
+
+		baseJobTemplate = map[string]interface{}{
+			"foo": "bar",
+			"baz": []interface{}{"qux", "quux"},
+		}
+
+		var err error
+		baseJobTemplateJson, err = json.Marshal(baseJobTemplate)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -187,8 +201,12 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 						"some":    "additional-label",
 						"another": "extra-label",
 					},
+					BaseJobTemplate: &prefectiov1.RawValueSource{},
 				},
 			}
+		})
+
+		JustBeforeEach(func() {
 			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
 
 			By("First reconciliation - adding finalizer")
@@ -219,6 +237,112 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Expect(deploymentReconciled.Status).To(Equal(metav1.ConditionTrue))
 				Expect(deploymentReconciled.Reason).To(Equal("DeploymentCreated"))
 				Expect(deploymentReconciled.Message).To(Equal("Deployment was created"))
+			})
+
+			It("should have the Synced condition", func() {
+				syncedCondition := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, "Synced")
+				Expect(syncedCondition).NotTo(BeNil())
+				Expect(syncedCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(syncedCondition.Reason).To(Equal("SyncSuccessful"))
+			})
+
+			It("should have the Ready condition", func() {
+				readyCondition := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, "Ready")
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(readyCondition.Reason).To(Equal("WorkPoolReady"))
+			})
+
+			It("should have the default base job template", func() {
+				workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(workPool.BaseJobTemplate).To(Equal(prefect.MockDefaultBaseJobTemplate))
+			})
+
+			Context("with inline job template", func() {
+				BeforeEach(func() {
+					prefectWorkPool.Spec.BaseJobTemplate.Value = &runtime.RawExtension{
+						Raw: baseJobTemplateJson,
+					}
+				})
+
+				It("should have the base job template defined in the work pool spec", func() {
+					workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(workPool.BaseJobTemplate).To(Equal(baseJobTemplate))
+				})
+			})
+
+			Context("with base job template ConfigMap", func() {
+				BeforeEach(func() {
+					configMap := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      name.Name,
+							Namespace: name.Namespace,
+						},
+						Data: map[string]string{
+							"baseJobTemplate.json": string(baseJobTemplateJson),
+						},
+					}
+
+					Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
+
+					prefectWorkPool.Spec.BaseJobTemplate.ConfigMap = &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: configMap.Name,
+						},
+						Key: "baseJobTemplate.json",
+					}
+				})
+
+				It("should have the base job template defined in the ConfigMap", func() {
+					workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(workPool.BaseJobTemplate).To(Equal(baseJobTemplate))
+				})
+
+			})
+
+			Context("with base job template patches", func() {
+				BeforeEach(func() {
+					raw, err := json.Marshal("xyzzy")
+					Expect(err).NotTo(HaveOccurred())
+
+					prefectWorkPool.Spec.BaseJobTemplate.Patches = []prefectiov1.JsonPatch{
+						{Operation: "add", Path: "/plugh", Value: &runtime.RawExtension{
+							Raw: raw,
+						}},
+					}
+				})
+
+				It("should properly apply base job template patches", func() {
+					workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+					Expect(err).NotTo(HaveOccurred())
+					patched := prefect.MockDefaultBaseJobTemplate
+					patched["plugh"] = "xyzzy"
+					Expect(workPool.BaseJobTemplate).To(Equal(patched))
+				})
+			})
+		})
+
+		Context("with base job template patches", func() {
+			BeforeEach(func() {
+				raw, err := json.Marshal("xyzzy")
+				Expect(err).NotTo(HaveOccurred())
+
+				prefectWorkPool.Spec.BaseJobTemplate.Patches = []prefectiov1.JsonPatch{
+					{Operation: "add", Path: "/plugh", Value: &runtime.RawExtension{
+						Raw: raw,
+					}},
+				}
+			})
+
+			It("should properly apply base job template patches", func() {
+				workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+				Expect(err).NotTo(HaveOccurred())
+				patched := prefect.MockDefaultBaseJobTemplate
+				patched["plugh"] = "xyzzy"
+				Expect(workPool.BaseJobTemplate).To(Equal(patched))
 			})
 		})
 
@@ -396,6 +520,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					Image: "extra-image",
 				},
 			}
+
 			Expect(k8sClient.Update(ctx, prefectWorkPool)).To(Succeed())
 
 			// Reconcile again to update the work pool
@@ -481,6 +606,19 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			Expect(k8sClient.Get(ctx, name, after)).To(Succeed())
 
 			Expect(after.Generation).To(Equal(before.Generation))
+			Expect(after).To(Equal(before))
+		})
+
+		It("should not change the prefect work pool if nothing has changed", func() {
+			before, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			after, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+			Expect(err).NotTo(HaveOccurred())
+
 			Expect(after).To(Equal(before))
 		})
 	})
@@ -904,6 +1042,41 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			err = k8sClient.Get(ctx, name, prefectWorkPool)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+	})
+
+	Context("When testing error scenarios", func() {
+		BeforeEach(func() {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: name.Namespace,
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{},
+			}
+		})
+
+		It("should handle sync errors from mock client", func() {
+			By("Configuring mock client to fail")
+			mockClient.ShouldFailCreate = true
+			mockClient.FailureMessage = "simulated Prefect API error"
+
+			By("Creating deployment")
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+			By("First reconcile - adding finalizer")
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			By("Second reconcile should handle the error")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("simulated Prefect API error"))
+			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+
+			By("Resetting mock client")
+			mockClient.ShouldFailCreate = false
 		})
 	})
 })

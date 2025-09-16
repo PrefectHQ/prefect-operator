@@ -30,6 +30,7 @@ type MockClient struct {
 	mu          sync.RWMutex
 	deployments map[string]*Deployment
 	flows       map[string]*Flow
+	workPools   map[string]*WorkPool
 
 	// Test configuration
 	ShouldFailCreate     bool
@@ -45,6 +46,7 @@ func NewMockClient() *MockClient {
 	return &MockClient{
 		deployments: make(map[string]*Deployment),
 		flows:       make(map[string]*Flow),
+		workPools:   make(map[string]*WorkPool),
 	}
 }
 
@@ -434,10 +436,111 @@ func (m *MockClient) copyFlow(f *Flow) *Flow {
 	return &copy
 }
 
-// DeleteWorkPool removes a work pool
+func (m *MockClient) CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*WorkPool, error) {
+	if m.ShouldFailCreate {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+
+	_, exists := m.workPools[workPool.Name]
+	if exists {
+		return nil, fmt.Errorf("work pool already exists: %s", workPool.Name)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+
+	newWorkPool := &WorkPool{
+		ID:               uuid.New().String(),
+		Created:          now,
+		Updated:          now,
+		Name:             workPool.Name,
+		Type:             workPool.Type,
+		Description:      workPool.Description,
+		BaseJobTemplate:  workPool.BaseJobTemplate,
+		IsPaused:         workPool.IsPaused != nil && *workPool.IsPaused,
+		ConcurrencyLimit: workPool.ConcurrencyLimit,
+		Status:           "READY", // Default status
+		DefaultQueueID:   nil,
+	}
+
+	if newWorkPool.BaseJobTemplate == nil {
+		newWorkPool.BaseJobTemplate = make(map[string]interface{})
+	}
+
+	m.workPools[newWorkPool.Name] = newWorkPool
+	return newWorkPool, nil
+}
+
+func (m *MockClient) GetWorkPool(ctx context.Context, name string) (*WorkPool, error) {
+	if m.ShouldFailGet {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	workPool, exists := m.workPools[name]
+	if !exists {
+		return nil, nil
+	}
+
+	// Return a copy to avoid race conditions
+	return m.copyWorkPool(workPool), nil
+}
+
+func (m *MockClient) UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error {
+	if m.ShouldFailUpdate {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	existing, ok := m.workPools[name]
+	if !ok {
+		return fmt.Errorf("work pool not found")
+	}
+
+	existing.Updated = time.Now()
+	existing.Description = workPool.Description
+	existing.IsPaused = *workPool.IsPaused
+	existing.BaseJobTemplate = workPool.BaseJobTemplate
+	existing.ConcurrencyLimit = workPool.ConcurrencyLimit
+
+	return nil
+}
+
 func (m *MockClient) DeleteWorkPool(ctx context.Context, name string) error {
 	if m.ShouldFailDelete {
 		return fmt.Errorf("mock error: %s", m.FailureMessage)
 	}
 	return nil
+}
+
+func (m *MockClient) copyWorkPool(w *WorkPool) *WorkPool {
+	copy := *w
+
+	if w.BaseJobTemplate != nil {
+		copy.BaseJobTemplate = make(map[string]interface{})
+		for k, v := range w.BaseJobTemplate {
+			copy.BaseJobTemplate[k] = v
+		}
+	}
+
+	return &copy
+}
+
+var MockDefaultBaseJobTemplate = map[string]interface{}{
+	"foo":  "bar",
+	"quux": true,
+	"boz":  []interface{}{"baz", "bot", "biz"},
+}
+
+// TODO - implement when implementing unit tests
+func (m *MockClient) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error) {
+	return map[string]WorkerMetadata{
+		"kubernetes": {DefaultBaseJobTemplate: MockDefaultBaseJobTemplate},
+	}, nil
 }
