@@ -182,7 +182,13 @@ func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.Prefect
 				return nil, fmt.Errorf("failed to retrieve worker metadata: %w", err)
 			}
 
-			worker, exists := metadata[workPool.Type]
+			workPoolType := "kubernetes"
+
+			if workPool.Type != "" {
+				workPoolType = workPool.Type
+			}
+
+			worker, exists := metadata[workPoolType]
 
 			if !exists {
 				return nil, fmt.Errorf("worker type not found in worker metadata: %s", workPool.Type)
@@ -196,25 +202,6 @@ func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.Prefect
 	}
 
 	if workPool.BaseJobTemplate != nil && workPool.BaseJobTemplate.Patches != nil {
-		if baseJobTemplate == nil {
-			metadata, err := client.GetWorkerMetadata(ctx)
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve worker metadata: %w", err)
-			}
-
-			worker, exists := metadata[workPool.Type]
-
-			if !exists {
-				return nil, fmt.Errorf("worker type not found in worker metadata: %s", workPool.Type)
-			}
-
-			baseJobTemplate, err = json.Marshal(worker.DefaultBaseJobTemplate)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal base job template: %w", err)
-			}
-		}
-
 		patchSource, err := json.Marshal(workPool.BaseJobTemplate.Patches)
 		if err != nil {
 			return nil, fmt.Errorf("can't marshal job template patches: %w", err)
