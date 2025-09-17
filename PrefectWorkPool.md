@@ -84,6 +84,13 @@ PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
         </tr>
     </thead>
     <tbody><tr>
+        <td><b><a href="#prefectworkpoolspecbasejobtemplate">baseJobTemplate</a></b></td>
+        <td>object</td>
+        <td>
+          Base job template for flow runs in the Work Pool<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>deploymentLabels</b></td>
         <td>map[string]string</td>
         <td>
@@ -146,6 +153,139 @@ PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
           Workers defines the number of workers to run in the Work Pool<br/>
           <br/>
             <i>Format</i>: int32<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.baseJobTemplate
+<sup><sup>[↩ Parent](#prefectworkpoolspec)</sup></sup>
+
+
+
+Base job template for flow runs in the Work Pool
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b><a href="#prefectworkpoolspecbasejobtemplateconfigmap">configMap</a></b></td>
+        <td>object</td>
+        <td>
+          A reference to a ConfigMap key containing a value encoded as a JSON string.
+This field is mutually exclusive with `value`, and is effectively required if `value` is not defined.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectworkpoolspecbasejobtemplatepatchesindex">patches</a></b></td>
+        <td>[]object</td>
+        <td>
+          A list of RFC-6902 JSON patches to apply to this value.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>value</b></td>
+        <td>object</td>
+        <td>
+          An inline value object.
+This field is mutually exclusive with `configMap`, and is effectively required if `configMap` is not defined.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.baseJobTemplate.configMap
+<sup><sup>[↩ Parent](#prefectworkpoolspecbasejobtemplate)</sup></sup>
+
+
+
+A reference to a ConfigMap key containing a value encoded as a JSON string.
+This field is mutually exclusive with `value`, and is effectively required if `value` is not defined.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          The key to select.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Name of the referent.
+This field is effectively required, but due to backwards compatibility is
+allowed to be empty. Instances of this type with an empty value here are
+almost certainly wrong.
+More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names<br/>
+          <br/>
+            <i>Default</i>: <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>optional</b></td>
+        <td>boolean</td>
+        <td>
+          Specify whether the ConfigMap or its key must be defined<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.baseJobTemplate.patches[index]
+<sup><sup>[↩ Parent](#prefectworkpoolspecbasejobtemplate)</sup></sup>
+
+
+
+An [RFC-6902](https://datatracker.ietf.org/doc/html/rfc6902) JSON patch
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>op</b></td>
+        <td>string</td>
+        <td>
+          A JSON patch operation<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>path</b></td>
+        <td>string</td>
+        <td>
+          A string containing an RFC-6901] value that references a location within
+the target document where the operation will be performed<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>value</b></td>
+        <td>JSON</td>
+        <td>
+          Value to be added/edited by the patch operation<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -218,8 +358,8 @@ Cannot be updated.<br/>
         <td>[]object</td>
         <td>
           List of sources to populate environment variables in the container.
-The keys defined within a source must be a C_IDENTIFIER. All invalid keys
-will be reported as an event when the container is starting. When a key exists in multiple
+The keys defined within a source may consist of any printable ASCII characters except '='.
+When a key exists in multiple
 sources, the value associated with the last source will take precedence.
 Values defined by an Env with a duplicate key will take precedence.
 Cannot be updated.<br/>
@@ -308,10 +448,10 @@ More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-co
         <td>string</td>
         <td>
           RestartPolicy defines the restart behavior of individual containers in a pod.
-This field may only be set for init containers, and the only allowed value is "Always".
-For non-init containers or when this field is not specified,
+This overrides the pod-level restart policy. When this field is not specified,
 the restart behavior is defined by the Pod's restart policy and the container type.
-Setting the RestartPolicy as "Always" for the init container will have the following effect:
+Additionally, setting the RestartPolicy as "Always" for the init container will
+have the following effect:
 this init container will be continually restarted on
 exit until all regular containers have terminated. Once all regular
 containers have completed, all init containers with restartPolicy "Always"
@@ -322,6 +462,23 @@ for the container to complete before proceeding to the next init
 container. Instead, the next init container starts immediately after this
 init container is started, or after any startupProbe has successfully
 completed.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectworkpoolspecextracontainersindexrestartpolicyrulesindex">restartPolicyRules</a></b></td>
+        <td>[]object</td>
+        <td>
+          Represents a list of rules to be checked to determine if the
+container should be restarted on exit. The rules are evaluated in
+order. Once a rule matches a container exit condition, the remaining
+rules are ignored. If no rule matches the container exit condition,
+the Container-level restart policy determines the whether the container
+is restarted or not. Constraints on the rules:
+- At most 20 rules are allowed.
+- Rules can have the same action.
+- Identical rules are not forbidden in validations.
+When rules are specified, container MUST set RestartPolicy explicitly
+even it if matches the Pod's RestartPolicy.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -451,7 +608,8 @@ EnvVar represents an environment variable present in a Container.
         <td><b>name</b></td>
         <td>string</td>
         <td>
-          Name of the environment variable. Must be a C_IDENTIFIER.<br/>
+          Name of the environment variable.
+May consist of any printable ASCII characters except '='.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -509,6 +667,14 @@ Source for the environment variable's value. Cannot be used if value is not empt
         <td>
           Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
 spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectworkpoolspecextracontainersindexenvindexvaluefromfilekeyref">fileKeyRef</a></b></td>
+        <td>object</td>
+        <td>
+          FileKeyRef selects a key of the env file.
+Requires the EnvFiles feature gate to be enabled.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -606,6 +772,66 @@ spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podI
         <td>string</td>
         <td>
           Version of the schema the FieldPath is written in terms of, defaults to "v1".<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.extraContainers[index].env[index].valueFrom.fileKeyRef
+<sup><sup>[↩ Parent](#prefectworkpoolspecextracontainersindexenvindexvaluefrom)</sup></sup>
+
+
+
+FileKeyRef selects a key of the env file.
+Requires the EnvFiles feature gate to be enabled.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          The key within the env file. An invalid key will prevent the pod from starting.
+The keys defined within a source may consist of any printable ASCII characters except '='.
+During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>path</b></td>
+        <td>string</td>
+        <td>
+          The path within the volume from which to select the file.
+Must be relative and may not contain the '..' path or start with '..'.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>volumeName</b></td>
+        <td>string</td>
+        <td>
+          The name of the volume mount containing the env file.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>optional</b></td>
+        <td>boolean</td>
+        <td>
+          Specify whether the file or its key must be defined. If the file or key
+does not exist, then the env var is not published.
+If optional is set to true and the specified key does not exist,
+the environment variable will not be set in the Pod's containers.
+
+If optional is set to false and the specified key does not exist,
+an error will be returned during Pod creation.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -728,7 +954,8 @@ EnvFromSource represents the source of a set of ConfigMaps or Secrets
         <td><b>prefix</b></td>
         <td>string</td>
         <td>
-          Optional text to prepend to the name of each environment variable. Must be a C_IDENTIFIER.<br/>
+          Optional text to prepend to the name of each environment variable.
+May consist of any printable ASCII characters except '='.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -2145,7 +2372,7 @@ More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-co
           Claims lists the names of resources, defined in spec.resourceClaims,
 that are used by this container.
 
-This is an alpha field and requires enabling the
+This field depends on the
 DynamicResourceAllocation feature gate.
 
 This field is immutable. It can only be set for containers.<br/>
@@ -2205,6 +2432,82 @@ inside a container.<br/>
           Request is the name chosen for a request in the referenced claim.
 If empty, everything from the claim is made available, otherwise
 only the result of this request.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.extraContainers[index].restartPolicyRules[index]
+<sup><sup>[↩ Parent](#prefectworkpoolspecextracontainersindex)</sup></sup>
+
+
+
+ContainerRestartRule describes how a container exit is handled.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>action</b></td>
+        <td>string</td>
+        <td>
+          Specifies the action taken on a container exit if the requirements
+are satisfied. The only possible value is "Restart" to restart the
+container.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b><a href="#prefectworkpoolspecextracontainersindexrestartpolicyrulesindexexitcodes">exitCodes</a></b></td>
+        <td>object</td>
+        <td>
+          Represents the exit codes to check on container exits.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.extraContainers[index].restartPolicyRules[index].exitCodes
+<sup><sup>[↩ Parent](#prefectworkpoolspecextracontainersindexrestartpolicyrulesindex)</sup></sup>
+
+
+
+Represents the exit codes to check on container exits.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>operator</b></td>
+        <td>string</td>
+        <td>
+          Represents the relationship between the container exit code(s) and the
+specified values. Possible values are:
+- In: the requirement is satisfied if the container exit code is in the
+  set of specified values.
+- NotIn: the requirement is satisfied if the container exit code is
+  not in the set of specified values.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>values</b></td>
+        <td>[]integer</td>
+        <td>
+          Specifies the set of values to check for container exit codes.
+At most 255 elements are allowed.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -3075,7 +3378,7 @@ Resources defines the CPU and memory resources for each worker in the Work Pool
           Claims lists the names of resources, defined in spec.resourceClaims,
 that are used by this container.
 
-This is an alpha field and requires enabling the
+This field depends on the
 DynamicResourceAllocation feature gate.
 
 This field is immutable. It can only be set for containers.<br/>
@@ -3269,6 +3572,14 @@ spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podI
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#prefectworkpoolspecserverapikeyvaluefromfilekeyref">fileKeyRef</a></b></td>
+        <td>object</td>
+        <td>
+          FileKeyRef selects a key of the env file.
+Requires the EnvFiles feature gate to be enabled.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectworkpoolspecserverapikeyvaluefromresourcefieldref">resourceFieldRef</a></b></td>
         <td>object</td>
         <td>
@@ -3363,6 +3674,66 @@ spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podI
         <td>string</td>
         <td>
           Version of the schema the FieldPath is written in terms of, defaults to "v1".<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.server.apiKey.valueFrom.fileKeyRef
+<sup><sup>[↩ Parent](#prefectworkpoolspecserverapikeyvaluefrom)</sup></sup>
+
+
+
+FileKeyRef selects a key of the env file.
+Requires the EnvFiles feature gate to be enabled.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          The key within the env file. An invalid key will prevent the pod from starting.
+The keys defined within a source may consist of any printable ASCII characters except '='.
+During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>path</b></td>
+        <td>string</td>
+        <td>
+          The path within the volume from which to select the file.
+Must be relative and may not contain the '..' path or start with '..'.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>volumeName</b></td>
+        <td>string</td>
+        <td>
+          The name of the volume mount containing the env file.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>optional</b></td>
+        <td>boolean</td>
+        <td>
+          Specify whether the file or its key must be defined. If the file or key
+does not exist, then the env var is not published.
+If optional is set to true and the specified key does not exist,
+the environment variable will not be set in the Pod's containers.
+
+If optional is set to false and the specified key does not exist,
+an error will be returned during Pod creation.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -3478,7 +3849,8 @@ EnvVar represents an environment variable present in a Container.
         <td><b>name</b></td>
         <td>string</td>
         <td>
-          Name of the environment variable. Must be a C_IDENTIFIER.<br/>
+          Name of the environment variable.
+May consist of any printable ASCII characters except '='.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -3536,6 +3908,14 @@ Source for the environment variable's value. Cannot be used if value is not empt
         <td>
           Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
 spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectworkpoolspecsettingsindexvaluefromfilekeyref">fileKeyRef</a></b></td>
+        <td>object</td>
+        <td>
+          FileKeyRef selects a key of the env file.
+Requires the EnvFiles feature gate to be enabled.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -3633,6 +4013,66 @@ spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podI
         <td>string</td>
         <td>
           Version of the schema the FieldPath is written in terms of, defaults to "v1".<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.settings[index].valueFrom.fileKeyRef
+<sup><sup>[↩ Parent](#prefectworkpoolspecsettingsindexvaluefrom)</sup></sup>
+
+
+
+FileKeyRef selects a key of the env file.
+Requires the EnvFiles feature gate to be enabled.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          The key within the env file. An invalid key will prevent the pod from starting.
+The keys defined within a source may consist of any printable ASCII characters except '='.
+During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>path</b></td>
+        <td>string</td>
+        <td>
+          The path within the volume from which to select the file.
+Must be relative and may not contain the '..' path or start with '..'.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>volumeName</b></td>
+        <td>string</td>
+        <td>
+          The name of the volume mount containing the env file.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>optional</b></td>
+        <td>boolean</td>
+        <td>
+          Specify whether the file or its key must be defined. If the file or key
+does not exist, then the env var is not published.
+If optional is set to true and the specified key does not exist,
+the environment variable will not be set in the Pod's containers.
+
+If optional is set to false and the specified key does not exist,
+an error will be returned during Pod creation.<br/>
+          <br/>
+            <i>Default</i>: false<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -3768,10 +4208,49 @@ PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>baseJobTemplateVersion</b></td>
+        <td>string</td>
+        <td>
+          BaseJobTemplateVersion tracks the version of BaseJobTemplate ConfigMap, if any is defined<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectworkpoolstatusconditionsindex">conditions</a></b></td>
         <td>[]object</td>
         <td>
           Conditions store the status conditions of the PrefectWorkPool instances<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>id</b></td>
+        <td>string</td>
+        <td>
+          Id is the workPool ID from Prefect<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>lastSyncTime</b></td>
+        <td>string</td>
+        <td>
+          LastSyncTime is the last time the workPool was synced with Prefect<br/>
+          <br/>
+            <i>Format</i>: date-time<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>observedGeneration</b></td>
+        <td>integer</td>
+        <td>
+          ObservedGeneration tracks the last processed generation<br/>
+          <br/>
+            <i>Format</i>: int64<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>specHash</b></td>
+        <td>string</td>
+        <td>
+          SpecHash tracks changes to the spec to minimize API calls<br/>
         </td>
         <td>false</td>
       </tr></tbody>
