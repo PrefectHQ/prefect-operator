@@ -63,10 +63,12 @@ spec:
             description: PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
             properties:
               baseJobTemplate:
-                description: Base job template for flow runs on this Work Pool
+                description: Base job template for flow runs in the Work Pool
                 properties:
                   configMap:
-                    description: Selects a key from a ConfigMap.
+                    description: |-
+                      A reference to a ConfigMap key containing a value encoded as a JSON string.
+                      This field is mutually exclusive with `value`, and is effectively required if `value` is not defined.
                     properties:
                       key:
                         description: The key to select.
@@ -89,13 +91,22 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   patches:
+                    description: A list of RFC-6902 JSON patches to apply to this
+                      value.
                     items:
+                      description: An [RFC-6902](https://datatracker.ietf.org/doc/html/rfc6902)
+                        JSON patch
                       properties:
                         op:
+                          description: A JSON patch operation
                           type: string
                         path:
+                          description: |-
+                            A string containing an RFC-6901] value that references a location within
+                            the target document where the operation will be performed
                           type: string
                         value:
+                          description: Value to be added/edited by the patch operation
                           x-kubernetes-preserve-unknown-fields: true
                       required:
                       - op
@@ -103,6 +114,9 @@ spec:
                       type: object
                     type: array
                   value:
+                    description: |-
+                      An inline value object.
+                      This field is mutually exclusive with `configMap`, and is effectively required if `configMap` is not defined.
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                 type: object

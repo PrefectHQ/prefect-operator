@@ -53,7 +53,7 @@ type PrefectWorkPoolSpec struct {
 	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
 
-	// Base job template for flow runs on this Work Pool
+	// Base job template for flow runs in the Work Pool
 	BaseJobTemplate *RawValueSource `json:"baseJobTemplate,omitempty"`
 }
 
