@@ -101,6 +101,60 @@ that for many testing scenarios, we can't assume that the operator is running
 in the same cluster it is operating on. Use port-forwarding where appropriate
 to support these cases.
 
+### Local Testing
+
+For local testing and development, first start a local Kubernetes cluster:
+
+```bash
+minikube start  # Start local Kubernetes cluster (if minikube is available)
+```
+
+Then run the operator locally:
+
+```bash
+make install run  # Install CRDs and run operator locally (long-running process)
+```
+
+This command should be run in a background shell as it's a long-lived process that watches and reconciles Prefect resources. The operator will:
+- Install/update CRDs to the cluster
+- Start the controller manager locally
+- Watch for changes to PrefectServer, PrefectWorkPool, and PrefectDeployment resources
+- Use port-forwarding to connect to in-cluster Prefect servers when needed
+
+#### Testing with Sample Resources
+
+Apply sample resources from `deploy/samples/` to test different scenarios:
+
+```bash
+# Apply a complete end-to-end example with all schedule types
+kubectl apply -f deploy/samples/deployment_end-to-end.yaml
+
+# Or test individual components
+kubectl apply -f deploy/samples/v1_prefectserver_ephemeral.yaml
+kubectl apply -f deploy/samples/v1_prefectworkpool_kubernetes.yaml
+
+# List available sample configurations
+ls deploy/samples/
+```
+
+#### Accessing the Prefect API
+
+When testing with in-cluster Prefect servers, you can port-forward to access the API directly:
+
+```bash
+kubectl port-forward svc/prefect-ephemeral 4200:4200
+# Prefect API now available at http://localhost:4200/api
+```
+
+This allows you to inspect deployments, schedules, and other resources created by the operator:
+```bash
+# View all deployments
+curl -X POST http://localhost:4200/api/deployments/filter -H "Content-Type: application/json" -d '{}'
+
+# View deployment schedules
+curl -X POST http://localhost:4200/api/deployments/filter -H "Content-Type: application/json" -d '{}' | jq '.[] | {name, schedules}'
+```
+
 ### Code Generation Workflow
 
 The operator uses controller-gen for:

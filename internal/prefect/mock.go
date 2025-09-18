@@ -134,7 +134,7 @@ func (m *MockClient) CreateOrUpdateDeployment(ctx context.Context, deployment *D
 		newDeployment.JobVariables = make(map[string]interface{})
 	}
 	if newDeployment.Schedules == nil {
-		newDeployment.Schedules = []Schedule{}
+		newDeployment.Schedules = []DeploymentSchedule{}
 	}
 	if newDeployment.GlobalConcurrencyLimits == nil {
 		newDeployment.GlobalConcurrencyLimits = []string{}
@@ -310,7 +310,7 @@ func (m *MockClient) copyDeployment(d *Deployment) *Deployment {
 	}
 
 	if d.Schedules != nil {
-		copy.Schedules = make([]Schedule, len(d.Schedules))
+		copy.Schedules = make([]DeploymentSchedule, len(d.Schedules))
 		for i, schedule := range d.Schedules {
 			copy.Schedules[i] = schedule
 		}

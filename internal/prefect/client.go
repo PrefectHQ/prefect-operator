@@ -32,6 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// isSuccessStatusCode returns true if the HTTP status code indicates success (2xx range)
+func isSuccessStatusCode(statusCode int) bool {
+	return 200 <= statusCode && statusCode < 300
+}
+
 // PrefectClient defines the interface for interacting with the Prefect API
 type PrefectClient interface {
 	// CreateOrUpdateDeployment creates a new deployment or updates an existing one
@@ -161,7 +166,7 @@ type DeploymentSpec struct {
 	WorkQueueName           *string                  `json:"work_queue_name,omitempty"`
 	WorkPoolName            *string                  `json:"work_pool_name,omitempty"`
 	Paused                  *bool                    `json:"paused,omitempty"`
-	Schedules               []Schedule               `json:"schedules,omitempty"`
+	Schedules               []DeploymentSchedule     `json:"schedules,omitempty"`
 	ConcurrencyLimit        *int                     `json:"concurrency_limit,omitempty"`
 	GlobalConcurrencyLimits []string                 `json:"global_concurrency_limits,omitempty"`
 	Entrypoint              *string                  `json:"entrypoint,omitempty"`
@@ -187,7 +192,7 @@ type Deployment struct {
 	WorkQueueName           *string                  `json:"work_queue_name"`
 	WorkPoolName            *string                  `json:"work_pool_name"`
 	Status                  string                   `json:"status"`
-	Schedules               []Schedule               `json:"schedules"`
+	Schedules               []DeploymentSchedule     `json:"schedules"`
 	ConcurrencyLimit        *int                     `json:"concurrency_limit"`
 	GlobalConcurrencyLimits []string                 `json:"global_concurrency_limits"`
 	Entrypoint              *string                  `json:"entrypoint"`
@@ -197,14 +202,56 @@ type Deployment struct {
 	EnforceParameterSchema  bool                     `json:"enforce_parameter_schema"`
 }
 
-// Schedule represents a deployment schedule
+// Schedule represents a Prefect deployment schedule.
+// Supports interval, cron, and rrule schedule types.
+// Exactly one of Interval, Cron, or RRule should be specified.
 type Schedule struct {
-	ID               string     `json:"id,omitempty"`
-	Interval         *int       `json:"interval,omitempty"`
-	AnchorDate       *time.Time `json:"anchor_date,omitempty"`
-	Timezone         *string    `json:"timezone,omitempty"`
-	Active           *bool      `json:"active,omitempty"`
-	MaxScheduledRuns *int       `json:"max_scheduled_runs,omitempty"`
+	ID string `json:"id,omitempty"`
+
+	// === INTERVAL SCHEDULE FIELDS ===
+	// Maps to: IntervalSchedule schema in Prefect API
+	Interval   *float64   `json:"interval,omitempty"`    // seconds (required for interval)
+	AnchorDate *time.Time `json:"anchor_date,omitempty"` // anchor date for interval schedules
+
+	// === CRON SCHEDULE FIELDS ===
+	// Maps to: CronSchedule schema in Prefect API
+	Cron  *string `json:"cron,omitempty"`   // cron expression (required for cron)
+	DayOr *bool   `json:"day_or,omitempty"` // day/day_of_week connection logic
+
+	// === RRULE SCHEDULE FIELDS ===
+	// Maps to: RRuleSchedule schema in Prefect API
+	RRule *string `json:"rrule,omitempty"` // RFC 5545 RRULE string (required for rrule)
+
+	// === COMMON FIELDS ===
+	// Shared across all schedule types
+	Timezone         *string `json:"timezone,omitempty"`
+	Active           *bool   `json:"active,omitempty"`
+	MaxScheduledRuns *int    `json:"max_scheduled_runs,omitempty"`
+}
+
+// DeploymentSchedule represents a deployment schedule in the Prefect API.
+// This matches the DeploymentScheduleCreate schema which wraps the schedule object.
+type DeploymentSchedule struct {
+	// Slug is a unique identifier for the schedule
+	Slug *string `json:"slug,omitempty"`
+
+	// Schedule contains the actual schedule configuration (interval, cron, or rrule)
+	Schedule Schedule `json:"schedule"`
+
+	// Active indicates if the schedule is active
+	Active *bool `json:"active,omitempty"`
+
+	// MaxScheduledRuns limits the number of scheduled runs
+	MaxScheduledRuns *int `json:"max_scheduled_runs,omitempty"`
+
+	// MaxActiveRuns limits the number of active runs
+	MaxActiveRuns *int `json:"max_active_runs,omitempty"`
+
+	// Catchup indicates if the worker should catch up on late runs
+	Catchup *bool `json:"catchup,omitempty"`
+
+	// Parameters are schedule-specific parameters
+	Parameters map[string]interface{} `json:"parameters,omitempty"`
 }
 
 // FlowSpec represents the request payload for creating flows
@@ -280,7 +327,7 @@ func (c *Client) CreateOrUpdateDeployment(ctx context.Context, deployment *Deplo
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -318,7 +365,7 @@ func (c *Client) GetDeployment(ctx context.Context, id string) (*Deployment, err
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -374,7 +421,7 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -412,7 +459,7 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -466,7 +513,7 @@ func (c *Client) CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, er
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -513,7 +560,7 @@ func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) 
 		return nil, nil // Flow doesn't exist
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -555,7 +602,7 @@ func (c *Client) GetWorkPool(ctx context.Context, name string) (*WorkPool, error
 		return nil, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -598,7 +645,7 @@ func (c *Client) CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*W
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusCreated {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -646,7 +693,7 @@ func (c *Client) UpdateWorkPool(ctx context.Context, name string, workPool *Work
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusNoContent {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -679,7 +726,7 @@ func (c *Client) DeleteWorkPool(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -733,7 +780,7 @@ func (c *Client) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetada
 		return nil, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 

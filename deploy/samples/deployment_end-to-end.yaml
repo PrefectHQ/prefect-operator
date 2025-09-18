@@ -44,3 +44,21 @@ spec:
           type: string
       required: []
       definitions: {}
+    schedules:
+      # Interval schedule - every minute (60 seconds)
+      - slug: "every-minute-interval"
+        interval: 60
+        timezone: "UTC"
+        active: true
+
+      # Cron schedule - every minute using cron syntax
+      - slug: "every-minute-cron"
+        cron: "* * * * *"
+        timezone: "UTC"
+        active: true
+
+      # RRule schedule - every minute using RFC 5545 RRULE
+      - slug: "every-minute-rrule"
+        rrule: "RRULE:FREQ=MINUTELY;INTERVAL=1"
+        timezone: "UTC"
+        active: true
