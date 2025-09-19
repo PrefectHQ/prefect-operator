@@ -17,8 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"strings"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -136,13 +134,9 @@ func (s *PrefectWorkPool) Image() string {
 }
 
 func (s *PrefectWorkPool) EntrypointArguments() []string {
-	workPoolName := s.Name
-	if strings.HasPrefix(workPoolName, "prefect") {
-		workPoolName = "pool-" + workPoolName
-	}
 	return []string{
 		"prefect", "worker", "start",
-		"--pool", workPoolName, "--type", s.Spec.Type,
+		"--pool", s.Name, "--type", s.Spec.Type,
 		"--with-healthcheck",
 	}
 }
