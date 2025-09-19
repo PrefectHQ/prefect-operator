@@ -173,7 +173,8 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 func UpdateDeploymentStatus(k8sDeployment *prefectiov1.PrefectDeployment, prefectDeployment *Deployment) {
 	k8sDeployment.Status.Id = &prefectDeployment.ID
 	k8sDeployment.Status.FlowId = &prefectDeployment.FlowID
-	k8sDeployment.Status.Ready = prefectDeployment.Status == "READY"
+	// Set Ready=true when we successfully sync to Prefect API, regardless of Prefect's internal status
+	k8sDeployment.Status.Ready = true
 }
 
 // GetFlowIDFromDeployment extracts or generates a flow ID for the deployment

@@ -52,6 +52,9 @@ const (
 
 	// PrefectDeploymentConditionSynced indicates the deployment is synced with Prefect API
 	PrefectWorkPoolConditionSynced = "Synced"
+
+	// PrefectWorkPoolConditionServerAvailable indicates the Prefect server is available
+	PrefectWorkPoolConditionServerAvailable = "ServerAvailable"
 )
 
 // PrefectWorkPoolReconciler reconciles a PrefectWorkPool object

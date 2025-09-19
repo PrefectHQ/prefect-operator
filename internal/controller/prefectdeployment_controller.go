@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -44,8 +45,14 @@ const (
 	// PrefectDeploymentConditionSynced indicates the deployment is synced with Prefect API
 	PrefectDeploymentConditionSynced = "Synced"
 
+	// PrefectDeploymentConditionServerAvailable indicates the Prefect server is available
+	PrefectDeploymentConditionServerAvailable = "ServerAvailable"
+
+	// PrefectDeploymentConditionWorkPoolAvailable indicates the referenced work pool is available
+	PrefectDeploymentConditionWorkPoolAvailable = "WorkPoolAvailable"
+
 	// RequeueIntervalReady is the interval for requeuing when deployment is ready
-	RequeueIntervalReady = 5 * time.Minute
+	RequeueIntervalReady = 10 * time.Second
 
 	// RequeueIntervalError is the interval for requeuing on errors
 	RequeueIntervalError = 30 * time.Second
@@ -148,6 +155,18 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		if err != nil {
 			log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
 			return ctrl.Result{}, err
+		}
+
+		// Check that the referenced work pool exists (only for real clients)
+		_, err = prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
+		if err != nil {
+			log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
+			r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
+			deployment.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
+				log.Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
+			}
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
 
