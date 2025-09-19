@@ -306,115 +306,264 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			Expect(spec.Schedules).To(BeNil())
 		})
 
-		It("Should handle valid schedule without anchor date", func() {
-			k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
-				{
-					Slug: "daily-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
+		Context("Interval schedules", func() {
+			It("Should handle interval schedule without anchor date", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:     "daily-interval",
 						Interval: ptr.To(86400), // 1 day in seconds
 						Timezone: ptr.To("UTC"),
 						Active:   ptr.To(true),
 					},
-				},
-			}
+				}
 
-			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(spec.Schedules).To(HaveLen(1))
-			Expect(spec.Schedules[0].Interval).To(Equal(ptr.To(86400)))
-			Expect(spec.Schedules[0].Timezone).To(Equal(ptr.To("UTC")))
-			Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
-			Expect(spec.Schedules[0].AnchorDate).To(BeNil())
-		})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(1))
+				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(86400))))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("UTC")))
+				Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
+				Expect(spec.Schedules[0].Schedule.AnchorDate).To(BeNil())
+				// Ensure other schedule types are nil
+				Expect(spec.Schedules[0].Schedule.Cron).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.RRule).To(BeNil())
+			})
 
-		It("Should handle valid schedule with anchor date", func() {
-			k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
-				{
-					Slug: "daily-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
-						Interval:   ptr.To(86400),
-						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:   ptr.To("UTC"),
-					},
-				},
-			}
-
-			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(spec.Schedules).To(HaveLen(1))
-			Expect(spec.Schedules[0].AnchorDate).NotTo(BeNil())
-			Expect(spec.Schedules[0].AnchorDate.Year()).To(Equal(2024))
-		})
-
-		It("Should handle multiple schedules", func() {
-			k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
-				{
-					Slug: "daily-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
-						Interval: ptr.To(86400),
-					},
-				},
-				{
-					Slug: "hourly-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
-						Interval:         ptr.To(3600),
+			It("Should handle interval schedule with anchor date", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:             "daily-interval",
+						Interval:         ptr.To(86400),
+						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:         ptr.To("UTC"),
 						MaxScheduledRuns: ptr.To(10),
 					},
-				},
-			}
+				}
 
-			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(spec.Schedules).To(HaveLen(2))
-			Expect(spec.Schedules[0].Interval).To(Equal(ptr.To(86400)))
-			Expect(spec.Schedules[1].Interval).To(Equal(ptr.To(3600)))
-			Expect(spec.Schedules[1].MaxScheduledRuns).To(Equal(ptr.To(10)))
-		})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(1))
+				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(86400))))
+				Expect(spec.Schedules[0].Schedule.AnchorDate).NotTo(BeNil())
+				Expect(spec.Schedules[0].Schedule.AnchorDate.Year()).To(Equal(2024))
+				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(10)))
+			})
 
-		It("Should return error for invalid anchor date format", func() {
-			k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
-				{
-					Slug: "daily-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
+			It("Should return error for invalid anchor date format", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:       "daily-interval",
 						Interval:   ptr.To(86400),
 						AnchorDate: ptr.To("invalid-date-format"),
 					},
-				},
-			}
+				}
 
-			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to parse anchor date for schedule 0"))
-			Expect(spec).To(BeNil())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to parse anchor_date for interval schedule 0"))
+				Expect(spec).To(BeNil())
+			})
 		})
 
-		It("Should return error for invalid anchor date in second schedule", func() {
-			k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
-				{
-					Slug: "daily-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
-						Interval:   ptr.To(86400),
-						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
+		Context("Cron schedules", func() {
+			It("Should handle cron schedule", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:     "daily-9am",
+						Cron:     ptr.To("0 9 * * *"),
+						DayOr:    ptr.To(true),
+						Timezone: ptr.To("America/New_York"),
+						Active:   ptr.To(true),
 					},
-				},
-				{
-					Slug: "hourly-schedule",
-					Schedule: prefectiov1.PrefectScheduleConfig{
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(1))
+				Expect(spec.Schedules[0].Schedule.Cron).To(Equal(ptr.To("0 9 * * *")))
+				Expect(spec.Schedules[0].Schedule.DayOr).To(Equal(ptr.To(true)))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("America/New_York")))
+				Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
+				// Ensure other schedule types are nil
+				Expect(spec.Schedules[0].Schedule.Interval).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.AnchorDate).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.RRule).To(BeNil())
+			})
+
+			It("Should handle cron schedule without day_or field", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:             "every-5-minutes",
+						Cron:             ptr.To("*/5 * * * *"),
+						Timezone:         ptr.To("UTC"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(100),
+					},
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(1))
+				Expect(spec.Schedules[0].Schedule.Cron).To(Equal(ptr.To("*/5 * * * *")))
+				Expect(spec.Schedules[0].Schedule.DayOr).To(BeNil()) // Should be nil when not specified
+				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(100)))
+			})
+		})
+
+		Context("RRule schedules", func() {
+			It("Should handle rrule schedule", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:     "weekly-monday",
+						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO"),
+						Timezone: ptr.To("UTC"),
+						Active:   ptr.To(true),
+					},
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(1))
+				Expect(spec.Schedules[0].Schedule.RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO")))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("UTC")))
+				Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
+				// Ensure other schedule types are nil
+				Expect(spec.Schedules[0].Schedule.Interval).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.AnchorDate).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.Cron).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.DayOr).To(BeNil())
+			})
+
+			It("Should handle complex rrule schedule", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:             "monthly-first-friday",
+						RRule:            ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR"),
+						Timezone:         ptr.To("America/Los_Angeles"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(12),
+					},
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(1))
+				Expect(spec.Schedules[0].Schedule.RRule).To(Equal(ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR")))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("America/Los_Angeles")))
+				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(12)))
+			})
+		})
+
+		Context("Mixed schedule types", func() {
+			It("Should handle multiple schedules of different types", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:       "hourly-interval",
 						Interval:   ptr.To(3600),
-						AnchorDate: ptr.To("invalid-date"),
+						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:   ptr.To("UTC"),
+						Active:     ptr.To(true),
 					},
-				},
-			}
+					{
+						Slug:     "daily-cron",
+						Cron:     ptr.To("0 9 * * *"),
+						DayOr:    ptr.To(false),
+						Timezone: ptr.To("America/New_York"),
+						Active:   ptr.To(true),
+					},
+					{
+						Slug:     "weekly-rrule",
+						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
+						Timezone: ptr.To("Europe/London"),
+						Active:   ptr.To(true),
+					},
+				}
 
-			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to parse anchor date for schedule 1"))
-			Expect(spec).To(BeNil())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(spec.Schedules).To(HaveLen(3))
+
+				// Interval schedule
+				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(3600))))
+				Expect(spec.Schedules[0].Schedule.AnchorDate).NotTo(BeNil())
+				Expect(spec.Schedules[0].Schedule.Cron).To(BeNil())
+				Expect(spec.Schedules[0].Schedule.RRule).To(BeNil())
+
+				// Cron schedule
+				Expect(spec.Schedules[1].Schedule.Cron).To(Equal(ptr.To("0 9 * * *")))
+				Expect(spec.Schedules[1].Schedule.DayOr).To(Equal(ptr.To(false)))
+				Expect(spec.Schedules[1].Schedule.Interval).To(BeNil())
+				Expect(spec.Schedules[1].Schedule.RRule).To(BeNil())
+
+				// RRule schedule
+				Expect(spec.Schedules[2].Schedule.RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR")))
+				Expect(spec.Schedules[2].Schedule.Interval).To(BeNil())
+				Expect(spec.Schedules[2].Schedule.Cron).To(BeNil())
+			})
+		})
+
+		Context("Schedule validation", func() {
+			It("Should return error when no schedule type is specified", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:     "empty-schedule",
+						Timezone: ptr.To("UTC"),
+						Active:   ptr.To(true),
+						// No interval, cron, or rrule specified
+					},
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("schedule 0 (empty-schedule): exactly one of interval, cron, or rrule must be specified"))
+				Expect(spec).To(BeNil())
+			})
+
+			It("Should return error when multiple schedule types are specified", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:     "invalid-schedule",
+						Interval: ptr.To(3600),        // interval specified
+						Cron:     ptr.To("0 9 * * *"), // cron also specified - invalid!
+						Timezone: ptr.To("UTC"),
+						Active:   ptr.To(true),
+					},
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("schedule 0 (invalid-schedule): exactly one of interval, cron, or rrule must be specified"))
+				Expect(spec).To(BeNil())
+			})
+
+			It("Should return error when all three schedule types are specified", func() {
+				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{
+						Slug:     "invalid-schedule",
+						Interval: ptr.To(3600),                         // interval specified
+						Cron:     ptr.To("0 9 * * *"),                  // cron specified
+						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO"), // rrule specified - all three invalid!
+						Timezone: ptr.To("UTC"),
+						Active:   ptr.To(true),
+					},
+				}
+
+				spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("schedule 0 (invalid-schedule): exactly one of interval, cron, or rrule must be specified"))
+				Expect(spec).To(BeNil())
+			})
 		})
 	})
 
@@ -473,14 +622,12 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				},
 				Schedules: []prefectiov1.PrefectSchedule{
 					{
-						Slug: "test-schedule",
-						Schedule: prefectiov1.PrefectScheduleConfig{
-							Interval:         ptr.To(3600),
-							AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
-							Timezone:         ptr.To("UTC"),
-							Active:           ptr.To(true),
-							MaxScheduledRuns: ptr.To(10),
-						},
+						Slug:             "test-schedule",
+						Interval:         ptr.To(3600),
+						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:         ptr.To("UTC"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(10),
 					},
 				},
 			}
@@ -507,7 +654,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			Expect(spec.GlobalConcurrencyLimits).To(Equal([]string{"global-limit"}))
 			Expect(spec.WorkQueueName).To(Equal(ptr.To("test-queue")))
 			Expect(spec.Schedules).To(HaveLen(1))
-			Expect(spec.Schedules[0].Interval).To(Equal(ptr.To(3600)))
+			Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(3600))))
 		})
 	})
 })

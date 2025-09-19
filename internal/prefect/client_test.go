@@ -662,4 +662,148 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Expect(deployment).To(BeNil())
 		})
 	})
+
+	Describe("HTTP Status Code Handling", func() {
+		var mockServer *httptest.Server
+
+		AfterEach(func() {
+			if mockServer != nil {
+				mockServer.Close()
+			}
+		})
+
+		Context("Success status codes (2xx)", func() {
+			It("Should accept 200 OK", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"id":"test-123","name":"test","flow_id":"flow-123","status":"READY"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				deployment, err := client.GetDeployment(ctx, "test-123")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(deployment).NotTo(BeNil())
+				Expect(deployment.ID).To(Equal("test-123"))
+			})
+
+			It("Should accept 201 Created for deployment creation", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusCreated) // 201 Created
+					_, _ = w.Write([]byte(`{"id":"new-deployment-123","name":"test","flow_id":"flow-123","status":"READY"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				spec := &DeploymentSpec{
+					Name:   "test-deployment",
+					FlowID: "flow-123",
+				}
+				deployment, err := client.CreateOrUpdateDeployment(ctx, spec)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(deployment).NotTo(BeNil())
+				Expect(deployment.ID).To(Equal("new-deployment-123"))
+			})
+
+			It("Should accept 202 Accepted", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusAccepted) // 202 Accepted
+					_, _ = w.Write([]byte(`{"id":"test-123","name":"test","flow_id":"flow-123","status":"READY"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				deployment, err := client.GetDeployment(ctx, "test-123")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(deployment).NotTo(BeNil())
+			})
+
+			It("Should accept 204 No Content for deletions", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNoContent) // 204 No Content
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				err := client.DeleteDeployment(ctx, "test-123")
+
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("Error status codes (non-2xx)", func() {
+			It("Should reject 400 Bad Request", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusBadRequest) // 400 Bad Request
+					_, _ = w.Write([]byte(`{"error":"Invalid request"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				deployment, err := client.GetDeployment(ctx, "test-123")
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("API request failed with status 400"))
+				Expect(deployment).To(BeNil())
+			})
+
+			It("Should reject 401 Unauthorized", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusUnauthorized) // 401 Unauthorized
+					_, _ = w.Write([]byte(`{"error":"Unauthorized"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				deployment, err := client.GetDeployment(ctx, "test-123")
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("API request failed with status 401"))
+				Expect(deployment).To(BeNil())
+			})
+
+			It("Should reject 404 Not Found (when not handling explicitly)", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound) // 404 Not Found
+					_, _ = w.Write([]byte(`{"error":"Not found"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				deployment, err := client.GetDeployment(ctx, "test-123")
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("API request failed with status 404"))
+				Expect(deployment).To(BeNil())
+			})
+
+			It("Should reject 422 Unprocessable Entity", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusUnprocessableEntity) // 422 Unprocessable Entity
+					_, _ = w.Write([]byte(`{"error":"Validation failed"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				spec := &DeploymentSpec{
+					Name:   "invalid-deployment",
+					FlowID: "flow-123",
+				}
+				deployment, err := client.CreateOrUpdateDeployment(ctx, spec)
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("API request failed with status 422"))
+				Expect(deployment).To(BeNil())
+			})
+
+			It("Should reject 500 Internal Server Error", func() {
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError) // 500 Internal Server Error
+					_, _ = w.Write([]byte(`{"error":"Server error"}`))
+				}))
+
+				client = NewClient(mockServer.URL, "test-api-key", logger)
+				deployment, err := client.GetDeployment(ctx, "test-123")
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("API request failed with status 500"))
+				Expect(deployment).To(BeNil())
+			})
+		})
+	})
 })

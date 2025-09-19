@@ -167,37 +167,179 @@ var _ = Describe("PrefectDeployment type", func() {
 			Expect(deploymentConfig.Paused).To(Equal(ptr.To(false)))
 		})
 
-		It("should support deployment with schedules", func() {
+		It("should support deployment with legacy nested schedules", func() {
+			// This test verifies backward compatibility - we'll remove this once we migrate
 			deploymentConfig := PrefectDeploymentConfiguration{
 				Entrypoint: "flows.py:my_flow",
 				Schedules: []PrefectSchedule{
 					{
-						Slug: "daily-schedule",
-						Schedule: PrefectScheduleConfig{
-							Interval:         ptr.To(86400), // 24 hours in seconds
-							AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
-							Timezone:         ptr.To("UTC"),
-							Active:           ptr.To(true),
-							MaxScheduledRuns: ptr.To(10),
-						},
+						Slug:             "daily-schedule",
+						Interval:         ptr.To(86400), // 24 hours in seconds
+						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:         ptr.To("UTC"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(10),
 					},
 					{
-						Slug: "hourly-schedule",
-						Schedule: PrefectScheduleConfig{
-							Interval:   ptr.To(3600), // 1 hour in seconds
-							AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
-							Timezone:   ptr.To("UTC"),
-							Active:     ptr.To(false),
-						},
+						Slug:       "hourly-schedule",
+						Interval:   ptr.To(3600), // 1 hour in seconds
+						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:   ptr.To("UTC"),
+						Active:     ptr.To(false),
 					},
 				},
 			}
 
 			Expect(deploymentConfig.Schedules).To(HaveLen(2))
 			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("daily-schedule"))
-			Expect(deploymentConfig.Schedules[0].Schedule.Interval).To(Equal(ptr.To(86400)))
+			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(ptr.To(86400)))
 			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("hourly-schedule"))
-			Expect(deploymentConfig.Schedules[1].Schedule.Active).To(Equal(ptr.To(false)))
+			Expect(deploymentConfig.Schedules[1].Active).To(Equal(ptr.To(false)))
+		})
+
+		It("should support deployment with flattened interval schedules", func() {
+			deploymentConfig := PrefectDeploymentConfiguration{
+				Entrypoint: "flows.py:my_flow",
+				Schedules: []PrefectSchedule{
+					{
+						Slug:             "daily-interval",
+						Interval:         ptr.To(86400), // 24 hours in seconds
+						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:         ptr.To("UTC"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(10),
+					},
+					{
+						Slug:       "hourly-interval",
+						Interval:   ptr.To(3600), // 1 hour in seconds
+						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:   ptr.To("UTC"),
+						Active:     ptr.To(false),
+					},
+				},
+			}
+
+			Expect(deploymentConfig.Schedules).To(HaveLen(2))
+			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("daily-interval"))
+			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(ptr.To(86400)))
+			Expect(deploymentConfig.Schedules[0].AnchorDate).To(Equal(ptr.To("2024-01-01T00:00:00Z")))
+			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(ptr.To("UTC")))
+			Expect(deploymentConfig.Schedules[0].Active).To(Equal(ptr.To(true)))
+			Expect(deploymentConfig.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(10)))
+
+			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("hourly-interval"))
+			Expect(deploymentConfig.Schedules[1].Interval).To(Equal(ptr.To(3600)))
+			Expect(deploymentConfig.Schedules[1].Active).To(Equal(ptr.To(false)))
+		})
+
+		It("should support deployment with cron schedules", func() {
+			deploymentConfig := PrefectDeploymentConfiguration{
+				Entrypoint: "flows.py:my_flow",
+				Schedules: []PrefectSchedule{
+					{
+						Slug:     "daily-9am",
+						Cron:     ptr.To("0 9 * * *"),
+						DayOr:    ptr.To(true),
+						Timezone: ptr.To("America/New_York"),
+						Active:   ptr.To(true),
+					},
+					{
+						Slug:             "every-5-minutes",
+						Cron:             ptr.To("*/5 * * * *"),
+						Timezone:         ptr.To("UTC"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(100),
+					},
+				},
+			}
+
+			Expect(deploymentConfig.Schedules).To(HaveLen(2))
+			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("daily-9am"))
+			Expect(deploymentConfig.Schedules[0].Cron).To(Equal(ptr.To("0 9 * * *")))
+			Expect(deploymentConfig.Schedules[0].DayOr).To(Equal(ptr.To(true)))
+			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(ptr.To("America/New_York")))
+			Expect(deploymentConfig.Schedules[0].Active).To(Equal(ptr.To(true)))
+
+			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("every-5-minutes"))
+			Expect(deploymentConfig.Schedules[1].Cron).To(Equal(ptr.To("*/5 * * * *")))
+			Expect(deploymentConfig.Schedules[1].Timezone).To(Equal(ptr.To("UTC")))
+			Expect(deploymentConfig.Schedules[1].MaxScheduledRuns).To(Equal(ptr.To(100)))
+		})
+
+		It("should support deployment with rrule schedules", func() {
+			deploymentConfig := PrefectDeploymentConfiguration{
+				Entrypoint: "flows.py:my_flow",
+				Schedules: []PrefectSchedule{
+					{
+						Slug:     "weekly-monday",
+						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO"),
+						Timezone: ptr.To("UTC"),
+						Active:   ptr.To(true),
+					},
+					{
+						Slug:             "monthly-first-friday",
+						RRule:            ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR"),
+						Timezone:         ptr.To("America/Los_Angeles"),
+						Active:           ptr.To(true),
+						MaxScheduledRuns: ptr.To(12),
+					},
+				},
+			}
+
+			Expect(deploymentConfig.Schedules).To(HaveLen(2))
+			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("weekly-monday"))
+			Expect(deploymentConfig.Schedules[0].RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO")))
+			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(ptr.To("UTC")))
+			Expect(deploymentConfig.Schedules[0].Active).To(Equal(ptr.To(true)))
+
+			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("monthly-first-friday"))
+			Expect(deploymentConfig.Schedules[1].RRule).To(Equal(ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR")))
+			Expect(deploymentConfig.Schedules[1].Timezone).To(Equal(ptr.To("America/Los_Angeles")))
+			Expect(deploymentConfig.Schedules[1].MaxScheduledRuns).To(Equal(ptr.To(12)))
+		})
+
+		It("should support deployment with mixed schedule types", func() {
+			deploymentConfig := PrefectDeploymentConfiguration{
+				Entrypoint: "flows.py:my_flow",
+				Schedules: []PrefectSchedule{
+					{
+						Slug:       "hourly-interval",
+						Interval:   ptr.To(3600),
+						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
+						Timezone:   ptr.To("UTC"),
+						Active:     ptr.To(true),
+					},
+					{
+						Slug:     "daily-cron",
+						Cron:     ptr.To("0 9 * * *"),
+						Timezone: ptr.To("America/New_York"),
+						Active:   ptr.To(true),
+					},
+					{
+						Slug:     "weekly-rrule",
+						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
+						Timezone: ptr.To("Europe/London"),
+						Active:   ptr.To(true),
+					},
+				},
+			}
+
+			Expect(deploymentConfig.Schedules).To(HaveLen(3))
+
+			// Interval schedule
+			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(ptr.To(3600)))
+			Expect(deploymentConfig.Schedules[0].Cron).To(BeNil())
+			Expect(deploymentConfig.Schedules[0].RRule).To(BeNil())
+
+			// Cron schedule
+			Expect(deploymentConfig.Schedules[1].Cron).To(Equal(ptr.To("0 9 * * *")))
+			Expect(deploymentConfig.Schedules[1].Interval).To(BeNil())
+			Expect(deploymentConfig.Schedules[1].RRule).To(BeNil())
+
+			// RRule schedule
+			Expect(deploymentConfig.Schedules[2].RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR")))
+			Expect(deploymentConfig.Schedules[2].Interval).To(BeNil())
+			Expect(deploymentConfig.Schedules[2].Cron).To(BeNil())
 		})
 
 		It("should support deployment with concurrency limits", func() {

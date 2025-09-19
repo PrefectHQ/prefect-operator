@@ -754,11 +754,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 						Entrypoint: "flows.py:my_flow",
 						Schedules: []prefectiov1.PrefectSchedule{
 							{
-								Slug: "invalid-schedule",
-								Schedule: prefectiov1.PrefectScheduleConfig{
-									Interval:   ptr.To(3600),
-									AnchorDate: ptr.To("invalid-date-format"),
-								},
+								Slug:       "invalid-schedule",
+								Interval:   ptr.To(3600),
+								AnchorDate: ptr.To("invalid-date-format"),
 							},
 						},
 					},
@@ -785,7 +783,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			})
 			// Should fail due to invalid anchor date format
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to parse anchor date"))
+			Expect(err.Error()).To(ContainSubstring("failed to parse anchor_date for interval schedule"))
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 		})
 

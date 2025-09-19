@@ -120,36 +120,69 @@ type PrefectVersionInfo struct {
 	Version *string `json:"version,omitempty"`
 }
 
-// PrefectSchedule defines a schedule for the deployment
+// PrefectSchedule defines a schedule for the deployment.
+// This structure exactly matches Prefect's prefect.yaml and API format.
+// Exactly one of Interval, Cron, or RRule must be specified.
 type PrefectSchedule struct {
 	// Slug is a unique identifier for the schedule
+	// Maps to: DeploymentScheduleCreate.slug (string)
 	Slug string `json:"slug"`
 
-	// Schedule defines the schedule configuration
-	Schedule PrefectScheduleConfig `json:"schedule"`
-}
+	// === INTERVAL SCHEDULE FIELDS ===
+	// Maps to: IntervalSchedule schema in Prefect API
 
-// PrefectScheduleConfig defines schedule timing configuration
-type PrefectScheduleConfig struct {
-	// Interval is the schedule interval in seconds
+	// Interval is the schedule interval in seconds (required for interval schedules)
+	// Maps to: IntervalSchedule.interval (number, required)
 	// +optional
 	Interval *int `json:"interval,omitempty"`
 
-	// AnchorDate is the anchor date for the schedule
+	// AnchorDate is the anchor date for interval schedules in RFC3339 format
+	// Maps to: IntervalSchedule.anchor_date (string, format: date-time)
+	// Example: "2024-01-01T00:00:00Z"
 	// +optional
-	AnchorDate *string `json:"anchorDate,omitempty"`
+	AnchorDate *string `json:"anchor_date,omitempty"`
 
-	// Timezone for the schedule
+	// === CRON SCHEDULE FIELDS ===
+	// Maps to: CronSchedule schema in Prefect API
+
+	// Cron is a valid cron expression (required for cron schedules)
+	// Maps to: CronSchedule.cron (string, required)
+	// Examples: "0 9 * * *" (daily at 9am), "*/5 * * * *" (every 5 minutes)
+	// +optional
+	Cron *string `json:"cron,omitempty"`
+
+	// DayOr controls how croniter handles day and day_of_week entries
+	// Maps to: CronSchedule.day_or (boolean, default: true)
+	// true = OR logic (standard cron), false = AND logic (like fcron)
+	// +optional
+	DayOr *bool `json:"day_or,omitempty"`
+
+	// === RRULE SCHEDULE FIELDS ===
+	// Maps to: RRuleSchedule schema in Prefect API
+
+	// RRule is a valid RFC 5545 RRULE string (required for rrule schedules)
+	// Maps to: RRuleSchedule.rrule (string, required)
+	// Examples: "RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=MONTHLY;BYDAY=1FR"
+	// +optional
+	RRule *string `json:"rrule,omitempty"`
+
+	// === COMMON FIELDS (shared across all schedule types) ===
+
+	// Timezone for the schedule (IANA timezone string)
+	// Maps to: IntervalSchedule.timezone, CronSchedule.timezone, RRuleSchedule.timezone
+	// Examples: "America/New_York", "UTC", "Europe/London"
 	// +optional
 	Timezone *string `json:"timezone,omitempty"`
 
 	// Active indicates if the schedule is active
+	// Maps to: DeploymentScheduleCreate.active (boolean, default: true)
 	// +optional
 	Active *bool `json:"active,omitempty"`
 
 	// MaxScheduledRuns limits the number of scheduled runs
+	// Maps to: DeploymentScheduleCreate.max_scheduled_runs (integer > 0)
 	// +optional
-	MaxScheduledRuns *int `json:"maxScheduledRuns,omitempty"`
+	MaxScheduledRuns *int `json:"max_scheduled_runs,omitempty"`
 }
 
 // PrefectGlobalConcurrencyLimit defines global concurrency limit configuration

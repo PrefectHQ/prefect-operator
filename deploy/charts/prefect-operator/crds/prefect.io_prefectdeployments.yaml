@@ -129,33 +129,62 @@ spec:
                   schedules:
                     description: Schedules defines when the deployment should run
                     items:
-                      description: PrefectSchedule defines a schedule for the deployment
+                      description: |-
+                        PrefectSchedule defines a schedule for the deployment.
+                        This structure exactly matches Prefect's prefect.yaml and API format.
+                        Exactly one of Interval, Cron, or RRule must be specified.
                       properties:
-                        schedule:
-                          description: Schedule defines the schedule configuration
-                          properties:
-                            active:
-                              description: Active indicates if the schedule is active
-                              type: boolean
-                            anchorDate:
-                              description: AnchorDate is the anchor date for the schedule
-                              type: string
-                            interval:
-                              description: Interval is the schedule interval in seconds
-                              type: integer
-                            maxScheduledRuns:
-                              description: MaxScheduledRuns limits the number of scheduled
-                                runs
-                              type: integer
-                            timezone:
-                              description: Timezone for the schedule
-                              type: string
-                          type: object
+                        active:
+                          description: |-
+                            Active indicates if the schedule is active
+                            Maps to: DeploymentScheduleCreate.active (boolean, default: true)
+                          type: boolean
+                        anchor_date:
+                          description: |-
+                            AnchorDate is the anchor date for interval schedules in RFC3339 format
+                            Maps to: IntervalSchedule.anchor_date (string, format: date-time)
+                            Example: "2024-01-01T00:00:00Z"
+                          type: string
+                        cron:
+                          description: |-
+                            Cron is a valid cron expression (required for cron schedules)
+                            Maps to: CronSchedule.cron (string, required)
+                            Examples: "0 9 * * *" (daily at 9am), "*/5 * * * *" (every 5 minutes)
+                          type: string
+                        day_or:
+                          description: |-
+                            DayOr controls how croniter handles day and day_of_week entries
+                            Maps to: CronSchedule.day_or (boolean, default: true)
+                            true = OR logic (standard cron), false = AND logic (like fcron)
+                          type: boolean
+                        interval:
+                          description: |-
+                            Interval is the schedule interval in seconds (required for interval schedules)
+                            Maps to: IntervalSchedule.interval (number, required)
+                          type: integer
+                        max_scheduled_runs:
+                          description: |-
+                            MaxScheduledRuns limits the number of scheduled runs
+                            Maps to: DeploymentScheduleCreate.max_scheduled_runs (integer > 0)
+                          type: integer
+                        rrule:
+                          description: |-
+                            RRule is a valid RFC 5545 RRULE string (required for rrule schedules)
+                            Maps to: RRuleSchedule.rrule (string, required)
+                            Examples: "RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=MONTHLY;BYDAY=1FR"
+                          type: string
                         slug:
-                          description: Slug is a unique identifier for the schedule
+                          description: |-
+                            Slug is a unique identifier for the schedule
+                            Maps to: DeploymentScheduleCreate.slug (string)
+                          type: string
+                        timezone:
+                          description: |-
+                            Timezone for the schedule (IANA timezone string)
+                            Maps to: IntervalSchedule.timezone, CronSchedule.timezone, RRuleSchedule.timezone
+                            Examples: "America/New_York", "UTC", "Europe/London"
                           type: string
                       required:
-                      - schedule
                       - slug
                       type: object
                     type: array

@@ -97,27 +97,66 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 		spec.PullSteps = pullSteps
 	}
 
-	// Schedules
+	// Schedules - support interval, cron, and rrule schedules
 	if deployment.Schedules != nil {
-		schedules := make([]Schedule, len(deployment.Schedules))
+		schedules := make([]DeploymentSchedule, len(deployment.Schedules))
 		for i, k8sSchedule := range deployment.Schedules {
-			schedule := Schedule{
-				Interval:         k8sSchedule.Schedule.Interval,
-				Timezone:         k8sSchedule.Schedule.Timezone,
-				Active:           k8sSchedule.Schedule.Active,
-				MaxScheduledRuns: k8sSchedule.Schedule.MaxScheduledRuns,
+			// Validate that exactly one schedule type is specified
+			scheduleTypes := []bool{
+				k8sSchedule.Interval != nil,
+				k8sSchedule.Cron != nil,
+				k8sSchedule.RRule != nil,
 			}
-
-			// Parse anchor date if provided
-			if k8sSchedule.Schedule.AnchorDate != nil {
-				anchorDate, err := time.Parse(time.RFC3339, *k8sSchedule.Schedule.AnchorDate)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse anchor date for schedule %d: %w", i, err)
+			activeTypes := 0
+			for _, isActive := range scheduleTypes {
+				if isActive {
+					activeTypes++
 				}
-				schedule.AnchorDate = &anchorDate
+			}
+			if activeTypes != 1 {
+				return nil, fmt.Errorf("schedule %d (%s): exactly one of interval, cron, or rrule must be specified", i, k8sSchedule.Slug)
 			}
 
-			schedules[i] = schedule
+			// Create the inner schedule object with type-specific fields
+			schedule := Schedule{
+				// Note: Common fields like Active, MaxScheduledRuns go on the outer DeploymentSchedule
+				Timezone: k8sSchedule.Timezone,
+			}
+
+			// Handle interval schedule fields
+			if k8sSchedule.Interval != nil {
+				interval := float64(*k8sSchedule.Interval)
+				schedule.Interval = &interval
+				// Parse anchor date if provided for interval schedules
+				if k8sSchedule.AnchorDate != nil {
+					anchorDate, err := time.Parse(time.RFC3339, *k8sSchedule.AnchorDate)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse anchor_date for interval schedule %d (%s): %w", i, k8sSchedule.Slug, err)
+					}
+					schedule.AnchorDate = &anchorDate
+				}
+			}
+
+			// Handle cron schedule fields
+			if k8sSchedule.Cron != nil {
+				schedule.Cron = k8sSchedule.Cron
+				schedule.DayOr = k8sSchedule.DayOr
+			}
+
+			// Handle rrule schedule fields
+			if k8sSchedule.RRule != nil {
+				schedule.RRule = k8sSchedule.RRule
+			}
+
+			// Create the deployment schedule wrapper
+			deploymentSchedule := DeploymentSchedule{
+				Slug:             &k8sSchedule.Slug,
+				Schedule:         schedule,
+				Active:           k8sSchedule.Active,
+				MaxScheduledRuns: k8sSchedule.MaxScheduledRuns,
+			}
+
+			schedules[i] = deploymentSchedule
 		}
 		spec.Schedules = schedules
 	}
