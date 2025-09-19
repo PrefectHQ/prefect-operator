@@ -46,4 +46,101 @@ var _ = Describe("PrefectWorkPool type", func() {
 		Expect(copied).To(Equal(original))
 		Expect(copied).NotTo(BeIdenticalTo(original))
 	})
+
+	Describe("EntrypointArguments", func() {
+		It("should use exact work pool name for names starting with 'prefect'", func() {
+			workPool := &PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "prefect-work-pool",
+				},
+				Spec: PrefectWorkPoolSpec{
+					Type: "kubernetes",
+				},
+			}
+
+			args := workPool.EntrypointArguments()
+			Expect(args).To(ContainElement("prefect-work-pool"))
+			Expect(args).To(Equal([]string{
+				"prefect", "worker", "start",
+				"--pool", "prefect-work-pool", "--type", "kubernetes",
+				"--with-healthcheck",
+			}))
+		})
+
+		It("should use exact work pool name for names not starting with 'prefect'", func() {
+			workPool := &PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-work-pool",
+				},
+				Spec: PrefectWorkPoolSpec{
+					Type: "process",
+				},
+			}
+
+			args := workPool.EntrypointArguments()
+			Expect(args).To(ContainElement("my-work-pool"))
+			Expect(args).To(Equal([]string{
+				"prefect", "worker", "start",
+				"--pool", "my-work-pool", "--type", "process",
+				"--with-healthcheck",
+			}))
+		})
+
+		It("ensures naming consistency between controller and worker", func() {
+			workPool := &PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "prefect-production",
+				},
+				Spec: PrefectWorkPoolSpec{
+					Type: "kubernetes",
+				},
+			}
+
+			controllerName := workPool.Name
+
+			workerArgs := workPool.EntrypointArguments()
+			var workerPoolName string
+			for i, arg := range workerArgs {
+				if arg == "--pool" && i+1 < len(workerArgs) {
+					workerPoolName = workerArgs[i+1]
+					break
+				}
+			}
+
+			Expect(controllerName).To(Equal("prefect-production"))
+			Expect(workerPoolName).To(Equal("prefect-production"))
+			Expect(controllerName).To(Equal(workerPoolName))
+		})
+
+		It("should work consistently for all naming patterns", func() {
+			testCases := []struct {
+				name         string
+				expectedPool string
+			}{
+				{"prefect", "prefect"},
+				{"prefect-k8s", "prefect-k8s"},
+				{"prefect123", "prefect123"},
+				{"k8s-pool", "k8s-pool"},
+				{"my-prefect-pool", "my-prefect-pool"},
+				{"PREFECT-POOL", "PREFECT-POOL"},
+				{"production-pool", "production-pool"},
+				{"dev", "dev"},
+			}
+
+			for _, tc := range testCases {
+				workPool := &PrefectWorkPool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: tc.name,
+					},
+					Spec: PrefectWorkPoolSpec{
+						Type: "process",
+					},
+				}
+
+				args := workPool.EntrypointArguments()
+				Expect(args).To(ContainElement(tc.expectedPool),
+					"Work pool %s should use pool name %s", tc.name, tc.expectedPool)
+			}
+		})
+	})
 })
