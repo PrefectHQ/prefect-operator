@@ -688,12 +688,14 @@ var _ = Describe("UpdateDeploymentStatus", func() {
 		Expect(k8sDeployment.Status.Ready).To(BeTrue())
 	})
 
-	It("Should handle non-ready status", func() {
+	It("Should set ready=true when successfully synced", func() {
 		prefectDeployment.Status = "PENDING"
 
 		UpdateDeploymentStatus(k8sDeployment, prefectDeployment)
 
-		Expect(k8sDeployment.Status.Ready).To(BeFalse())
+		// Ready should be true because we successfully synced to Prefect API
+		// regardless of Prefect's internal deployment status
+		Expect(k8sDeployment.Status.Ready).To(BeTrue())
 	})
 })
 

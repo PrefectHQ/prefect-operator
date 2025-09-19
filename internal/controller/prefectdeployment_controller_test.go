@@ -845,12 +845,11 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Second))
 
-			By("Second reconcile should attempt to create real client and fail gracefully")
+			By("Second reconcile should attempt health check and requeue when server not ready")
 			result, err = realReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			// This should fail because we don't have a real Prefect server
-			// but it exercises the createPrefectClient path
-			Expect(err).To(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+			// Should not error but should requeue because server is not healthy
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 		})
 	})
 
