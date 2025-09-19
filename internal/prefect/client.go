@@ -91,7 +91,7 @@ func NewClient(baseURL, apiKey string, log logr.Logger) *Client {
 }
 
 // NewClientFromServerReference creates a new PrefectClient from a PrefectServerReference
-func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference, apiKey string, log logr.Logger) (*Client, error) {
+func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
 	// Create a base client first to check if we're running in cluster
 	baseClient := NewClient("", apiKey, log)
 
@@ -105,12 +105,12 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 		baseURL = "http://localhost:14200/api"
 		log.V(1).Info("Using localhost for port-forwarding", "url", baseURL)
 	} else {
-		// Use the server's namespace as fallback if not specified
-		fallbackNamespace := serverRef.Namespace
-		if fallbackNamespace == "" {
-			fallbackNamespace = "default" // Default to "default" namespace if not specified
+		// Use the server's namespace, or fallback to the provided namespace
+		namespace := serverRef.Namespace
+		if namespace == "" {
+			namespace = fallbackNamespace // Use provided fallback instead of hardcoded "default"
 		}
-		baseURL = serverRef.GetAPIURL(fallbackNamespace)
+		baseURL = serverRef.GetAPIURL(namespace)
 		log.V(1).Info("Using in-cluster URL", "url", baseURL)
 	}
 
@@ -150,8 +150,8 @@ func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerR
 		return nil, fmt.Errorf("failed to get API key: %w", err)
 	}
 
-	// Create client using the existing factory function
-	return NewClientFromServerReference(serverRef, apiKey, log)
+	// Create client using the existing factory function, passing the namespace as fallback
+	return NewClientFromServerReference(serverRef, apiKey, namespace, log)
 }
 
 // DeploymentSpec represents the request payload for creating/updating deployments
