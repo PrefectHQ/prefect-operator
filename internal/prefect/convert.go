@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
@@ -179,8 +180,17 @@ func UpdateDeploymentStatus(k8sDeployment *prefectiov1.PrefectDeployment, prefec
 
 // GetFlowIDFromDeployment extracts or generates a flow ID for the deployment
 func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeployment *prefectiov1.PrefectDeployment) (string, error) {
+	entryPoint := k8sDeployment.Spec.Deployment.Entrypoint
+
+	idx := strings.Index(entryPoint, ":")
+	if idx == -1 {
+		return "", fmt.Errorf("invalid entrypoint format (missing ':'): %s", entryPoint)
+	}
+
+	flowName := entryPoint[idx+1:]
+
 	flowSpec := &FlowSpec{
-		Name:   k8sDeployment.Name,
+		Name:   flowName,
 		Tags:   k8sDeployment.Spec.Deployment.Tags,
 		Labels: k8sDeployment.Spec.Deployment.Labels,
 	}

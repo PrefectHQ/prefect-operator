@@ -17,6 +17,9 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -256,6 +259,18 @@ type PrefectDeploymentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PrefectDeployment `json:"items"`
+}
+
+// Here for future validation hooks.
+func (deployment *PrefectDeployment) Validate() error {
+	entryPoint := deployment.Spec.Deployment.Entrypoint
+
+	idx := strings.Index(entryPoint, ":")
+	if idx == -1 {
+		return fmt.Errorf("invalid entrypoint format (missing ':'): %s", entryPoint)
+	}
+
+	return nil
 }
 
 func init() {

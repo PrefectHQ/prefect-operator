@@ -716,8 +716,9 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 			},
 			Spec: prefectiov1.PrefectDeploymentSpec{
 				Deployment: prefectiov1.PrefectDeploymentConfiguration{
-					Tags:   []string{"test", "deployment"},
-					Labels: map[string]string{"env": "test"},
+					Entrypoint: "foo.py:test_flow",
+					Tags:       []string{"test", "deployment"},
+					Labels:     map[string]string{"env": "test"},
 				},
 			},
 		}
@@ -730,6 +731,26 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		Expect(flowID).NotTo(BeEmpty())
 	})
 
+	It("Should name flows correctly", func() {
+		By("creating a deployment")
+		flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(flowID).NotTo(BeEmpty())
+
+		By("fetching matching flow by name")
+		flowSpec := &FlowSpec{
+			Name: "test_flow",
+		}
+
+		flow, err := mockClient.CreateOrGetFlow(ctx, flowSpec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(flow).NotTo(BeNil())
+
+		By("comparing to known flowID")
+		Expect(flow.ID).To(Equal(flowID))
+	})
+
 	It("Should handle flow creation error", func() {
 		mockClient.ShouldFailFlowCreate = true
 		mockClient.FailureMessage = "mock flow error"
@@ -739,6 +760,14 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to create or get flow"))
 		Expect(err.Error()).To(ContainSubstring("mock flow error"))
+		Expect(flowID).To(BeEmpty())
+	})
+
+	It("should handle invalid entrypoint names", func() {
+		k8sDeployment.Spec.Deployment.Entrypoint = "foo_test.py"
+		flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+
+		Expect(err).To(HaveOccurred())
 		Expect(flowID).To(BeEmpty())
 	})
 })
