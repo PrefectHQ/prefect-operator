@@ -19,7 +19,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install tool dependencies
         uses: jdx/mise-action@v3

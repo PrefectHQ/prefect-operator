@@ -27,7 +27,7 @@ jobs:
       # required to read from the repo
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
 
