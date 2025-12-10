@@ -645,7 +645,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(container.Args).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0", "--some-arg", "some-value"}))
 			})
 
-			It("should create a Deployment with custom IPv6 host", func() {
+			It("should create a Deployment with IPv6/dual-stack host (empty string)", func() {
 				name := types.NamespacedName{
 					Namespace: namespaceName,
 					Name:      "prefect-ipv6-server",
@@ -655,41 +655,6 @@ var _ = Describe("PrefectServer controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: namespaceName,
 						Name:      "prefect-ipv6-server",
-					},
-					Spec: prefectiov1.PrefectServerSpec{
-						Host: ptr.To("::"),
-					},
-				}
-				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
-
-				controllerReconciler := &PrefectServerReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, name, deployment)
-				}).Should(Succeed())
-
-				container := deployment.Spec.Template.Spec.Containers[0]
-				Expect(container.Args).To(Equal([]string{"prefect", "server", "start", "--host", "::"}))
-			})
-
-			It("should create a Deployment with dual-stack host (empty string)", func() {
-				name := types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "prefect-dualstack-server",
-				}
-
-				prefectserver := &prefectiov1.PrefectServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: namespaceName,
-						Name:      "prefect-dualstack-server",
 					},
 					Spec: prefectiov1.PrefectServerSpec{
 						Host: ptr.To(""),

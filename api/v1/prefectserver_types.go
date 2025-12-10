@@ -38,7 +38,8 @@ type PrefectServerSpec struct {
 
 	// Host defines the host address to bind the Prefect Server to.
 	// Defaults to "0.0.0.0" for IPv4 compatibility.
-	// Use "::" for IPv6-only environments, or "" for dual-stack.
+	// Use "" (empty string) to bind to all interfaces for IPv6-only or dual-stack environments.
+	// Note: Prefect does not accept "::" as a valid host value.
 	// +kubebuilder:validation:Optional
 	Host *string `json:"host,omitempty"`
 

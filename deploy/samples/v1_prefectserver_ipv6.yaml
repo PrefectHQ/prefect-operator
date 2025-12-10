@@ -6,5 +6,5 @@ metadata:
     app.kubernetes.io/name: prefect-operator
     app.kubernetes.io/managed-by: kustomize
 spec:
-  host: "::"  # IPv6-only binding
+  host: ""  # Empty string binds to all interfaces (works for IPv6-only and dual-stack)
   ephemeral: {}
