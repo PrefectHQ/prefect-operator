@@ -554,6 +554,11 @@ func (in *PrefectServerSpec) DeepCopyInto(out *PrefectServerSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.Host != nil {
+		in, out := &in.Host, &out.Host
+		*out = new(string)
+		**out = **in
+	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	if in.ExtraContainers != nil {
 		in, out := &in.ExtraContainers, &out.ExtraContainers

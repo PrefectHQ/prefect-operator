@@ -620,5 +620,73 @@ var _ = Describe("PrefectServer type", func() {
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
 		})
+
+		Context("Host binding configuration", func() {
+			It("should use default host 0.0.0.0 when Host is nil", func() {
+				server := &PrefectServer{
+					Spec: PrefectServerSpec{},
+				}
+
+				args := server.EntrypointArguments()
+				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
+			})
+
+			It("should use custom IPv6 host when specified", func() {
+				server := &PrefectServer{
+					Spec: PrefectServerSpec{
+						Host: ptr.To("::"),
+					},
+				}
+
+				args := server.EntrypointArguments()
+				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "::"}))
+			})
+
+			It("should support empty string for dual-stack", func() {
+				server := &PrefectServer{
+					Spec: PrefectServerSpec{
+						Host: ptr.To(""),
+					},
+				}
+
+				args := server.EntrypointArguments()
+				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", ""}))
+			})
+
+			It("should use custom host with ExtraArgs", func() {
+				server := &PrefectServer{
+					Spec: PrefectServerSpec{
+						Host:      ptr.To("::"),
+						ExtraArgs: []string{"--some-arg", "some-value"},
+					},
+				}
+
+				args := server.EntrypointArguments()
+				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "::", "--some-arg", "some-value"}))
+			})
+
+			It("should use specific IPv4 address when specified", func() {
+				server := &PrefectServer{
+					Spec: PrefectServerSpec{
+						Host: ptr.To("127.0.0.1"),
+					},
+				}
+
+				args := server.EntrypointArguments()
+				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "127.0.0.1"}))
+			})
+
+			It("should maintain backward compatibility with deprecated EntrypointArugments method", func() {
+				server := &PrefectServer{
+					Spec: PrefectServerSpec{
+						Host: ptr.To("::"),
+					},
+				}
+
+				// Test that the deprecated method still works
+				args := server.EntrypointArugments()
+				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "::"}))
+			})
+		})
 	})
 })

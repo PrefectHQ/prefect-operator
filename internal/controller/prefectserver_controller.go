@@ -374,7 +374,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
-						Args: server.EntrypointArugments(),
+						Args: server.EntrypointArguments(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "prefect-data",
@@ -458,7 +458,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
-						Args: server.EntrypointArugments(),
+						Args: server.EntrypointArguments(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "prefect-data",
@@ -514,7 +514,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
 
-						Args: server.EntrypointArugments(),
+						Args: server.EntrypointArguments(),
 						Env:  server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{

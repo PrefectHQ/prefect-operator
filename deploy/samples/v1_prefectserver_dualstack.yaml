@@ -1,0 +1,12 @@
+apiVersion: prefect.io/v1
+kind: PrefectServer
+metadata:
+  name: prefect-dualstack
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  host: ""  # Empty string for dual-stack (uvicorn binds to all interfaces)
+  sqlite:
+    storageClassName: standard
+    size: 1Gi

@@ -1661,6 +1661,12 @@ spec:
                   - port
                   type: object
                 type: array
+              host:
+                description: |-
+                  Host defines the host address to bind the Prefect Server to.
+                  Defaults to "0.0.0.0" for IPv4 compatibility.
+                  Use "::" for IPv6-only environments, or "" for dual-stack.
+                type: string
               image:
                 description: Image defines the exact image to deploy for the Prefect
                   Server, overriding Version
