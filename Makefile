@@ -85,13 +85,7 @@ manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourc
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	@echo "Adding coverage ignore directive to generated files..."
-	@grep -q "go:coverage ignore" api/v1/zz_generated.deepcopy.go || \
-		(head -1 api/v1/zz_generated.deepcopy.go > /tmp/zz_temp && \
-		echo "" >> /tmp/zz_temp && \
-		echo "//go:coverage ignore" >> /tmp/zz_temp && \
-		echo "" >> /tmp/zz_temp && \
-		tail -n +2 api/v1/zz_generated.deepcopy.go >> /tmp/zz_temp && \
-		mv /tmp/zz_temp api/v1/zz_generated.deepcopy.go)
+	@sed -i '1a\\n//go:coverage ignore' api/v1/zz_generated.deepcopy.go
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
