@@ -664,18 +664,6 @@ var _ = Describe("PrefectServer type", func() {
 				args := server.EntrypointArguments()
 				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "127.0.0.1"}))
 			})
-
-			It("should maintain backward compatibility with deprecated EntrypointArugments method", func() {
-				server := &PrefectServer{
-					Spec: PrefectServerSpec{
-						Host: ptr.To(""),
-					},
-				}
-
-				// Test that the deprecated method still works
-				args := server.EntrypointArugments()
-				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", ""}))
-			})
 		})
 	})
 })

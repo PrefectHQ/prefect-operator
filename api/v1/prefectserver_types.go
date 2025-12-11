@@ -413,11 +413,6 @@ func (s *PrefectServer) EntrypointArguments() []string {
 	return command
 }
 
-// Deprecated: EntrypointArugments is misspelled, use EntrypointArguments instead
-func (s *PrefectServer) EntrypointArugments() []string {
-	return s.EntrypointArguments()
-}
-
 func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{
