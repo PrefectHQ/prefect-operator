@@ -36,6 +36,13 @@ type PrefectServerSpec struct {
 	// Image defines the exact image to deploy for the Prefect Server, overriding Version
 	Image *string `json:"image,omitempty"`
 
+	// Host defines the host address to bind the Prefect Server to.
+	// Defaults to "0.0.0.0" for IPv4 compatibility.
+	// Use "" (empty string) to bind to all interfaces for IPv6-only or dual-stack environments.
+	// Note: Prefect does not accept "::" as a valid host value.
+	// +kubebuilder:validation:Optional
+	Host *string `json:"host,omitempty"`
+
 	// Resources defines the CPU and memory resources for each replica of the Prefect Server
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -394,8 +401,13 @@ func (s *PrefectServer) Image() string {
 	return DEFAULT_PREFECT_IMAGE
 }
 
-func (s *PrefectServer) EntrypointArugments() []string {
-	command := []string{"prefect", "server", "start", "--host", "0.0.0.0"}
+func (s *PrefectServer) EntrypointArguments() []string {
+	host := "0.0.0.0" // Default to IPv4 for backward compatibility
+	if s.Spec.Host != nil {
+		host = *s.Spec.Host
+	}
+
+	command := []string{"prefect", "server", "start", "--host", host}
 	command = append(command, s.Spec.ExtraArgs...)
 
 	return command

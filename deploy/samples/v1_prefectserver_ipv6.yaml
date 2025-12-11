@@ -1,0 +1,10 @@
+apiVersion: prefect.io/v1
+kind: PrefectServer
+metadata:
+  name: prefect-ipv6
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  host: ""  # Empty string binds to all interfaces (works for IPv6-only and dual-stack)
+  ephemeral: {}
