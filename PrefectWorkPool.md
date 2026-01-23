@@ -126,6 +126,14 @@ PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>serviceAccountName</b></td>
+        <td>string</td>
+        <td>
+          ServiceAccountName defines the ServiceAccount to use for worker pods.
+If not specified, the default ServiceAccount for the namespace will be used.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectworkpoolspecsettingsindex">settings</a></b></td>
         <td>[]object</td>
         <td>

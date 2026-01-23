@@ -167,6 +167,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					Labels: workPool.WorkerLabels(),
 				},
 				Spec: corev1.PodSpec{
+					ServiceAccountName: getServiceAccountName(&workPool),
 					Volumes: []corev1.Volume{
 						{
 							Name: "prefect-data",
@@ -458,4 +459,13 @@ func (r *PrefectWorkPoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToWorkPools)).
 		Complete(r)
+}
+
+// getServiceAccountName returns the ServiceAccount name to use for worker pods.
+// If not specified in the spec, returns empty string to use the default ServiceAccount.
+func getServiceAccountName(workPool *prefectiov1.PrefectWorkPool) string {
+	if workPool.Spec.ServiceAccountName != nil && *workPool.Spec.ServiceAccountName != "" {
+		return *workPool.Spec.ServiceAccountName
+	}
+	return ""
 }
