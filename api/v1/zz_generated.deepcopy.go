@@ -811,6 +811,11 @@ func (in *PrefectWorkPoolSpec) DeepCopyInto(out *PrefectWorkPoolSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.ServiceAccountName != nil {
+		in, out := &in.ServiceAccountName, &out.ServiceAccountName
+		*out = new(string)
+		**out = **in
+	}
 	if in.BaseJobTemplate != nil {
 		in, out := &in.BaseJobTemplate, &out.BaseJobTemplate
 		*out = new(RawValueSource)
