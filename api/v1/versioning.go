@@ -20,7 +20,7 @@ import (
 	"strings"
 )
 
-const DEFAULT_PREFECT_VERSION = "3.6.13"
+const DEFAULT_PREFECT_VERSION = "3.6.15"
 const DEFAULT_PREFECT_IMAGE = "prefecthq/prefect:" + DEFAULT_PREFECT_VERSION + "-python3.12"
 
 func VersionFromImage(image string) string {
