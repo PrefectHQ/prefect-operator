@@ -51,6 +51,11 @@ type PrefectWorkPoolSpec struct {
 	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
 
+	// ServiceAccountName defines the ServiceAccount to use for worker pods.
+	// If not specified, the default ServiceAccount for the namespace will be used.
+	// +optional
+	ServiceAccountName *string `json:"serviceAccountName,omitempty"`
+
 	// Base job template for flow runs in the Work Pool
 	BaseJobTemplate *RawValueSource `json:"baseJobTemplate,omitempty"`
 }

@@ -407,7 +407,8 @@ func (s *PrefectServer) EntrypointArguments() []string {
 		host = *s.Spec.Host
 	}
 
-	command := []string{"prefect", "server", "start", "--host", host}
+	command := make([]string, 0, 5+len(s.Spec.ExtraArgs))
+	command = append(command, "prefect", "server", "start", "--host", host)
 	command = append(command, s.Spec.ExtraArgs...)
 
 	return command
