@@ -138,6 +138,15 @@ func (s *PrefectWorkPool) Image() string {
 	return DEFAULT_PREFECT_IMAGE + suffix
 }
 
+// ServiceAccount returns the ServiceAccount name to use for worker pods.
+// If not specified in the spec, returns empty string to use the default ServiceAccount.
+func (s *PrefectWorkPool) ServiceAccount() string {
+	if s.Spec.ServiceAccountName != nil && *s.Spec.ServiceAccountName != "" {
+		return *s.Spec.ServiceAccountName
+	}
+	return ""
+}
+
 func (s *PrefectWorkPool) EntrypointArguments() []string {
 	return []string{
 		"prefect", "worker", "start",
