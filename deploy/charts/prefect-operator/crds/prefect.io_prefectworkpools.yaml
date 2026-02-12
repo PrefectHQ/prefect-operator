@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: prefectworkpools.prefect.io
 spec:
   group: prefect.io
@@ -1875,6 +1875,11 @@ spec:
                       connect to Prefect Cloud
                     type: string
                 type: object
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName defines the ServiceAccount to use for worker pods.
+                  If not specified, the default ServiceAccount for the namespace will be used.
+                type: string
               settings:
                 description: A list of environment variables to set on the Prefect
                   Worker

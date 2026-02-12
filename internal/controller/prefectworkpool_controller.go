@@ -167,6 +167,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					Labels: workPool.WorkerLabels(),
 				},
 				Spec: corev1.PodSpec{
+					ServiceAccountName: workPool.ServiceAccount(),
 					Volumes: []corev1.Volume{
 						{
 							Name: "prefect-data",

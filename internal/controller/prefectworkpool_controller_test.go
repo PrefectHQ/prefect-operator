@@ -1045,6 +1045,109 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		})
 	})
 
+	Context("When specifying a custom ServiceAccount", func() {
+		It("should use custom ServiceAccount when specified", func() {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: namespaceName,
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{
+					Type:               "kubernetes",
+					Workers:            1,
+					ServiceAccountName: ptr.To("prefect-worker"),
+					Server: prefectiov1.PrefectServerReference{
+						Name: "test-server",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+			By("First reconciliation - adding finalizer")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Second reconciliation - creating deployment")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			deployment := &appsv1.Deployment{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, name, deployment)
+			}).Should(Succeed())
+
+			Expect(deployment.Spec.Template.Spec.ServiceAccountName).To(Equal("prefect-worker"))
+		})
+
+		It("should use default ServiceAccount when not specified", func() {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: namespaceName,
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{
+					Type:    "kubernetes",
+					Workers: 1,
+					Server: prefectiov1.PrefectServerReference{
+						Name: "test-server",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+			By("First reconciliation - adding finalizer")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Second reconciliation - creating deployment")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			deployment := &appsv1.Deployment{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, name, deployment)
+			}).Should(Succeed())
+
+			Expect(deployment.Spec.Template.Spec.ServiceAccountName).To(Equal(""))
+		})
+
+		It("should use default ServiceAccount when empty string is specified", func() {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name.Name,
+					Namespace: namespaceName,
+				},
+				Spec: prefectiov1.PrefectWorkPoolSpec{
+					Type:               "kubernetes",
+					Workers:            1,
+					ServiceAccountName: ptr.To(""),
+					Server: prefectiov1.PrefectServerReference{
+						Name: "test-server",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+			By("First reconciliation - adding finalizer")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Second reconciliation - creating deployment")
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			deployment := &appsv1.Deployment{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, name, deployment)
+			}).Should(Succeed())
+
+			Expect(deployment.Spec.Template.Spec.ServiceAccountName).To(Equal(""))
+		})
+	})
+
 	Context("When testing error scenarios", func() {
 		BeforeEach(func() {
 			prefectWorkPool = &prefectiov1.PrefectWorkPool{

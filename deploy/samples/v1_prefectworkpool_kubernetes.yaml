@@ -12,3 +12,4 @@ spec:
   server:
     name: prefect-ephemeral
   workers: 3
+  # serviceAccountName: prefect-worker  # Optional: custom ServiceAccount for worker pods
