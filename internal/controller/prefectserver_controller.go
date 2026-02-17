@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -346,7 +345,7 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 
 func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
-		Replicas: ptr.To(int32(1)),
+		Replicas: new(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 		},
@@ -428,7 +427,7 @@ func (r *PrefectServerReconciler) sqlitePersistentVolumeClaim(server *prefectiov
 
 func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.PrefectServer, pvc *corev1.PersistentVolumeClaim) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
-		Replicas: ptr.To(int32(1)),
+		Replicas: new(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RecreateDeploymentStrategyType,
 		},
@@ -491,7 +490,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 
 func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
-		Replicas: ptr.To(int32(1)),
+		Replicas: new(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 		},
@@ -541,7 +540,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 
 func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) *batchv1.Job {
 	jobSpec := batchv1.JobSpec{
-		TTLSecondsAfterFinished: ptr.To(int32(60 * 60)), // 1 hour
+		TTLSecondsAfterFinished: new(int32(60 * 60)), // 1 hour
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: server.MigrationJobLabels(),

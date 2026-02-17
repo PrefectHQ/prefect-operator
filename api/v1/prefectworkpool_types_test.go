@@ -19,7 +19,6 @@ package v1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/ptr"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,8 +30,8 @@ var _ = Describe("PrefectWorkPool type", func() {
 				Name: "test",
 			},
 			Spec: PrefectWorkPoolSpec{
-				Version: ptr.To("0.0.1"),
-				Image:   ptr.To("prefecthq/prefect:0.0.1"),
+				Version: new("0.0.1"),
+				Image:   new("prefecthq/prefect:0.0.1"),
 				Server: PrefectServerReference{
 					Namespace: "default",
 					Name:      "prefect",

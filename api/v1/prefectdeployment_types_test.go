@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("PrefectDeployment type", func() {
@@ -34,9 +33,9 @@ var _ = Describe("PrefectDeployment type", func() {
 			},
 			Spec: PrefectDeploymentSpec{
 				Server: PrefectServerReference{
-					RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
-					AccountID:    ptr.To("abc-123"),
-					WorkspaceID:  ptr.To("def-456"),
+					RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+					AccountID:    new("abc-123"),
+					WorkspaceID:  new("def-456"),
 					APIKey: &APIKeySpec{
 						ValueFrom: &corev1.EnvVarSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
@@ -47,25 +46,25 @@ var _ = Describe("PrefectDeployment type", func() {
 					},
 				},
 				WorkPool: PrefectWorkPoolReference{
-					Namespace: ptr.To("default"),
+					Namespace: new("default"),
 					Name:      "kubernetes-work-pool",
-					WorkQueue: ptr.To("default"),
+					WorkQueue: new("default"),
 				},
 				Deployment: PrefectDeploymentConfiguration{
-					Description: ptr.To("Test deployment"),
+					Description: new("Test deployment"),
 					Tags:        []string{"test", "kubernetes"},
 					Labels: map[string]string{
 						"environment": "test",
 						"team":        "platform",
 					},
 					Entrypoint: "flows.py:my_flow",
-					Path:       ptr.To("/opt/prefect/flows"),
-					Paused:     ptr.To(false),
+					Path:       new("/opt/prefect/flows"),
+					Paused:     new(false),
 				},
 			},
 			Status: PrefectDeploymentStatus{
-				Id:     ptr.To("deployment-123"),
-				FlowId: ptr.To("flow-456"),
+				Id:     new("deployment-123"),
+				FlowId: new("flow-456"),
 				Ready:  true,
 			},
 		}
@@ -79,9 +78,9 @@ var _ = Describe("PrefectDeployment type", func() {
 	Context("PrefectServerReference", func() {
 		It("should support Prefect Cloud configuration", func() {
 			serverRef := PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
-				AccountID:    ptr.To("abc-123"),
-				WorkspaceID:  ptr.To("def-456"),
+				RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+				AccountID:    new("abc-123"),
+				WorkspaceID:  new("def-456"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -92,15 +91,15 @@ var _ = Describe("PrefectDeployment type", func() {
 				},
 			}
 
-			Expect(serverRef.RemoteAPIURL).To(Equal(ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def")))
-			Expect(serverRef.AccountID).To(Equal(ptr.To("abc-123")))
-			Expect(serverRef.WorkspaceID).To(Equal(ptr.To("def-456")))
+			Expect(serverRef.RemoteAPIURL).To(Equal(new("https://api.prefect.cloud/api/accounts/abc/workspaces/def")))
+			Expect(serverRef.AccountID).To(Equal(new("abc-123")))
+			Expect(serverRef.WorkspaceID).To(Equal(new("def-456")))
 			Expect(serverRef.APIKey).NotTo(BeNil())
 		})
 
 		It("should support self-hosted Prefect server configuration", func() {
 			serverRef := PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://prefect.example.com/api"),
+				RemoteAPIURL: new("https://prefect.example.com/api"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -111,7 +110,7 @@ var _ = Describe("PrefectDeployment type", func() {
 				},
 			}
 
-			Expect(serverRef.RemoteAPIURL).To(Equal(ptr.To("https://prefect.example.com/api")))
+			Expect(serverRef.RemoteAPIURL).To(Equal(new("https://prefect.example.com/api")))
 			Expect(serverRef.AccountID).To(BeNil())
 			Expect(serverRef.WorkspaceID).To(BeNil())
 			Expect(serverRef.APIKey).NotTo(BeNil())
@@ -121,32 +120,32 @@ var _ = Describe("PrefectDeployment type", func() {
 	Context("PrefectWorkPoolReference", func() {
 		It("should support namespaced work pool reference", func() {
 			workPoolRef := PrefectWorkPoolReference{
-				Namespace: ptr.To("prefect-system"),
+				Namespace: new("prefect-system"),
 				Name:      "kubernetes-work-pool",
-				WorkQueue: ptr.To("high-priority"),
+				WorkQueue: new("high-priority"),
 			}
 
-			Expect(workPoolRef.Namespace).To(Equal(ptr.To("prefect-system")))
+			Expect(workPoolRef.Namespace).To(Equal(new("prefect-system")))
 			Expect(workPoolRef.Name).To(Equal("kubernetes-work-pool"))
-			Expect(workPoolRef.WorkQueue).To(Equal(ptr.To("high-priority")))
+			Expect(workPoolRef.WorkQueue).To(Equal(new("high-priority")))
 		})
 
 		It("should support work pool reference without namespace", func() {
 			workPoolRef := PrefectWorkPoolReference{
 				Name:      "process-work-pool",
-				WorkQueue: ptr.To("default"),
+				WorkQueue: new("default"),
 			}
 
 			Expect(workPoolRef.Namespace).To(BeNil())
 			Expect(workPoolRef.Name).To(Equal("process-work-pool"))
-			Expect(workPoolRef.WorkQueue).To(Equal(ptr.To("default")))
+			Expect(workPoolRef.WorkQueue).To(Equal(new("default")))
 		})
 	})
 
 	Context("PrefectDeploymentConfiguration", func() {
 		It("should support basic deployment configuration", func() {
 			deploymentConfig := PrefectDeploymentConfiguration{
-				Description: ptr.To("My test flow deployment"),
+				Description: new("My test flow deployment"),
 				Tags:        []string{"test", "ci/cd", "production"},
 				Labels: map[string]string{
 					"environment": "production",
@@ -154,17 +153,17 @@ var _ = Describe("PrefectDeployment type", func() {
 					"version":     "1.0.0",
 				},
 				Entrypoint: "flows/etl.py:main_flow",
-				Path:       ptr.To("/opt/prefect/flows"),
-				Paused:     ptr.To(false),
+				Path:       new("/opt/prefect/flows"),
+				Paused:     new(false),
 			}
 
-			Expect(deploymentConfig.Description).To(Equal(ptr.To("My test flow deployment")))
+			Expect(deploymentConfig.Description).To(Equal(new("My test flow deployment")))
 			Expect(deploymentConfig.Tags).To(Equal([]string{"test", "ci/cd", "production"}))
 			Expect(deploymentConfig.Labels).To(HaveKeyWithValue("environment", "production"))
 			Expect(deploymentConfig.Labels).To(HaveKeyWithValue("team", "data-engineering"))
 			Expect(deploymentConfig.Entrypoint).To(Equal("flows/etl.py:main_flow"))
-			Expect(deploymentConfig.Path).To(Equal(ptr.To("/opt/prefect/flows")))
-			Expect(deploymentConfig.Paused).To(Equal(ptr.To(false)))
+			Expect(deploymentConfig.Path).To(Equal(new("/opt/prefect/flows")))
+			Expect(deploymentConfig.Paused).To(Equal(new(false)))
 		})
 
 		It("should support deployment with legacy nested schedules", func() {
@@ -174,27 +173,27 @@ var _ = Describe("PrefectDeployment type", func() {
 				Schedules: []PrefectSchedule{
 					{
 						Slug:             "daily-schedule",
-						Interval:         ptr.To(86400), // 24 hours in seconds
-						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:         ptr.To("UTC"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(10),
+						Interval:         new(86400), // 24 hours in seconds
+						AnchorDate:       new("2024-01-01T00:00:00Z"),
+						Timezone:         new("UTC"),
+						Active:           new(true),
+						MaxScheduledRuns: new(10),
 					},
 					{
 						Slug:       "hourly-schedule",
-						Interval:   ptr.To(3600), // 1 hour in seconds
-						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:   ptr.To("UTC"),
-						Active:     ptr.To(false),
+						Interval:   new(3600), // 1 hour in seconds
+						AnchorDate: new("2024-01-01T00:00:00Z"),
+						Timezone:   new("UTC"),
+						Active:     new(false),
 					},
 				},
 			}
 
 			Expect(deploymentConfig.Schedules).To(HaveLen(2))
 			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("daily-schedule"))
-			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(ptr.To(86400)))
+			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(new(86400)))
 			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("hourly-schedule"))
-			Expect(deploymentConfig.Schedules[1].Active).To(Equal(ptr.To(false)))
+			Expect(deploymentConfig.Schedules[1].Active).To(Equal(new(false)))
 		})
 
 		It("should support deployment with flattened interval schedules", func() {
@@ -203,33 +202,33 @@ var _ = Describe("PrefectDeployment type", func() {
 				Schedules: []PrefectSchedule{
 					{
 						Slug:             "daily-interval",
-						Interval:         ptr.To(86400), // 24 hours in seconds
-						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:         ptr.To("UTC"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(10),
+						Interval:         new(86400), // 24 hours in seconds
+						AnchorDate:       new("2024-01-01T00:00:00Z"),
+						Timezone:         new("UTC"),
+						Active:           new(true),
+						MaxScheduledRuns: new(10),
 					},
 					{
 						Slug:       "hourly-interval",
-						Interval:   ptr.To(3600), // 1 hour in seconds
-						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:   ptr.To("UTC"),
-						Active:     ptr.To(false),
+						Interval:   new(3600), // 1 hour in seconds
+						AnchorDate: new("2024-01-01T00:00:00Z"),
+						Timezone:   new("UTC"),
+						Active:     new(false),
 					},
 				},
 			}
 
 			Expect(deploymentConfig.Schedules).To(HaveLen(2))
 			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("daily-interval"))
-			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(ptr.To(86400)))
-			Expect(deploymentConfig.Schedules[0].AnchorDate).To(Equal(ptr.To("2024-01-01T00:00:00Z")))
-			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(ptr.To("UTC")))
-			Expect(deploymentConfig.Schedules[0].Active).To(Equal(ptr.To(true)))
-			Expect(deploymentConfig.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(10)))
+			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(new(86400)))
+			Expect(deploymentConfig.Schedules[0].AnchorDate).To(Equal(new("2024-01-01T00:00:00Z")))
+			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(new("UTC")))
+			Expect(deploymentConfig.Schedules[0].Active).To(Equal(new(true)))
+			Expect(deploymentConfig.Schedules[0].MaxScheduledRuns).To(Equal(new(10)))
 
 			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("hourly-interval"))
-			Expect(deploymentConfig.Schedules[1].Interval).To(Equal(ptr.To(3600)))
-			Expect(deploymentConfig.Schedules[1].Active).To(Equal(ptr.To(false)))
+			Expect(deploymentConfig.Schedules[1].Interval).To(Equal(new(3600)))
+			Expect(deploymentConfig.Schedules[1].Active).To(Equal(new(false)))
 		})
 
 		It("should support deployment with cron schedules", func() {
@@ -238,32 +237,32 @@ var _ = Describe("PrefectDeployment type", func() {
 				Schedules: []PrefectSchedule{
 					{
 						Slug:     "daily-9am",
-						Cron:     ptr.To("0 9 * * *"),
-						DayOr:    ptr.To(true),
-						Timezone: ptr.To("America/New_York"),
-						Active:   ptr.To(true),
+						Cron:     new("0 9 * * *"),
+						DayOr:    new(true),
+						Timezone: new("America/New_York"),
+						Active:   new(true),
 					},
 					{
 						Slug:             "every-5-minutes",
-						Cron:             ptr.To("*/5 * * * *"),
-						Timezone:         ptr.To("UTC"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(100),
+						Cron:             new("*/5 * * * *"),
+						Timezone:         new("UTC"),
+						Active:           new(true),
+						MaxScheduledRuns: new(100),
 					},
 				},
 			}
 
 			Expect(deploymentConfig.Schedules).To(HaveLen(2))
 			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("daily-9am"))
-			Expect(deploymentConfig.Schedules[0].Cron).To(Equal(ptr.To("0 9 * * *")))
-			Expect(deploymentConfig.Schedules[0].DayOr).To(Equal(ptr.To(true)))
-			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(ptr.To("America/New_York")))
-			Expect(deploymentConfig.Schedules[0].Active).To(Equal(ptr.To(true)))
+			Expect(deploymentConfig.Schedules[0].Cron).To(Equal(new("0 9 * * *")))
+			Expect(deploymentConfig.Schedules[0].DayOr).To(Equal(new(true)))
+			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(new("America/New_York")))
+			Expect(deploymentConfig.Schedules[0].Active).To(Equal(new(true)))
 
 			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("every-5-minutes"))
-			Expect(deploymentConfig.Schedules[1].Cron).To(Equal(ptr.To("*/5 * * * *")))
-			Expect(deploymentConfig.Schedules[1].Timezone).To(Equal(ptr.To("UTC")))
-			Expect(deploymentConfig.Schedules[1].MaxScheduledRuns).To(Equal(ptr.To(100)))
+			Expect(deploymentConfig.Schedules[1].Cron).To(Equal(new("*/5 * * * *")))
+			Expect(deploymentConfig.Schedules[1].Timezone).To(Equal(new("UTC")))
+			Expect(deploymentConfig.Schedules[1].MaxScheduledRuns).To(Equal(new(100)))
 		})
 
 		It("should support deployment with rrule schedules", func() {
@@ -272,30 +271,30 @@ var _ = Describe("PrefectDeployment type", func() {
 				Schedules: []PrefectSchedule{
 					{
 						Slug:     "weekly-monday",
-						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO"),
-						Timezone: ptr.To("UTC"),
-						Active:   ptr.To(true),
+						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO"),
+						Timezone: new("UTC"),
+						Active:   new(true),
 					},
 					{
 						Slug:             "monthly-first-friday",
-						RRule:            ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR"),
-						Timezone:         ptr.To("America/Los_Angeles"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(12),
+						RRule:            new("RRULE:FREQ=MONTHLY;BYDAY=1FR"),
+						Timezone:         new("America/Los_Angeles"),
+						Active:           new(true),
+						MaxScheduledRuns: new(12),
 					},
 				},
 			}
 
 			Expect(deploymentConfig.Schedules).To(HaveLen(2))
 			Expect(deploymentConfig.Schedules[0].Slug).To(Equal("weekly-monday"))
-			Expect(deploymentConfig.Schedules[0].RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO")))
-			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(ptr.To("UTC")))
-			Expect(deploymentConfig.Schedules[0].Active).To(Equal(ptr.To(true)))
+			Expect(deploymentConfig.Schedules[0].RRule).To(Equal(new("RRULE:FREQ=WEEKLY;BYDAY=MO")))
+			Expect(deploymentConfig.Schedules[0].Timezone).To(Equal(new("UTC")))
+			Expect(deploymentConfig.Schedules[0].Active).To(Equal(new(true)))
 
 			Expect(deploymentConfig.Schedules[1].Slug).To(Equal("monthly-first-friday"))
-			Expect(deploymentConfig.Schedules[1].RRule).To(Equal(ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR")))
-			Expect(deploymentConfig.Schedules[1].Timezone).To(Equal(ptr.To("America/Los_Angeles")))
-			Expect(deploymentConfig.Schedules[1].MaxScheduledRuns).To(Equal(ptr.To(12)))
+			Expect(deploymentConfig.Schedules[1].RRule).To(Equal(new("RRULE:FREQ=MONTHLY;BYDAY=1FR")))
+			Expect(deploymentConfig.Schedules[1].Timezone).To(Equal(new("America/Los_Angeles")))
+			Expect(deploymentConfig.Schedules[1].MaxScheduledRuns).To(Equal(new(12)))
 		})
 
 		It("should support deployment with mixed schedule types", func() {
@@ -304,22 +303,22 @@ var _ = Describe("PrefectDeployment type", func() {
 				Schedules: []PrefectSchedule{
 					{
 						Slug:       "hourly-interval",
-						Interval:   ptr.To(3600),
-						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:   ptr.To("UTC"),
-						Active:     ptr.To(true),
+						Interval:   new(3600),
+						AnchorDate: new("2024-01-01T00:00:00Z"),
+						Timezone:   new("UTC"),
+						Active:     new(true),
 					},
 					{
 						Slug:     "daily-cron",
-						Cron:     ptr.To("0 9 * * *"),
-						Timezone: ptr.To("America/New_York"),
-						Active:   ptr.To(true),
+						Cron:     new("0 9 * * *"),
+						Timezone: new("America/New_York"),
+						Active:   new(true),
 					},
 					{
 						Slug:     "weekly-rrule",
-						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
-						Timezone: ptr.To("Europe/London"),
-						Active:   ptr.To(true),
+						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
+						Timezone: new("Europe/London"),
+						Active:   new(true),
 					},
 				},
 			}
@@ -327,17 +326,17 @@ var _ = Describe("PrefectDeployment type", func() {
 			Expect(deploymentConfig.Schedules).To(HaveLen(3))
 
 			// Interval schedule
-			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(ptr.To(3600)))
+			Expect(deploymentConfig.Schedules[0].Interval).To(Equal(new(3600)))
 			Expect(deploymentConfig.Schedules[0].Cron).To(BeNil())
 			Expect(deploymentConfig.Schedules[0].RRule).To(BeNil())
 
 			// Cron schedule
-			Expect(deploymentConfig.Schedules[1].Cron).To(Equal(ptr.To("0 9 * * *")))
+			Expect(deploymentConfig.Schedules[1].Cron).To(Equal(new("0 9 * * *")))
 			Expect(deploymentConfig.Schedules[1].Interval).To(BeNil())
 			Expect(deploymentConfig.Schedules[1].RRule).To(BeNil())
 
 			// RRule schedule
-			Expect(deploymentConfig.Schedules[2].RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR")))
+			Expect(deploymentConfig.Schedules[2].RRule).To(Equal(new("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR")))
 			Expect(deploymentConfig.Schedules[2].Interval).To(BeNil())
 			Expect(deploymentConfig.Schedules[2].Cron).To(BeNil())
 		})
@@ -345,36 +344,36 @@ var _ = Describe("PrefectDeployment type", func() {
 		It("should support deployment with concurrency limits", func() {
 			deploymentConfig := PrefectDeploymentConfiguration{
 				Entrypoint:       "flows.py:my_flow",
-				ConcurrencyLimit: ptr.To(5),
+				ConcurrencyLimit: new(5),
 				GlobalConcurrencyLimit: &PrefectGlobalConcurrencyLimit{
-					Active:             ptr.To(true),
+					Active:             new(true),
 					Name:               "global-etl-limit",
-					Limit:              ptr.To(10),
-					SlotDecayPerSecond: ptr.To("0.1"),
-					CollisionStrategy:  ptr.To("CANCEL_NEW"),
+					Limit:              new(10),
+					SlotDecayPerSecond: new("0.1"),
+					CollisionStrategy:  new("CANCEL_NEW"),
 				},
 			}
 
-			Expect(deploymentConfig.ConcurrencyLimit).To(Equal(ptr.To(5)))
+			Expect(deploymentConfig.ConcurrencyLimit).To(Equal(new(5)))
 			Expect(deploymentConfig.GlobalConcurrencyLimit).NotTo(BeNil())
 			Expect(deploymentConfig.GlobalConcurrencyLimit.Name).To(Equal("global-etl-limit"))
-			Expect(deploymentConfig.GlobalConcurrencyLimit.Limit).To(Equal(ptr.To(10)))
-			Expect(deploymentConfig.GlobalConcurrencyLimit.CollisionStrategy).To(Equal(ptr.To("CANCEL_NEW")))
-			Expect(deploymentConfig.GlobalConcurrencyLimit.SlotDecayPerSecond).To(Equal(ptr.To("0.1")))
+			Expect(deploymentConfig.GlobalConcurrencyLimit.Limit).To(Equal(new(10)))
+			Expect(deploymentConfig.GlobalConcurrencyLimit.CollisionStrategy).To(Equal(new("CANCEL_NEW")))
+			Expect(deploymentConfig.GlobalConcurrencyLimit.SlotDecayPerSecond).To(Equal(new("0.1")))
 		})
 
 		It("should support deployment with version info", func() {
 			deploymentConfig := PrefectDeploymentConfiguration{
 				Entrypoint: "flows.py:my_flow",
 				VersionInfo: &PrefectVersionInfo{
-					Type:    ptr.To("git"),
-					Version: ptr.To("v1.2.3"),
+					Type:    new("git"),
+					Version: new("v1.2.3"),
 				},
 			}
 
 			Expect(deploymentConfig.VersionInfo).NotTo(BeNil())
-			Expect(deploymentConfig.VersionInfo.Type).To(Equal(ptr.To("git")))
-			Expect(deploymentConfig.VersionInfo.Version).To(Equal(ptr.To("v1.2.3")))
+			Expect(deploymentConfig.VersionInfo.Type).To(Equal(new("git")))
+			Expect(deploymentConfig.VersionInfo.Version).To(Equal(new("v1.2.3")))
 		})
 
 		It("should support deployment with parameters and job variables", func() {
@@ -393,13 +392,13 @@ var _ = Describe("PrefectDeployment type", func() {
 				Parameters:             parameters,
 				JobVariables:           jobVariables,
 				ParameterOpenApiSchema: parameterSchema,
-				EnforceParameterSchema: ptr.To(true),
+				EnforceParameterSchema: new(true),
 			}
 
 			Expect(deploymentConfig.Parameters).To(Equal(parameters))
 			Expect(deploymentConfig.JobVariables).To(Equal(jobVariables))
 			Expect(deploymentConfig.ParameterOpenApiSchema).To(Equal(parameterSchema))
-			Expect(deploymentConfig.EnforceParameterSchema).To(Equal(ptr.To(true)))
+			Expect(deploymentConfig.EnforceParameterSchema).To(Equal(new(true)))
 		})
 
 		It("should support deployment with pull steps", func() {
@@ -422,15 +421,15 @@ var _ = Describe("PrefectDeployment type", func() {
 	Context("PrefectDeploymentStatus", func() {
 		It("should track deployment status correctly", func() {
 			status := PrefectDeploymentStatus{
-				Id:                 ptr.To("deployment-123"),
-				FlowId:             ptr.To("flow-456"),
+				Id:                 new("deployment-123"),
+				FlowId:             new("flow-456"),
 				Ready:              true,
 				SpecHash:           "abc123def456",
 				ObservedGeneration: 2,
 			}
 
-			Expect(status.Id).To(Equal(ptr.To("deployment-123")))
-			Expect(status.FlowId).To(Equal(ptr.To("flow-456")))
+			Expect(status.Id).To(Equal(new("deployment-123")))
+			Expect(status.FlowId).To(Equal(new("flow-456")))
 			Expect(status.Ready).To(BeTrue())
 			Expect(status.SpecHash).To(Equal("abc123def456"))
 			Expect(status.ObservedGeneration).To(Equal(int64(2)))

@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("PrefectServer type", func() {
@@ -32,8 +31,8 @@ var _ = Describe("PrefectServer type", func() {
 				Name: "test",
 			},
 			Spec: PrefectServerSpec{
-				Version: ptr.To("0.0.1"),
-				Image:   ptr.To("prefecthq/prefect:0.0.1"),
+				Version: new("0.0.1"),
+				Image:   new("prefecthq/prefect:0.0.1"),
 				SQLite: &SQLiteConfiguration{
 					StorageClassName: "standard",
 					Size:             resource.MustParse("1Gi"),
@@ -52,11 +51,11 @@ var _ = Describe("PrefectServer type", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{
 					Postgres: &PostgresConfiguration{
-						Host:     ptr.To("postgres.example.com"),
-						Port:     ptr.To(5432),
-						User:     ptr.To("prefect"),
-						Password: ptr.To("secret123"),
-						Database: ptr.To("prefect"),
+						Host:     new("postgres.example.com"),
+						Port:     new(5432),
+						User:     new("prefect"),
+						Password: new("secret123"),
+						Database: new("prefect"),
 					},
 				},
 			}
@@ -241,16 +240,16 @@ var _ = Describe("PrefectServer type", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{
 					Postgres: &PostgresConfiguration{
-						Host:     ptr.To("postgres.example.com"),
-						Port:     ptr.To(5432),
-						User:     ptr.To("prefect"),
-						Password: ptr.To("secret123"),
-						Database: ptr.To("prefect"),
+						Host:     new("postgres.example.com"),
+						Port:     new(5432),
+						User:     new("prefect"),
+						Password: new("secret123"),
+						Database: new("prefect"),
 					},
 					Redis: &RedisConfiguration{
-						Host:     ptr.To("redis.example.com"),
-						Port:     ptr.To(6379),
-						Database: ptr.To(0),
+						Host:     new("redis.example.com"),
+						Port:     new(6379),
+						Database: new(0),
 					},
 					Settings: []corev1.EnvVar{
 						{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
@@ -289,11 +288,11 @@ var _ = Describe("PrefectServer type", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{
 					Redis: &RedisConfiguration{
-						Host:     ptr.To("redis.example.com"),
-						Port:     ptr.To(6379),
-						Database: ptr.To(0),
-						Username: ptr.To("prefect"),
-						Password: ptr.To("secret123"),
+						Host:     new("redis.example.com"),
+						Port:     new(6379),
+						Database: new(0),
+						Username: new("prefect"),
+						Password: new("secret123"),
 					},
 				},
 			}
@@ -410,9 +409,9 @@ var _ = Describe("PrefectServer type", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{
 					Redis: &RedisConfiguration{
-						Host:     ptr.To("redis.example.com"),
-						Port:     ptr.To(6379),
-						Database: ptr.To(0),
+						Host:     new("redis.example.com"),
+						Port:     new(6379),
+						Database: new(0),
 					},
 				},
 			}
@@ -436,7 +435,7 @@ var _ = Describe("PrefectServer type", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{
 					Redis: &RedisConfiguration{
-						Host: ptr.To("redis.example.com"),
+						Host: new("redis.example.com"),
 						// Only specifying host, other fields left empty
 					},
 				},
@@ -541,16 +540,16 @@ var _ = Describe("PrefectServer type", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{
 					Postgres: &PostgresConfiguration{
-						Host:     ptr.To("postgres.example.com"),
-						Port:     ptr.To(5432),
-						User:     ptr.To("prefect"),
-						Password: ptr.To("secret123"),
-						Database: ptr.To("prefect"),
+						Host:     new("postgres.example.com"),
+						Port:     new(5432),
+						User:     new("prefect"),
+						Password: new("secret123"),
+						Database: new("prefect"),
 					},
 					Redis: &RedisConfiguration{
-						Host:     ptr.To("redis.example.com"),
-						Port:     ptr.To(6379),
-						Database: ptr.To(0),
+						Host:     new("redis.example.com"),
+						Port:     new(6379),
+						Database: new(0),
 					},
 					Settings: []corev1.EnvVar{
 						{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
@@ -634,7 +633,7 @@ var _ = Describe("PrefectServer type", func() {
 			It("should use empty string for IPv6/dual-stack when specified", func() {
 				server := &PrefectServer{
 					Spec: PrefectServerSpec{
-						Host: ptr.To(""),
+						Host: new(""),
 					},
 				}
 
@@ -645,7 +644,7 @@ var _ = Describe("PrefectServer type", func() {
 			It("should use custom host with ExtraArgs", func() {
 				server := &PrefectServer{
 					Spec: PrefectServerSpec{
-						Host:      ptr.To(""),
+						Host:      new(""),
 						ExtraArgs: []string{"--some-arg", "some-value"},
 					},
 				}
@@ -657,7 +656,7 @@ var _ = Describe("PrefectServer type", func() {
 			It("should use specific IPv4 address when specified", func() {
 				server := &PrefectServer{
 					Spec: PrefectServerSpec{
-						Host: ptr.To("127.0.0.1"),
+						Host: new("127.0.0.1"),
 					},
 				}
 

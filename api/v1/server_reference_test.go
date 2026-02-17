@@ -24,7 +24,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -59,7 +58,7 @@ var _ = Describe("PrefectServerReference", func() {
 		It("Should return direct value when APIKey.Value is set", func() {
 			serverRef := &PrefectServerReference{
 				APIKey: &APIKeySpec{
-					Value: ptr.To("direct-api-key-value"),
+					Value: new("direct-api-key-value"),
 				},
 			}
 
@@ -234,7 +233,7 @@ var _ = Describe("PrefectServerReference", func() {
 	Context("GetAPIURL method", func() {
 		It("Should return remote API URL when RemoteAPIURL is set", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.io"),
+				RemoteAPIURL: new("https://api.prefect.io"),
 			}
 
 			apiURL := serverRef.GetAPIURL("test-namespace")
@@ -243,7 +242,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should append /api to remote URL if not present", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://custom-server.com"),
+				RemoteAPIURL: new("https://custom-server.com"),
 			}
 
 			apiURL := serverRef.GetAPIURL("test-namespace")
@@ -252,7 +251,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should not double-append /api to remote URL", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://custom-server.com/api"),
+				RemoteAPIURL: new("https://custom-server.com/api"),
 			}
 
 			apiURL := serverRef.GetAPIURL("test-namespace")
@@ -261,9 +260,9 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should add Prefect Cloud workspace path when AccountID and WorkspaceID are set", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				AccountID:    ptr.To("account-123"),
-				WorkspaceID:  ptr.To("workspace-456"),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new("account-123"),
+				WorkspaceID:  new("workspace-456"),
 			}
 
 			apiURL := serverRef.GetAPIURL("test-namespace")
@@ -298,7 +297,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should prioritize RemoteAPIURL over in-cluster Name", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://external.prefect.io"),
+				RemoteAPIURL: new("https://external.prefect.io"),
 				Name:         "prefect-server",
 				Namespace:    "prefect-system",
 			}
@@ -311,7 +310,7 @@ var _ = Describe("PrefectServerReference", func() {
 	Context("Helper methods", func() {
 		It("Should correctly identify remote server references", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.io"),
+				RemoteAPIURL: new("https://api.prefect.io"),
 			}
 
 			Expect(serverRef.IsRemote()).To(BeTrue())
@@ -330,9 +329,9 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should correctly identify Prefect Cloud configuration", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				AccountID:    ptr.To("account-123"),
-				WorkspaceID:  ptr.To("workspace-456"),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new("account-123"),
+				WorkspaceID:  new("workspace-456"),
 			}
 
 			Expect(serverRef.IsPrefectCloud()).To(BeTrue())
@@ -340,8 +339,8 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should not identify as Prefect Cloud when AccountID is missing", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				WorkspaceID:  ptr.To("workspace-456"),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				WorkspaceID:  new("workspace-456"),
 			}
 
 			Expect(serverRef.IsPrefectCloud()).To(BeFalse())
@@ -349,8 +348,8 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should not identify as Prefect Cloud when WorkspaceID is missing", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				AccountID:    ptr.To("account-123"),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new("account-123"),
 			}
 
 			Expect(serverRef.IsPrefectCloud()).To(BeFalse())
@@ -358,9 +357,9 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should not identify as Prefect Cloud when AccountID is empty", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				AccountID:    ptr.To(""),
-				WorkspaceID:  ptr.To("workspace-456"),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new(""),
+				WorkspaceID:  new("workspace-456"),
 			}
 
 			Expect(serverRef.IsPrefectCloud()).To(BeFalse())
@@ -368,9 +367,9 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should not identify as Prefect Cloud when WorkspaceID is empty", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				AccountID:    ptr.To("account-123"),
-				WorkspaceID:  ptr.To(""),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new("account-123"),
+				WorkspaceID:  new(""),
 			}
 
 			Expect(serverRef.IsPrefectCloud()).To(BeFalse())
@@ -378,7 +377,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should handle both remote and in-cluster configurations simultaneously", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.io"),
+				RemoteAPIURL: new("https://api.prefect.io"),
 				Name:         "prefect-server",
 				Namespace:    "prefect-system",
 			}
@@ -389,7 +388,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should handle empty RemoteAPIURL pointer", func() {
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To(""),
+				RemoteAPIURL: new(""),
 				Name:         "prefect-server",
 			}
 
@@ -414,9 +413,9 @@ var _ = Describe("PrefectServerReference", func() {
 
 			// Create a server reference with Secret-based API key
 			serverRef := &PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-				AccountID:    ptr.To("account-123"),
-				WorkspaceID:  ptr.To("workspace-456"),
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new("account-123"),
+				WorkspaceID:  new("workspace-456"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{

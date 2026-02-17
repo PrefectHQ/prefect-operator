@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("ConvertToDeploymentSpec", func() {
@@ -60,8 +59,8 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			Expect(spec).NotTo(BeNil())
 			Expect(spec.Name).To(Equal("test-deployment"))
 			Expect(spec.FlowID).To(Equal(flowID))
-			Expect(spec.Entrypoint).To(Equal(ptr.To("flows.py:main_flow")))
-			Expect(spec.WorkPoolName).To(Equal(ptr.To("test-workpool")))
+			Expect(spec.Entrypoint).To(Equal(new("flows.py:main_flow")))
+			Expect(spec.WorkPoolName).To(Equal(new("test-workpool")))
 		})
 	})
 
@@ -77,13 +76,13 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 		It("Should handle valid version info", func() {
 			k8sDeployment.Spec.Deployment.VersionInfo = &prefectiov1.PrefectVersionInfo{
-				Version: ptr.To("v1.0.0"),
+				Version: new("v1.0.0"),
 			}
 
 			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(spec.Version).To(Equal(ptr.To("v1.0.0")))
+			Expect(spec.Version).To(Equal(new("v1.0.0")))
 		})
 	})
 
@@ -98,12 +97,12 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 
 		It("Should handle valid work queue", func() {
-			k8sDeployment.Spec.WorkPool.WorkQueue = ptr.To("test-queue")
+			k8sDeployment.Spec.WorkPool.WorkQueue = new("test-queue")
 
 			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(spec.WorkQueueName).To(Equal(ptr.To("test-queue")))
+			Expect(spec.WorkQueueName).To(Equal(new("test-queue")))
 		})
 	})
 
@@ -118,7 +117,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 
 		It("Should handle valid parameters", func() {
-			params := map[string]interface{}{
+			params := map[string]any{
 				"key1": "value1",
 				"key2": 42,
 			}
@@ -160,7 +159,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 
 		It("Should handle valid job variables", func() {
-			jobVars := map[string]interface{}{
+			jobVars := map[string]any{
 				"cpu":    "100m",
 				"memory": "128Mi",
 			}
@@ -199,10 +198,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 
 		It("Should handle valid parameter schema", func() {
-			schema := map[string]interface{}{
+			schema := map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"name": map[string]interface{}{
+				"properties": map[string]any{
+					"name": map[string]any{
 						"type": "string",
 					},
 				},
@@ -242,13 +241,13 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 
 		It("Should handle valid pull steps", func() {
-			pullStep1 := map[string]interface{}{
-				"prefect.deployments.steps.git_clone": map[string]interface{}{
+			pullStep1 := map[string]any{
+				"prefect.deployments.steps.git_clone": map[string]any{
 					"repository": "https://github.com/org/repo.git",
 				},
 			}
-			pullStep2 := map[string]interface{}{
-				"prefect.deployments.steps.pip_install_requirements": map[string]interface{}{
+			pullStep2 := map[string]any{
+				"prefect.deployments.steps.pip_install_requirements": map[string]any{
 					"requirements_file": "requirements.txt",
 				},
 			}
@@ -281,7 +280,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 
 		It("Should return error for invalid pull step JSON in second step", func() {
-			validStep := map[string]interface{}{"valid": "step"}
+			validStep := map[string]any{"valid": "step"}
 			validStepJSON, _ := json.Marshal(validStep)
 			k8sDeployment.Spec.Deployment.PullSteps = []runtime.RawExtension{
 				{Raw: validStepJSON},
@@ -311,9 +310,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:     "daily-interval",
-						Interval: ptr.To(86400), // 1 day in seconds
-						Timezone: ptr.To("UTC"),
-						Active:   ptr.To(true),
+						Interval: new(86400), // 1 day in seconds
+						Timezone: new("UTC"),
+						Active:   new(true),
 					},
 				}
 
@@ -321,9 +320,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Schedules).To(HaveLen(1))
-				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(86400))))
-				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("UTC")))
-				Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
+				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(new(float64(86400))))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(new("UTC")))
+				Expect(spec.Schedules[0].Active).To(Equal(new(true)))
 				Expect(spec.Schedules[0].Schedule.AnchorDate).To(BeNil())
 				// Ensure other schedule types are nil
 				Expect(spec.Schedules[0].Schedule.Cron).To(BeNil())
@@ -334,10 +333,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:             "daily-interval",
-						Interval:         ptr.To(86400),
-						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:         ptr.To("UTC"),
-						MaxScheduledRuns: ptr.To(10),
+						Interval:         new(86400),
+						AnchorDate:       new("2024-01-01T00:00:00Z"),
+						Timezone:         new("UTC"),
+						MaxScheduledRuns: new(10),
 					},
 				}
 
@@ -345,18 +344,18 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Schedules).To(HaveLen(1))
-				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(86400))))
+				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(new(float64(86400))))
 				Expect(spec.Schedules[0].Schedule.AnchorDate).NotTo(BeNil())
 				Expect(spec.Schedules[0].Schedule.AnchorDate.Year()).To(Equal(2024))
-				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(10)))
+				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(new(10)))
 			})
 
 			It("Should return error for invalid anchor date format", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:       "daily-interval",
-						Interval:   ptr.To(86400),
-						AnchorDate: ptr.To("invalid-date-format"),
+						Interval:   new(86400),
+						AnchorDate: new("invalid-date-format"),
 					},
 				}
 
@@ -373,10 +372,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:     "daily-9am",
-						Cron:     ptr.To("0 9 * * *"),
-						DayOr:    ptr.To(true),
-						Timezone: ptr.To("America/New_York"),
-						Active:   ptr.To(true),
+						Cron:     new("0 9 * * *"),
+						DayOr:    new(true),
+						Timezone: new("America/New_York"),
+						Active:   new(true),
 					},
 				}
 
@@ -384,10 +383,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Schedules).To(HaveLen(1))
-				Expect(spec.Schedules[0].Schedule.Cron).To(Equal(ptr.To("0 9 * * *")))
-				Expect(spec.Schedules[0].Schedule.DayOr).To(Equal(ptr.To(true)))
-				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("America/New_York")))
-				Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
+				Expect(spec.Schedules[0].Schedule.Cron).To(Equal(new("0 9 * * *")))
+				Expect(spec.Schedules[0].Schedule.DayOr).To(Equal(new(true)))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(new("America/New_York")))
+				Expect(spec.Schedules[0].Active).To(Equal(new(true)))
 				// Ensure other schedule types are nil
 				Expect(spec.Schedules[0].Schedule.Interval).To(BeNil())
 				Expect(spec.Schedules[0].Schedule.AnchorDate).To(BeNil())
@@ -398,10 +397,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:             "every-5-minutes",
-						Cron:             ptr.To("*/5 * * * *"),
-						Timezone:         ptr.To("UTC"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(100),
+						Cron:             new("*/5 * * * *"),
+						Timezone:         new("UTC"),
+						Active:           new(true),
+						MaxScheduledRuns: new(100),
 					},
 				}
 
@@ -409,9 +408,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Schedules).To(HaveLen(1))
-				Expect(spec.Schedules[0].Schedule.Cron).To(Equal(ptr.To("*/5 * * * *")))
+				Expect(spec.Schedules[0].Schedule.Cron).To(Equal(new("*/5 * * * *")))
 				Expect(spec.Schedules[0].Schedule.DayOr).To(BeNil()) // Should be nil when not specified
-				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(100)))
+				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(new(100)))
 			})
 		})
 
@@ -420,9 +419,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:     "weekly-monday",
-						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO"),
-						Timezone: ptr.To("UTC"),
-						Active:   ptr.To(true),
+						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO"),
+						Timezone: new("UTC"),
+						Active:   new(true),
 					},
 				}
 
@@ -430,9 +429,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Schedules).To(HaveLen(1))
-				Expect(spec.Schedules[0].Schedule.RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO")))
-				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("UTC")))
-				Expect(spec.Schedules[0].Active).To(Equal(ptr.To(true)))
+				Expect(spec.Schedules[0].Schedule.RRule).To(Equal(new("RRULE:FREQ=WEEKLY;BYDAY=MO")))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(new("UTC")))
+				Expect(spec.Schedules[0].Active).To(Equal(new(true)))
 				// Ensure other schedule types are nil
 				Expect(spec.Schedules[0].Schedule.Interval).To(BeNil())
 				Expect(spec.Schedules[0].Schedule.AnchorDate).To(BeNil())
@@ -444,10 +443,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:             "monthly-first-friday",
-						RRule:            ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR"),
-						Timezone:         ptr.To("America/Los_Angeles"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(12),
+						RRule:            new("RRULE:FREQ=MONTHLY;BYDAY=1FR"),
+						Timezone:         new("America/Los_Angeles"),
+						Active:           new(true),
+						MaxScheduledRuns: new(12),
 					},
 				}
 
@@ -455,9 +454,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(spec.Schedules).To(HaveLen(1))
-				Expect(spec.Schedules[0].Schedule.RRule).To(Equal(ptr.To("RRULE:FREQ=MONTHLY;BYDAY=1FR")))
-				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(ptr.To("America/Los_Angeles")))
-				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(ptr.To(12)))
+				Expect(spec.Schedules[0].Schedule.RRule).To(Equal(new("RRULE:FREQ=MONTHLY;BYDAY=1FR")))
+				Expect(spec.Schedules[0].Schedule.Timezone).To(Equal(new("America/Los_Angeles")))
+				Expect(spec.Schedules[0].MaxScheduledRuns).To(Equal(new(12)))
 			})
 		})
 
@@ -466,23 +465,23 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:       "hourly-interval",
-						Interval:   ptr.To(3600),
-						AnchorDate: ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:   ptr.To("UTC"),
-						Active:     ptr.To(true),
+						Interval:   new(3600),
+						AnchorDate: new("2024-01-01T00:00:00Z"),
+						Timezone:   new("UTC"),
+						Active:     new(true),
 					},
 					{
 						Slug:     "daily-cron",
-						Cron:     ptr.To("0 9 * * *"),
-						DayOr:    ptr.To(false),
-						Timezone: ptr.To("America/New_York"),
-						Active:   ptr.To(true),
+						Cron:     new("0 9 * * *"),
+						DayOr:    new(false),
+						Timezone: new("America/New_York"),
+						Active:   new(true),
 					},
 					{
 						Slug:     "weekly-rrule",
-						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
-						Timezone: ptr.To("Europe/London"),
-						Active:   ptr.To(true),
+						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
+						Timezone: new("Europe/London"),
+						Active:   new(true),
 					},
 				}
 
@@ -492,19 +491,19 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				Expect(spec.Schedules).To(HaveLen(3))
 
 				// Interval schedule
-				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(3600))))
+				Expect(spec.Schedules[0].Schedule.Interval).To(Equal(new(float64(3600))))
 				Expect(spec.Schedules[0].Schedule.AnchorDate).NotTo(BeNil())
 				Expect(spec.Schedules[0].Schedule.Cron).To(BeNil())
 				Expect(spec.Schedules[0].Schedule.RRule).To(BeNil())
 
 				// Cron schedule
-				Expect(spec.Schedules[1].Schedule.Cron).To(Equal(ptr.To("0 9 * * *")))
-				Expect(spec.Schedules[1].Schedule.DayOr).To(Equal(ptr.To(false)))
+				Expect(spec.Schedules[1].Schedule.Cron).To(Equal(new("0 9 * * *")))
+				Expect(spec.Schedules[1].Schedule.DayOr).To(Equal(new(false)))
 				Expect(spec.Schedules[1].Schedule.Interval).To(BeNil())
 				Expect(spec.Schedules[1].Schedule.RRule).To(BeNil())
 
 				// RRule schedule
-				Expect(spec.Schedules[2].Schedule.RRule).To(Equal(ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR")))
+				Expect(spec.Schedules[2].Schedule.RRule).To(Equal(new("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR")))
 				Expect(spec.Schedules[2].Schedule.Interval).To(BeNil())
 				Expect(spec.Schedules[2].Schedule.Cron).To(BeNil())
 			})
@@ -515,8 +514,8 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:     "empty-schedule",
-						Timezone: ptr.To("UTC"),
-						Active:   ptr.To(true),
+						Timezone: new("UTC"),
+						Active:   new(true),
 						// No interval, cron, or rrule specified
 					},
 				}
@@ -532,10 +531,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:     "invalid-schedule",
-						Interval: ptr.To(3600),        // interval specified
-						Cron:     ptr.To("0 9 * * *"), // cron also specified - invalid!
-						Timezone: ptr.To("UTC"),
-						Active:   ptr.To(true),
+						Interval: new(3600),        // interval specified
+						Cron:     new("0 9 * * *"), // cron also specified - invalid!
+						Timezone: new("UTC"),
+						Active:   new(true),
 					},
 				}
 
@@ -550,11 +549,11 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
 						Slug:     "invalid-schedule",
-						Interval: ptr.To(3600),                         // interval specified
-						Cron:     ptr.To("0 9 * * *"),                  // cron specified
-						RRule:    ptr.To("RRULE:FREQ=WEEKLY;BYDAY=MO"), // rrule specified - all three invalid!
-						Timezone: ptr.To("UTC"),
-						Active:   ptr.To(true),
+						Interval: new(3600),                         // interval specified
+						Cron:     new("0 9 * * *"),                  // cron specified
+						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO"), // rrule specified - all three invalid!
+						Timezone: new("UTC"),
+						Active:   new(true),
 					},
 				}
 
@@ -592,10 +591,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 	Context("Complete deployment with all fields", func() {
 		It("Should handle deployment with all optional fields populated", func() {
 			// Set up comprehensive deployment with all fields
-			params := map[string]interface{}{"param1": "value1"}
-			jobVars := map[string]interface{}{"cpu": "100m"}
-			schema := map[string]interface{}{"type": "object"}
-			pullStep := map[string]interface{}{"step": "git_clone"}
+			params := map[string]any{"param1": "value1"}
+			jobVars := map[string]any{"cpu": "100m"}
+			schema := map[string]any{"type": "object"}
+			pullStep := map[string]any{"step": "git_clone"}
 
 			paramsJSON, _ := json.Marshal(params)
 			jobVarsJSON, _ := json.Marshal(jobVars)
@@ -603,35 +602,35 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			pullStepJSON, _ := json.Marshal(pullStep)
 
 			k8sDeployment.Spec.Deployment = prefectiov1.PrefectDeploymentConfiguration{
-				Description: ptr.To("Test deployment"),
+				Description: new("Test deployment"),
 				Tags:        []string{"test", "example"},
 				VersionInfo: &prefectiov1.PrefectVersionInfo{
-					Version: ptr.To("v1.0.0"),
+					Version: new("v1.0.0"),
 				},
 				Entrypoint:             "flows.py:main_flow",
-				Path:                   ptr.To("/opt/flows"),
+				Path:                   new("/opt/flows"),
 				Parameters:             &runtime.RawExtension{Raw: paramsJSON},
 				JobVariables:           &runtime.RawExtension{Raw: jobVarsJSON},
 				ParameterOpenApiSchema: &runtime.RawExtension{Raw: schemaJSON},
-				EnforceParameterSchema: ptr.To(true),
+				EnforceParameterSchema: new(true),
 				PullSteps:              []runtime.RawExtension{{Raw: pullStepJSON}},
-				Paused:                 ptr.To(false),
-				ConcurrencyLimit:       ptr.To(5),
+				Paused:                 new(false),
+				ConcurrencyLimit:       new(5),
 				GlobalConcurrencyLimit: &prefectiov1.PrefectGlobalConcurrencyLimit{
 					Name: "global-limit",
 				},
 				Schedules: []prefectiov1.PrefectSchedule{
 					{
 						Slug:             "test-schedule",
-						Interval:         ptr.To(3600),
-						AnchorDate:       ptr.To("2024-01-01T00:00:00Z"),
-						Timezone:         ptr.To("UTC"),
-						Active:           ptr.To(true),
-						MaxScheduledRuns: ptr.To(10),
+						Interval:         new(3600),
+						AnchorDate:       new("2024-01-01T00:00:00Z"),
+						Timezone:         new("UTC"),
+						Active:           new(true),
+						MaxScheduledRuns: new(10),
 					},
 				},
 			}
-			k8sDeployment.Spec.WorkPool.WorkQueue = ptr.To("test-queue")
+			k8sDeployment.Spec.WorkPool.WorkQueue = new("test-queue")
 
 			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
 
@@ -639,22 +638,22 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			Expect(spec).NotTo(BeNil())
 
 			// Verify all fields are properly converted
-			Expect(spec.Description).To(Equal(ptr.To("Test deployment")))
+			Expect(spec.Description).To(Equal(new("Test deployment")))
 			Expect(spec.Tags).To(Equal([]string{"test", "example"}))
-			Expect(spec.Version).To(Equal(ptr.To("v1.0.0")))
-			Expect(spec.Path).To(Equal(ptr.To("/opt/flows")))
+			Expect(spec.Version).To(Equal(new("v1.0.0")))
+			Expect(spec.Path).To(Equal(new("/opt/flows")))
 			Expect(spec.Parameters).To(Equal(params))
 			Expect(spec.JobVariables).To(Equal(jobVars))
 			Expect(spec.ParameterOpenAPISchema).To(Equal(schema))
-			Expect(spec.EnforceParameterSchema).To(Equal(ptr.To(true)))
+			Expect(spec.EnforceParameterSchema).To(Equal(new(true)))
 			Expect(spec.PullSteps).To(HaveLen(1))
 			Expect(spec.PullSteps[0]).To(Equal(pullStep))
-			Expect(spec.Paused).To(Equal(ptr.To(false)))
-			Expect(spec.ConcurrencyLimit).To(Equal(ptr.To(5)))
+			Expect(spec.Paused).To(Equal(new(false)))
+			Expect(spec.ConcurrencyLimit).To(Equal(new(5)))
 			Expect(spec.GlobalConcurrencyLimits).To(Equal([]string{"global-limit"}))
-			Expect(spec.WorkQueueName).To(Equal(ptr.To("test-queue")))
+			Expect(spec.WorkQueueName).To(Equal(new("test-queue")))
 			Expect(spec.Schedules).To(HaveLen(1))
-			Expect(spec.Schedules[0].Schedule.Interval).To(Equal(ptr.To(float64(3600))))
+			Expect(spec.Schedules[0].Schedule.Interval).To(Equal(new(float64(3600))))
 		})
 	})
 })
@@ -683,8 +682,8 @@ var _ = Describe("UpdateDeploymentStatus", func() {
 	It("Should update status correctly", func() {
 		UpdateDeploymentStatus(k8sDeployment, prefectDeployment)
 
-		Expect(k8sDeployment.Status.Id).To(Equal(ptr.To("deployment-123")))
-		Expect(k8sDeployment.Status.FlowId).To(Equal(ptr.To("flow-456")))
+		Expect(k8sDeployment.Status.Id).To(Equal(new("deployment-123")))
+		Expect(k8sDeployment.Status.FlowId).To(Equal(new("flow-456")))
 		Expect(k8sDeployment.Status.Ready).To(BeTrue())
 	})
 

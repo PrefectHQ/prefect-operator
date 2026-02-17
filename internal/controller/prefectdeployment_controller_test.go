@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -85,9 +84,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 			},
 			Spec: prefectiov1.PrefectDeploymentSpec{
 				Server: prefectiov1.PrefectServerReference{
-					RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
-					AccountID:    ptr.To("abc-123"),
-					WorkspaceID:  ptr.To("def-456"),
+					RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+					AccountID:    new("abc-123"),
+					WorkspaceID:  new("def-456"),
 					APIKey: &prefectiov1.APIKeySpec{
 						ValueFrom: &corev1.EnvVarSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
@@ -99,14 +98,14 @@ var _ = Describe("PrefectDeployment controller", func() {
 				},
 				WorkPool: prefectiov1.PrefectWorkPoolReference{
 					Name:      "kubernetes-work-pool",
-					WorkQueue: ptr.To("default"),
+					WorkQueue: new("default"),
 				},
 				Deployment: prefectiov1.PrefectDeploymentConfiguration{
-					Description: ptr.To("Test deployment"),
+					Description: new("Test deployment"),
 					Tags:        []string{"test", "kubernetes"},
 					Entrypoint:  "flows.py:my_flow",
-					Path:        ptr.To("/opt/prefect/flows"),
-					Paused:      ptr.To(false),
+					Path:        new("/opt/prefect/flows"),
+					Paused:      new(false),
 				},
 			},
 		}
@@ -255,7 +254,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 		It("Should detect spec changes and trigger sync", func() {
 			By("Updating the deployment spec")
-			prefectDeployment.Spec.Deployment.Description = ptr.To("Updated description")
+			prefectDeployment.Spec.Deployment.Description = new("Updated description")
 			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
 
 			By("Reconciling after the change")
@@ -307,7 +306,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(needsSync).To(BeTrue(), "should need sync for new deployment")
 
 			By("Testing needsSync for spec changes")
-			deployment.Status.Id = ptr.To("existing-id")
+			deployment.Status.Id = new("existing-id")
 			deployment.Status.SpecHash = "old-hash"
 			deployment.Status.ObservedGeneration = 1
 			deployment.Generation = 1
@@ -418,7 +417,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Testing GetAPIKey with direct value")
 			serverRef := &prefectiov1.PrefectServerReference{
 				APIKey: &prefectiov1.APIKeySpec{
-					Value: ptr.To("direct-api-key-value"),
+					Value: new("direct-api-key-value"),
 				},
 			}
 
@@ -568,9 +567,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 				},
 				Spec: prefectiov1.PrefectDeploymentSpec{
 					Server: prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+						RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
 						APIKey: &prefectiov1.APIKeySpec{
-							Value: ptr.To("test-key"),
+							Value: new("test-key"),
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
@@ -686,9 +685,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 				},
 				Spec: prefectiov1.PrefectDeploymentSpec{
 					Server: prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+						RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
 						APIKey: &prefectiov1.APIKeySpec{
-							Value: ptr.To("test-key"),
+							Value: new("test-key"),
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
@@ -742,9 +741,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 				},
 				Spec: prefectiov1.PrefectDeploymentSpec{
 					Server: prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+						RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
 						APIKey: &prefectiov1.APIKeySpec{
-							Value: ptr.To("test-key"),
+							Value: new("test-key"),
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
@@ -755,8 +754,8 @@ var _ = Describe("PrefectDeployment controller", func() {
 						Schedules: []prefectiov1.PrefectSchedule{
 							{
 								Slug:       "invalid-schedule",
-								Interval:   ptr.To(3600),
-								AnchorDate: ptr.To("invalid-date-format"),
+								Interval:   new(3600),
+								AnchorDate: new("invalid-date-format"),
 							},
 						},
 					},
@@ -799,9 +798,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 				},
 				Spec: prefectiov1.PrefectDeploymentSpec{
 					Server: prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
+						RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
 						APIKey: &prefectiov1.APIKeySpec{
-							Value: ptr.To("test-key"),
+							Value: new("test-key"),
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{

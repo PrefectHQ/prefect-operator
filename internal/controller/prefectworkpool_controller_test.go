@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -51,7 +50,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		prefectWorkPool     *prefectiov1.PrefectWorkPool
 		reconciler          *PrefectWorkPoolReconciler
 		mockClient          *prefect.MockClient
-		baseJobTemplate     map[string]interface{}
+		baseJobTemplate     map[string]any
 		baseJobTemplateJson []byte
 	)
 
@@ -78,9 +77,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			PrefectClient: mockClient,
 		}
 
-		baseJobTemplate = map[string]interface{}{
+		baseJobTemplate = map[string]any{
 			"foo": "bar",
-			"baz": []interface{}{"qux", "quux"},
+			"baz": []any{"qux", "quux"},
 		}
 
 		var err error
@@ -114,7 +113,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Namespace: name.Namespace,
 			},
 			Spec: prefectiov1.PrefectWorkPoolSpec{
-				Image: ptr.To("prefecthq/prefect:custom-prefect-image"),
+				Image: new("prefecthq/prefect:custom-prefect-image"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
@@ -148,7 +147,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Namespace: name.Namespace,
 			},
 			Spec: prefectiov1.PrefectWorkPoolSpec{
-				Version: ptr.To("3.3.3.3.3.3.3.3"),
+				Version: new("3.3.3.3.3.3.3.3"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
@@ -185,7 +184,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					Name:      name.Name,
 				},
 				Spec: prefectiov1.PrefectWorkPoolSpec{
-					Version: ptr.To("3.0.0"),
+					Version: new("3.0.0"),
 					Type:    "kubernetes",
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -354,8 +353,8 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 						Kind:               "PrefectWorkPool",
 						Name:               name.Name,
 						UID:                prefectWorkPool.UID,
-						Controller:         ptr.To(true),
-						BlockOwnerDeletion: ptr.To(true),
+						Controller:         new(true),
+						BlockOwnerDeletion: new(true),
 					},
 				))
 			})
@@ -744,7 +743,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Server: prefectiov1.PrefectServerReference{
 					Name:         "test-server",
 					Namespace:    name.Namespace,
-					RemoteAPIURL: ptr.To("https://some-server.example.com/api"),
+					RemoteAPIURL: new("https://some-server.example.com/api"),
 				},
 			},
 		}
@@ -785,7 +784,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Server: prefectiov1.PrefectServerReference{
 					Name:         "test-server",
 					Namespace:    name.Namespace,
-					RemoteAPIURL: ptr.To("https://some-server.example.com"),
+					RemoteAPIURL: new("https://some-server.example.com"),
 				},
 			},
 		}
@@ -826,9 +825,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Server: prefectiov1.PrefectServerReference{
 					Name:         "test-server",
 					Namespace:    name.Namespace,
-					RemoteAPIURL: ptr.To("https://remote.prefect.cloud/api"),
+					RemoteAPIURL: new("https://remote.prefect.cloud/api"),
 					APIKey: &prefectiov1.APIKeySpec{
-						Value: ptr.To("test-api-key"),
+						Value: new("test-api-key"),
 					},
 				},
 			},
@@ -874,7 +873,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Server: prefectiov1.PrefectServerReference{
 					Name:         "test-server",
 					Namespace:    name.Namespace,
-					RemoteAPIURL: ptr.To("https://remote.prefect.cloud"),
+					RemoteAPIURL: new("https://remote.prefect.cloud"),
 					APIKey: &prefectiov1.APIKeySpec{
 						ValueFrom: &corev1.EnvVarSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
@@ -937,9 +936,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			},
 			Spec: prefectiov1.PrefectWorkPoolSpec{
 				Server: prefectiov1.PrefectServerReference{
-					RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
-					AccountID:    ptr.To(accountID),
-					WorkspaceID:  ptr.To(workspaceID),
+					RemoteAPIURL: new("https://api.prefect.cloud"),
+					AccountID:    new(accountID),
+					WorkspaceID:  new(workspaceID),
 					APIKey: &prefectiov1.APIKeySpec{
 						ValueFrom: &corev1.EnvVarSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
@@ -1055,7 +1054,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Spec: prefectiov1.PrefectWorkPoolSpec{
 					Type:               "kubernetes",
 					Workers:            1,
-					ServiceAccountName: ptr.To("prefect-worker"),
+					ServiceAccountName: new("prefect-worker"),
 					Server: prefectiov1.PrefectServerReference{
 						Name: "test-server",
 					},
@@ -1122,7 +1121,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Spec: prefectiov1.PrefectWorkPoolSpec{
 					Type:               "kubernetes",
 					Workers:            1,
-					ServiceAccountName: ptr.To(""),
+					ServiceAccountName: new(""),
 					Server: prefectiov1.PrefectServerReference{
 						Name: "test-server",
 					},

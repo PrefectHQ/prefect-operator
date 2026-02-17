@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -87,7 +86,7 @@ var _ = Describe("PrefectServer controller", func() {
 					Name:      "prefect-on-anything",
 				},
 				Spec: prefectiov1.PrefectServerSpec{
-					Image: ptr.To("prefecthq/prefect:custom-prefect-image"),
+					Image: new("prefecthq/prefect:custom-prefect-image"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -270,8 +269,8 @@ var _ = Describe("PrefectServer controller", func() {
 							Kind:               "PrefectServer",
 							Name:               "prefect-on-anything",
 							UID:                prefectserver.UID,
-							Controller:         ptr.To(true),
-							BlockOwnerDeletion: ptr.To(true),
+							Controller:         new(true),
+							BlockOwnerDeletion: new(true),
 						},
 					))
 				})
@@ -397,8 +396,8 @@ var _ = Describe("PrefectServer controller", func() {
 							Kind:               "PrefectServer",
 							Name:               "prefect-on-anything",
 							UID:                prefectserver.UID,
-							Controller:         ptr.To(true),
-							BlockOwnerDeletion: ptr.To(true),
+							Controller:         new(true),
+							BlockOwnerDeletion: new(true),
 						},
 					))
 				})
@@ -657,7 +656,7 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-ipv6-server",
 					},
 					Spec: prefectiov1.PrefectServerSpec{
-						Host: ptr.To(""),
+						Host: new(""),
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -1262,11 +1261,11 @@ var _ = Describe("PrefectServer controller", func() {
 					},
 					Spec: prefectiov1.PrefectServerSpec{
 						Postgres: &prefectiov1.PostgresConfiguration{
-							Host:     ptr.To("some-postgres-server"),
-							Port:     ptr.To(15432),
-							User:     ptr.To("a-prefect-user"),
-							Password: ptr.To("this-is-a-bad-idea"),
-							Database: ptr.To("some-prefect"),
+							Host:     new("some-postgres-server"),
+							Port:     new(15432),
+							User:     new("a-prefect-user"),
+							Password: new("this-is-a-bad-idea"),
+							Database: new("some-prefect"),
 						},
 						DeploymentLabels: map[string]string{
 							"some":    "additional-label",
@@ -1391,8 +1390,8 @@ var _ = Describe("PrefectServer controller", func() {
 							Kind:               "PrefectServer",
 							Name:               "prefect-on-postgres",
 							UID:                prefectserver.UID,
-							Controller:         ptr.To(true),
-							BlockOwnerDeletion: ptr.To(true),
+							Controller:         new(true),
+							BlockOwnerDeletion: new(true),
 						},
 					))
 				})
@@ -1571,11 +1570,11 @@ var _ = Describe("PrefectServer controller", func() {
 					},
 					Spec: prefectiov1.PrefectServerSpec{
 						Postgres: &prefectiov1.PostgresConfiguration{
-							Host:     ptr.To("some-postgres-server"),
-							Port:     ptr.To(15432),
-							User:     ptr.To("a-prefect-user"),
-							Password: ptr.To("this-is-a-bad-idea"),
-							Database: ptr.To("some-prefect"),
+							Host:     new("some-postgres-server"),
+							Port:     new(15432),
+							User:     new("a-prefect-user"),
+							Password: new("this-is-a-bad-idea"),
+							Database: new("some-prefect"),
 						},
 					},
 				}
@@ -1707,11 +1706,11 @@ var _ = Describe("PrefectServer controller", func() {
 					},
 					Spec: prefectiov1.PrefectServerSpec{
 						Postgres: &prefectiov1.PostgresConfiguration{
-							Host:     ptr.To("some-postgres-server"),
-							Port:     ptr.To(15432),
-							User:     ptr.To("a-prefect-user"),
-							Password: ptr.To("this-is-a-bad-idea"),
-							Database: ptr.To("some-prefect"),
+							Host:     new("some-postgres-server"),
+							Port:     new(15432),
+							User:     new("a-prefect-user"),
+							Password: new("this-is-a-bad-idea"),
+							Database: new("some-prefect"),
 						},
 					},
 				}
@@ -1897,7 +1896,7 @@ var _ = Describe("PrefectServer controller", func() {
 					Namespace: namespaceName,
 				},
 				Spec: prefectiov1.PrefectServerSpec{
-					Image: ptr.To("prefecthq/prefect:2.11.0-python3.11"),
+					Image: new("prefecthq/prefect:2.11.0-python3.11"),
 				},
 			}
 		})
@@ -1927,11 +1926,11 @@ var _ = Describe("PrefectServer controller", func() {
 
 		It("should handle SetControllerReference errors in PostgreSQL configurations", func() {
 			prefectserver.Spec.Postgres = &prefectiov1.PostgresConfiguration{
-				Host:     ptr.To("localhost"),
-				Port:     ptr.To(5432),
-				User:     ptr.To("prefect"),
-				Password: ptr.To("password"),
-				Database: ptr.To("prefect"),
+				Host:     new("localhost"),
+				Port:     new(5432),
+				User:     new("prefect"),
+				Password: new("password"),
+				Database: new("prefect"),
 			}
 
 			badReconciler := &PrefectServerReconciler{
