@@ -179,7 +179,7 @@ func getWatchNamespaces() map[string]cache.Config {
 	}
 
 	namespacesToWatch := make(map[string]cache.Config)
-	for _, ns := range strings.Split(namespaces, ",") {
+	for ns := range strings.SplitSeq(namespaces, ",") {
 		namespacesToWatch[ns] = cache.Config{}
 	}
 

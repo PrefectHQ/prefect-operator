@@ -182,12 +182,12 @@ func UpdateDeploymentStatus(k8sDeployment *prefectiov1.PrefectDeployment, prefec
 func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeployment *prefectiov1.PrefectDeployment) (string, error) {
 	entryPoint := k8sDeployment.Spec.Deployment.Entrypoint
 
-	idx := strings.Index(entryPoint, ":")
-	if idx == -1 {
+	_, after, ok := strings.Cut(entryPoint, ":")
+	if !ok {
 		return "", fmt.Errorf("invalid entrypoint format (missing ':'): %s", entryPoint)
 	}
 
-	flowName := entryPoint[idx+1:]
+	flowName := after
 
 	flowSpec := &FlowSpec{
 		Name:   flowName,
