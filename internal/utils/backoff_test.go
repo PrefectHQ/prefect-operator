@@ -83,7 +83,7 @@ var _ = Describe("Backoff utilities", func() {
 		})
 
 		It("should detect when to stop retrying", func() {
-			for i := 0; i < MaxRetryAttempts-1; i++ {
+			for range MaxRetryAttempts - 1 {
 				IncrementRetryCount(workPool)
 				Expect(ShouldStopRetrying(workPool)).To(BeFalse())
 			}

@@ -33,7 +33,7 @@ func (p *KubectlPortForwarder) ForwardPorts(stopCh <-chan struct{}, readyCh chan
 
 	// Wait for the port-forwarding to be ready
 	ready := false
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", p.LocalPort))
 		if err == nil {
 			_ = resp.Body.Close()
