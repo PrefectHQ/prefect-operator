@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -116,9 +118,7 @@ func (s *PrefectWorkPool) WorkerLabels() map[string]string {
 		"prefect.io/worker": s.Name,
 	}
 
-	for k, v := range s.Spec.DeploymentLabels {
-		labels[k] = v
-	}
+	maps.Copy(labels, s.Spec.DeploymentLabels)
 
 	return labels
 }

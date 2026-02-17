@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"maps"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -365,9 +366,7 @@ func (s *PrefectServer) ServerLabels() map[string]string {
 		"prefect.io/server": s.Name,
 		"app":               "prefect-server",
 	}
-	for k, v := range s.Spec.DeploymentLabels {
-		labels[k] = v
-	}
+	maps.Copy(labels, s.Spec.DeploymentLabels)
 	return labels
 }
 
@@ -375,9 +374,7 @@ func (s *PrefectServer) ServiceLabels() map[string]string {
 	labels := map[string]string{
 		"prefect.io/server": s.Name,
 	}
-	for k, v := range s.Spec.ServiceLabels {
-		labels[k] = v
-	}
+	maps.Copy(labels, s.Spec.ServiceLabels)
 	return labels
 }
 
@@ -385,9 +382,7 @@ func (s *PrefectServer) MigrationJobLabels() map[string]string {
 	labels := map[string]string{
 		"prefect.io/server": s.Name,
 	}
-	for k, v := range s.Spec.MigrationJobLabels {
-		labels[k] = v
-	}
+	maps.Copy(labels, s.Spec.MigrationJobLabels)
 	return labels
 }
 

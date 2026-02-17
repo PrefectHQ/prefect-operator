@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"time"
 
@@ -794,9 +795,7 @@ func (c *Client) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetada
 	metadata := map[string]WorkerMetadata{}
 
 	for _, integration := range result {
-		for workerType, worker := range integration {
-			metadata[workerType] = worker
-		}
+		maps.Copy(metadata, integration)
 	}
 
 	return metadata, nil

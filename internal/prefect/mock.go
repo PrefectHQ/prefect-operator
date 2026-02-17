@@ -19,6 +19,7 @@ package prefect
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -297,16 +298,12 @@ func (m *MockClient) copyDeployment(d *Deployment) *Deployment {
 
 	if d.Parameters != nil {
 		copy.Parameters = make(map[string]interface{})
-		for k, v := range d.Parameters {
-			copy.Parameters[k] = v
-		}
+		maps.Copy(copy.Parameters, d.Parameters)
 	}
 
 	if d.JobVariables != nil {
 		copy.JobVariables = make(map[string]interface{})
-		for k, v := range d.JobVariables {
-			copy.JobVariables[k] = v
-		}
+		maps.Copy(copy.JobVariables, d.JobVariables)
 	}
 
 	if d.Schedules != nil {
@@ -327,17 +324,13 @@ func (m *MockClient) copyDeployment(d *Deployment) *Deployment {
 		copy.PullSteps = make([]map[string]interface{}, len(d.PullSteps))
 		for i, step := range d.PullSteps {
 			copy.PullSteps[i] = make(map[string]interface{})
-			for k, v := range step {
-				copy.PullSteps[i][k] = v
-			}
+			maps.Copy(copy.PullSteps[i], step)
 		}
 	}
 
 	if d.ParameterOpenAPISchema != nil {
 		copy.ParameterOpenAPISchema = make(map[string]interface{})
-		for k, v := range d.ParameterOpenAPISchema {
-			copy.ParameterOpenAPISchema[k] = v
-		}
+		maps.Copy(copy.ParameterOpenAPISchema, d.ParameterOpenAPISchema)
 	}
 
 	return &copy
@@ -428,9 +421,7 @@ func (m *MockClient) copyFlow(f *Flow) *Flow {
 	}
 	if f.Labels != nil {
 		copy.Labels = make(map[string]string)
-		for k, v := range f.Labels {
-			copy.Labels[k] = v
-		}
+		maps.Copy(copy.Labels, f.Labels)
 	}
 
 	return &copy
@@ -524,9 +515,7 @@ func (m *MockClient) copyWorkPool(w *WorkPool) *WorkPool {
 
 	if w.BaseJobTemplate != nil {
 		copy.BaseJobTemplate = make(map[string]interface{})
-		for k, v := range w.BaseJobTemplate {
-			copy.BaseJobTemplate[k] = v
-		}
+		maps.Copy(copy.BaseJobTemplate, w.BaseJobTemplate)
 	}
 
 	return &copy
