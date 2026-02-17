@@ -157,50 +157,50 @@ func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerR
 
 // DeploymentSpec represents the request payload for creating/updating deployments
 type DeploymentSpec struct {
-	Name                    string                   `json:"name"`
-	FlowID                  string                   `json:"flow_id"`
-	Description             *string                  `json:"description,omitempty"`
-	Version                 *string                  `json:"version,omitempty"`
-	Tags                    []string                 `json:"tags,omitempty"`
-	Parameters              map[string]interface{}   `json:"parameters,omitempty"`
-	JobVariables            map[string]interface{}   `json:"job_variables,omitempty"`
-	WorkQueueName           *string                  `json:"work_queue_name,omitempty"`
-	WorkPoolName            *string                  `json:"work_pool_name,omitempty"`
-	Paused                  *bool                    `json:"paused,omitempty"`
-	Schedules               []DeploymentSchedule     `json:"schedules,omitempty"`
-	ConcurrencyLimit        *int                     `json:"concurrency_limit,omitempty"`
-	GlobalConcurrencyLimits []string                 `json:"global_concurrency_limits,omitempty"`
-	Entrypoint              *string                  `json:"entrypoint,omitempty"`
-	Path                    *string                  `json:"path,omitempty"`
-	PullSteps               []map[string]interface{} `json:"pull_steps,omitempty"`
-	ParameterOpenAPISchema  map[string]interface{}   `json:"parameter_openapi_schema,omitempty"`
-	EnforceParameterSchema  *bool                    `json:"enforce_parameter_schema,omitempty"`
+	Name                    string               `json:"name"`
+	FlowID                  string               `json:"flow_id"`
+	Description             *string              `json:"description,omitempty"`
+	Version                 *string              `json:"version,omitempty"`
+	Tags                    []string             `json:"tags,omitempty"`
+	Parameters              map[string]any       `json:"parameters,omitempty"`
+	JobVariables            map[string]any       `json:"job_variables,omitempty"`
+	WorkQueueName           *string              `json:"work_queue_name,omitempty"`
+	WorkPoolName            *string              `json:"work_pool_name,omitempty"`
+	Paused                  *bool                `json:"paused,omitempty"`
+	Schedules               []DeploymentSchedule `json:"schedules,omitempty"`
+	ConcurrencyLimit        *int                 `json:"concurrency_limit,omitempty"`
+	GlobalConcurrencyLimits []string             `json:"global_concurrency_limits,omitempty"`
+	Entrypoint              *string              `json:"entrypoint,omitempty"`
+	Path                    *string              `json:"path,omitempty"`
+	PullSteps               []map[string]any     `json:"pull_steps,omitempty"`
+	ParameterOpenAPISchema  map[string]any       `json:"parameter_openapi_schema,omitempty"`
+	EnforceParameterSchema  *bool                `json:"enforce_parameter_schema,omitempty"`
 }
 
 // Deployment represents a Prefect deployment
 type Deployment struct {
-	ID                      string                   `json:"id"`
-	Created                 time.Time                `json:"created"`
-	Updated                 time.Time                `json:"updated"`
-	Name                    string                   `json:"name"`
-	Version                 *string                  `json:"version"`
-	Description             *string                  `json:"description"`
-	FlowID                  string                   `json:"flow_id"`
-	Paused                  bool                     `json:"paused"`
-	Tags                    []string                 `json:"tags"`
-	Parameters              map[string]interface{}   `json:"parameters"`
-	JobVariables            map[string]interface{}   `json:"job_variables"`
-	WorkQueueName           *string                  `json:"work_queue_name"`
-	WorkPoolName            *string                  `json:"work_pool_name"`
-	Status                  string                   `json:"status"`
-	Schedules               []DeploymentSchedule     `json:"schedules"`
-	ConcurrencyLimit        *int                     `json:"concurrency_limit"`
-	GlobalConcurrencyLimits []string                 `json:"global_concurrency_limits"`
-	Entrypoint              *string                  `json:"entrypoint"`
-	Path                    *string                  `json:"path"`
-	PullSteps               []map[string]interface{} `json:"pull_steps"`
-	ParameterOpenAPISchema  map[string]interface{}   `json:"parameter_openapi_schema"`
-	EnforceParameterSchema  bool                     `json:"enforce_parameter_schema"`
+	ID                      string               `json:"id"`
+	Created                 time.Time            `json:"created"`
+	Updated                 time.Time            `json:"updated"`
+	Name                    string               `json:"name"`
+	Version                 *string              `json:"version"`
+	Description             *string              `json:"description"`
+	FlowID                  string               `json:"flow_id"`
+	Paused                  bool                 `json:"paused"`
+	Tags                    []string             `json:"tags"`
+	Parameters              map[string]any       `json:"parameters"`
+	JobVariables            map[string]any       `json:"job_variables"`
+	WorkQueueName           *string              `json:"work_queue_name"`
+	WorkPoolName            *string              `json:"work_pool_name"`
+	Status                  string               `json:"status"`
+	Schedules               []DeploymentSchedule `json:"schedules"`
+	ConcurrencyLimit        *int                 `json:"concurrency_limit"`
+	GlobalConcurrencyLimits []string             `json:"global_concurrency_limits"`
+	Entrypoint              *string              `json:"entrypoint"`
+	Path                    *string              `json:"path"`
+	PullSteps               []map[string]any     `json:"pull_steps"`
+	ParameterOpenAPISchema  map[string]any       `json:"parameter_openapi_schema"`
+	EnforceParameterSchema  bool                 `json:"enforce_parameter_schema"`
 }
 
 // Schedule represents a Prefect deployment schedule.
@@ -252,7 +252,7 @@ type DeploymentSchedule struct {
 	Catchup *bool `json:"catchup,omitempty"`
 
 	// Parameters are schedule-specific parameters
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 // FlowSpec represents the request payload for creating flows
@@ -273,27 +273,27 @@ type Flow struct {
 }
 
 type WorkPoolSpec struct {
-	Name             string                 `json:"name,omitempty"`
-	Description      *string                `json:"description,omitempty"`
-	Type             string                 `json:"type,omitempty"`
-	BaseJobTemplate  map[string]interface{} `json:"base_job_template,omitempty"`
-	IsPaused         *bool                  `json:"is_paused,omitempty"`
-	ConcurrencyLimit *int                   `json:"concurrency_limit,omitempty"`
+	Name             string         `json:"name,omitempty"`
+	Description      *string        `json:"description,omitempty"`
+	Type             string         `json:"type,omitempty"`
+	BaseJobTemplate  map[string]any `json:"base_job_template,omitempty"`
+	IsPaused         *bool          `json:"is_paused,omitempty"`
+	ConcurrencyLimit *int           `json:"concurrency_limit,omitempty"`
 	// StorageConfiguration map[string]interface{} `json:"storage_configuration,omitempty"`
 }
 
 type WorkPool struct {
-	ID               string                 `json:"id"`
-	Created          time.Time              `json:"created"`
-	Updated          time.Time              `json:"updated"`
-	Name             string                 `json:"name"`
-	Type             string                 `json:"type"`
-	Description      *string                `json:"description"`
-	BaseJobTemplate  map[string]interface{} `json:"base_job_template"`
-	IsPaused         bool                   `json:"is_paused"`
-	ConcurrencyLimit *int                   `json:"concurrency_limit"`
-	Status           string                 `json:"status"`
-	DefaultQueueID   *string                `json:"default_queue_id"`
+	ID               string         `json:"id"`
+	Created          time.Time      `json:"created"`
+	Updated          time.Time      `json:"updated"`
+	Name             string         `json:"name"`
+	Type             string         `json:"type"`
+	Description      *string        `json:"description"`
+	BaseJobTemplate  map[string]any `json:"base_job_template"`
+	IsPaused         bool           `json:"is_paused"`
+	ConcurrencyLimit *int           `json:"concurrency_limit"`
+	Status           string         `json:"status"`
+	DefaultQueueID   *string        `json:"default_queue_id"`
 	// StorageConfiguration map[string]interface{} `json:"storage_configuration,omitempty"`
 }
 
@@ -742,14 +742,14 @@ func (c *Client) isRunningInCluster() bool {
 }
 
 type WorkerMetadata struct {
-	Type                   string                 `json:"type"`
-	Description            string                 `json:"description"`
-	DisplayName            string                 `json:"display_name"`
-	DocumentationURL       string                 `json:"documentation_url"`
-	InstallCommand         string                 `json:"install_command"`
-	IsBeta                 bool                   `json:"is_beta"`
-	LogoURL                string                 `json:"logo_url"`
-	DefaultBaseJobTemplate map[string]interface{} `json:"default_base_job_configuration"`
+	Type                   string         `json:"type"`
+	Description            string         `json:"description"`
+	DisplayName            string         `json:"display_name"`
+	DocumentationURL       string         `json:"documentation_url"`
+	InstallCommand         string         `json:"install_command"`
+	IsBeta                 bool           `json:"is_beta"`
+	LogoURL                string         `json:"logo_url"`
+	DefaultBaseJobTemplate map[string]any `json:"default_base_job_configuration"`
 }
 
 // GetWorkerMetadata retrieves aggregate metadata for all worker types
