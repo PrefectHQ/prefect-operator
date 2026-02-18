@@ -21,7 +21,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/ptr"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 )
@@ -40,16 +39,16 @@ var _ = Describe("Server health utilities", func() {
 			serverRef := &prefectiov1.PrefectServerReference{
 				Name:         "prefect-ephemeral",
 				Namespace:    "default",
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/123/workspaces/456"),
+				RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/123/workspaces/456"),
 			}
 			Expect(IsInClusterServer(serverRef)).To(BeFalse())
 		})
 
 		It("should identify Prefect Cloud servers", func() {
 			serverRef := &prefectiov1.PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://api.prefect.cloud/api/accounts/123/workspaces/456"),
-				AccountID:    ptr.To("123"),
-				WorkspaceID:  ptr.To("456"),
+				RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/123/workspaces/456"),
+				AccountID:    new("123"),
+				WorkspaceID:  new("456"),
 			}
 			Expect(IsInClusterServer(serverRef)).To(BeFalse())
 		})
@@ -69,7 +68,7 @@ var _ = Describe("Server health utilities", func() {
 
 		It("should handle external server references", func() {
 			serverRef := &prefectiov1.PrefectServerReference{
-				RemoteAPIURL: ptr.To("https://httpbin.org"),
+				RemoteAPIURL: new("https://httpbin.org"),
 			}
 
 			// This will fail because httpbin.org doesn't have /api/health endpoint

@@ -265,8 +265,8 @@ type PrefectDeploymentList struct {
 func (deployment *PrefectDeployment) Validate() error {
 	entryPoint := deployment.Spec.Deployment.Entrypoint
 
-	idx := strings.Index(entryPoint, ":")
-	if idx == -1 {
+	found := strings.Contains(entryPoint, ":")
+	if !found {
 		return fmt.Errorf("invalid entrypoint format (missing ':'): %s", entryPoint)
 	}
 

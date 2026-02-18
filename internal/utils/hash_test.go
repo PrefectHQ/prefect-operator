@@ -6,7 +6,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 func MigrationJobStub() *batchv1.Job {
@@ -16,7 +15,7 @@ func MigrationJobStub() *batchv1.Job {
 			Namespace: "default",
 		},
 		Spec: batchv1.JobSpec{
-			TTLSecondsAfterFinished: ptr.To(int32(60 * 60)), // 1 hour
+			TTLSecondsAfterFinished: new(int32(60 * 60)), // 1 hour
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"app": "prefect-server"},

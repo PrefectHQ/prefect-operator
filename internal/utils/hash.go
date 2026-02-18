@@ -8,7 +8,7 @@ import (
 
 // Hash returns a hashed string based on an input object,
 // which is JSON serialized, and the length of the output.
-func Hash(obj interface{}, length int) (string, error) {
+func Hash(obj any, length int) (string, error) {
 	data, err := json.Marshal(obj) // Serialize the object to JSON
 	if err != nil {
 		return "", err

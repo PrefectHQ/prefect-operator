@@ -57,7 +57,7 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 
 	// Parameters
 	if deployment.Parameters != nil {
-		var params map[string]interface{}
+		var params map[string]any
 		if err := json.Unmarshal(deployment.Parameters.Raw, &params); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal parameters: %w", err)
 		}
@@ -66,7 +66,7 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 
 	// Job variables
 	if deployment.JobVariables != nil {
-		var jobVars map[string]interface{}
+		var jobVars map[string]any
 		if err := json.Unmarshal(deployment.JobVariables.Raw, &jobVars); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal job variables: %w", err)
 		}
@@ -75,7 +75,7 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 
 	// Parameter OpenAPI schema
 	if deployment.ParameterOpenApiSchema != nil {
-		var schema map[string]interface{}
+		var schema map[string]any
 		if err := json.Unmarshal(deployment.ParameterOpenApiSchema.Raw, &schema); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal parameter schema: %w", err)
 		}
@@ -87,9 +87,9 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 
 	// Pull steps
 	if deployment.PullSteps != nil {
-		pullSteps := make([]map[string]interface{}, len(deployment.PullSteps))
+		pullSteps := make([]map[string]any, len(deployment.PullSteps))
 		for i, step := range deployment.PullSteps {
-			var stepMap map[string]interface{}
+			var stepMap map[string]any
 			if err := json.Unmarshal(step.Raw, &stepMap); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal pull step %d: %w", i, err)
 			}
@@ -182,12 +182,12 @@ func UpdateDeploymentStatus(k8sDeployment *prefectiov1.PrefectDeployment, prefec
 func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeployment *prefectiov1.PrefectDeployment) (string, error) {
 	entryPoint := k8sDeployment.Spec.Deployment.Entrypoint
 
-	idx := strings.Index(entryPoint, ":")
-	if idx == -1 {
+	_, after, ok := strings.Cut(entryPoint, ":")
+	if !ok {
 		return "", fmt.Errorf("invalid entrypoint format (missing ':'): %s", entryPoint)
 	}
 
-	flowName := entryPoint[idx+1:]
+	flowName := after
 
 	flowSpec := &FlowSpec{
 		Name:   flowName,

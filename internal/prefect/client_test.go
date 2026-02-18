@@ -28,7 +28,6 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/ptr"
 )
 
 func TestPrefectClient(t *testing.T) {
@@ -454,9 +453,9 @@ var _ = Describe("Prefect HTTP Client", func() {
 				FlowID:       "flow-123",
 				Paused:       false,
 				Tags:         []string{"test", "deployment"},
-				Parameters:   map[string]interface{}{"param1": "value1"},
-				Entrypoint:   ptr.To("flows.py:main_flow"),
-				WorkPoolName: ptr.To("kubernetes"),
+				Parameters:   map[string]any{"param1": "value1"},
+				Entrypoint:   new("flows.py:main_flow"),
+				WorkPoolName: new("kubernetes"),
 			}
 
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -484,9 +483,9 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Name:         "test-deployment",
 				FlowID:       "flow-123",
 				Tags:         []string{"test", "deployment"},
-				Parameters:   map[string]interface{}{"param1": "value1"},
-				Entrypoint:   ptr.To("flows.py:main_flow"),
-				WorkPoolName: ptr.To("kubernetes"),
+				Parameters:   map[string]any{"param1": "value1"},
+				Entrypoint:   new("flows.py:main_flow"),
+				WorkPoolName: new("kubernetes"),
 			}
 			deployment, err := client.CreateOrUpdateDeployment(ctx, deploymentSpec)
 
@@ -511,7 +510,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Paused:       false,
 				Status:       "READY",
 				Tags:         []string{"test"},
-				WorkPoolName: ptr.To("kubernetes"),
+				WorkPoolName: new("kubernetes"),
 			}
 
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -550,8 +549,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 				FlowID:       "flow-123",
 				Paused:       true,
 				Tags:         []string{"updated", "test"},
-				Parameters:   map[string]interface{}{"param1": "updated_value"},
-				WorkPoolName: ptr.To("kubernetes"),
+				Parameters:   map[string]any{"param1": "updated_value"},
+				WorkPoolName: new("kubernetes"),
 			}
 
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -578,9 +577,9 @@ var _ = Describe("Prefect HTTP Client", func() {
 			deploymentSpec := &DeploymentSpec{
 				Name:       "updated-deployment",
 				FlowID:     "flow-123",
-				Paused:     ptr.To(true),
+				Paused:     new(true),
 				Tags:       []string{"updated", "test"},
-				Parameters: map[string]interface{}{"param1": "updated_value"},
+				Parameters: map[string]any{"param1": "updated_value"},
 			}
 			deployment, err := client.UpdateDeployment(ctx, "deployment-12345", deploymentSpec)
 
@@ -849,7 +848,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 					// This test verifies the fix works for remote servers (to avoid port-forwarding issues)
 					serverRefWithRemote := &prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
+						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
 					client, err := NewClientFromServerReference(serverRefWithRemote, "test-key", "fallback-namespace", logger)
@@ -868,7 +867,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Context("when server reference has remote server", func() {
 				It("should use remote API URL", func() {
 					serverRef = &prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
+						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
 					client, err := NewClientFromServerReference(serverRef, "test-key", "test-namespace", logger)
@@ -946,7 +945,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 				It("should correctly use fallback namespace after fix (VERIFICATION)", func() {
 					// Use remote server reference to test NewClientFromK8s without port-forwarding
 					serverRef := &prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
+						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
 					client, err := NewClientFromK8s(ctx, serverRef, nil, "deployment-namespace", logger)
@@ -969,7 +968,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Context("with remote server reference", func() {
 				It("should use remote API URL regardless of namespace", func() {
 					serverRef = &prefectiov1.PrefectServerReference{
-						RemoteAPIURL: ptr.To("https://api.prefect.cloud"),
+						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
 					client, err := NewClientFromK8s(ctx, serverRef, nil, "deployment-namespace", logger)
