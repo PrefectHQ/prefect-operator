@@ -55,7 +55,7 @@ var _ = Describe("Backoff utilities", func() {
 			workPool = &prefectiov1.PrefectWorkPool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pool",
-					Namespace: "default",
+					Namespace: testNamespaceDefault,
 				},
 			}
 		})

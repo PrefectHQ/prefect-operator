@@ -30,7 +30,7 @@ var _ = Describe("Server health utilities", func() {
 		It("should identify in-cluster servers", func() {
 			serverRef := &prefectiov1.PrefectServerReference{
 				Name:      "prefect-ephemeral",
-				Namespace: "default",
+				Namespace: testNamespaceDefault,
 			}
 			Expect(IsInClusterServer(serverRef)).To(BeTrue())
 		})
@@ -38,7 +38,7 @@ var _ = Describe("Server health utilities", func() {
 		It("should identify external servers with RemoteAPIURL", func() {
 			serverRef := &prefectiov1.PrefectServerReference{
 				Name:         "prefect-ephemeral",
-				Namespace:    "default",
+				Namespace:    testNamespaceDefault,
 				RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/123/workspaces/456"),
 			}
 			Expect(IsInClusterServer(serverRef)).To(BeFalse())
@@ -73,7 +73,7 @@ var _ = Describe("Server health utilities", func() {
 
 			// This will fail because httpbin.org doesn't have /api/health endpoint
 			// But it tests that we don't crash on external servers
-			healthy, err := CheckPrefectServerHealth(ctx, serverRef, nil, "default")
+			healthy, err := CheckPrefectServerHealth(ctx, serverRef, nil, testNamespaceDefault)
 			Expect(healthy).To(BeFalse())
 			Expect(err).To(HaveOccurred()) // Will error because endpoint doesn't exist
 		})
@@ -81,7 +81,7 @@ var _ = Describe("Server health utilities", func() {
 		It("should handle servers with no API URL", func() {
 			serverRef := &prefectiov1.PrefectServerReference{}
 
-			healthy, err := CheckPrefectServerHealth(ctx, serverRef, nil, "default")
+			healthy, err := CheckPrefectServerHealth(ctx, serverRef, nil, testNamespaceDefault)
 			Expect(healthy).To(BeFalse())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unable to determine API URL"))

@@ -103,7 +103,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 				expectedFlow := Flow{
 					ID:   "flow-12345",
-					Name: "test-flow",
+					Name: testFlowName,
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -114,12 +114,12 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "", logger)
 
 			By("Calling GetFlowByName")
-			flow, err := client.GetFlowByName(ctx, "test-flow")
+			flow, err := client.GetFlowByName(ctx, testFlowName)
 
 			By("Verifying request succeeds without authentication")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(flow).NotTo(BeNil())
-			Expect(flow.Name).To(Equal("test-flow"))
+			Expect(flow.Name).To(Equal(testFlowName))
 		})
 
 		It("Should handle custom authentication tokens", func() {
@@ -167,7 +167,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "invalid_key", logger)
 
 			By("Calling GetFlowByName")
-			flow, err := client.GetFlowByName(ctx, "test-flow")
+			flow, err := client.GetFlowByName(ctx, testFlowName)
 
 			By("Verifying authentication error is handled")
 			Expect(err).To(HaveOccurred())
@@ -183,7 +183,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient("http://invalid-host:99999", "test-api-key", logger)
 
 			By("Calling GetFlowByName")
-			flow, err := client.GetFlowByName(ctx, "test-flow")
+			flow, err := client.GetFlowByName(ctx, testFlowName)
 
 			By("Verifying network error is returned")
 			Expect(err).To(HaveOccurred())
@@ -197,7 +197,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 				defer GinkgoRecover()
 				time.Sleep(100 * time.Millisecond)
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(Flow{ID: "test", Name: "test-flow"})
+				_ = json.NewEncoder(w).Encode(Flow{ID: "test", Name: testFlowName})
 			}))
 
 			By("Creating client with mock server URL")
@@ -208,7 +208,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			cancel()
 
 			By("Calling GetFlowByName with cancelled context")
-			flow, err := client.GetFlowByName(cancelCtx, "test-flow")
+			flow, err := client.GetFlowByName(cancelCtx, testFlowName)
 
 			By("Verifying context cancellation error")
 			Expect(err).To(HaveOccurred())
@@ -229,7 +229,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "test-api-key", logger)
 
 			By("Calling GetFlowByName")
-			flow, err := client.GetFlowByName(ctx, "test-flow")
+			flow, err := client.GetFlowByName(ctx, testFlowName)
 
 			By("Verifying unmarshal error is returned")
 			Expect(err).To(HaveOccurred())
@@ -250,7 +250,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "test-api-key", logger)
 
 			By("Calling GetFlowByName")
-			flow, err := client.GetFlowByName(ctx, "test-flow")
+			flow, err := client.GetFlowByName(ctx, testFlowName)
 
 			By("Verifying unmarshal error for non-JSON response")
 			Expect(err).To(HaveOccurred())
@@ -287,9 +287,9 @@ var _ = Describe("Prefect HTTP Client", func() {
 				ID:      "flow-12345",
 				Created: time.Now(),
 				Updated: time.Now(),
-				Name:    "test-flow",
-				Tags:    []string{"test", "example"},
-				Labels:  map[string]string{"env": "test"},
+				Name:    testFlowName,
+				Tags:    []string{testValueTest, testTagExample},
+				Labels:  map[string]string{"env": testValueTest},
 			}
 
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -309,7 +309,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "test-api-key", logger)
 
 			By("Calling GetFlowByName")
-			flow, err := client.GetFlowByName(ctx, "test-flow")
+			flow, err := client.GetFlowByName(ctx, testFlowName)
 
 			By("Verifying the response")
 			Expect(err).NotTo(HaveOccurred())
@@ -351,8 +351,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Created: time.Now(),
 				Updated: time.Now(),
 				Name:    "new-flow",
-				Tags:    []string{"new", "created"},
-				Labels:  map[string]string{"source": "operator"},
+				Tags:    []string{testTagNew, "created"},
+				Labels:  map[string]string{"source": testLabelOperator},
 			}
 
 			callCount := 0
@@ -386,8 +386,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 			By("Calling CreateOrGetFlow")
 			flowSpec := &FlowSpec{
 				Name:   "new-flow",
-				Tags:   []string{"new", "created"},
-				Labels: map[string]string{"source": "operator"},
+				Tags:   []string{testTagNew, "created"},
+				Labels: map[string]string{"source": testLabelOperator},
 			}
 			flow, err := client.CreateOrGetFlow(ctx, flowSpec)
 
@@ -427,8 +427,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 			By("Calling CreateOrGetFlow")
 			flowSpec := &FlowSpec{
 				Name:   "existing-flow",
-				Tags:   []string{"new", "tag"},
-				Labels: map[string]string{"source": "operator"},
+				Tags:   []string{testTagNew, "tag"},
+				Labels: map[string]string{"source": testLabelOperator},
 			}
 			flow, err := client.CreateOrGetFlow(ctx, flowSpec)
 
@@ -446,14 +446,14 @@ var _ = Describe("Prefect HTTP Client", func() {
 		It("Should create a new deployment", func() {
 			By("Setting up mock server for deployment creation")
 			expectedDeployment := Deployment{
-				ID:           "deployment-12345",
+				ID:           testDeploymentID,
 				Created:      time.Now(),
 				Updated:      time.Now(),
-				Name:         "test-deployment",
-				FlowID:       "flow-123",
+				Name:         testDeploymentName,
+				FlowID:       testFlowID,
 				Paused:       false,
-				Tags:         []string{"test", "deployment"},
-				Parameters:   map[string]any{"param1": "value1"},
+				Tags:         []string{testValueTest, testTagDeployment},
+				Parameters:   map[string]any{testParam1: "value1"},
 				Entrypoint:   new("flows.py:main_flow"),
 				WorkPoolName: new("kubernetes"),
 			}
@@ -467,8 +467,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 				// Verify request body contains deployment spec
 				var deploymentSpec DeploymentSpec
 				_ = json.NewDecoder(r.Body).Decode(&deploymentSpec)
-				Expect(deploymentSpec.Name).To(Equal("test-deployment"))
-				Expect(deploymentSpec.FlowID).To(Equal("flow-123"))
+				Expect(deploymentSpec.Name).To(Equal(testDeploymentName))
+				Expect(deploymentSpec.FlowID).To(Equal(testFlowID))
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -480,10 +480,10 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 			By("Calling CreateOrUpdateDeployment")
 			deploymentSpec := &DeploymentSpec{
-				Name:         "test-deployment",
-				FlowID:       "flow-123",
-				Tags:         []string{"test", "deployment"},
-				Parameters:   map[string]any{"param1": "value1"},
+				Name:         testDeploymentName,
+				FlowID:       testFlowID,
+				Tags:         []string{testValueTest, testTagDeployment},
+				Parameters:   map[string]any{testParam1: "value1"},
 				Entrypoint:   new("flows.py:main_flow"),
 				WorkPoolName: new("kubernetes"),
 			}
@@ -502,14 +502,14 @@ var _ = Describe("Prefect HTTP Client", func() {
 		It("Should retrieve a deployment by ID", func() {
 			By("Setting up mock server for deployment retrieval")
 			expectedDeployment := Deployment{
-				ID:           "deployment-12345",
+				ID:           testDeploymentID,
 				Created:      time.Now(),
 				Updated:      time.Now(),
-				Name:         "test-deployment",
-				FlowID:       "flow-123",
+				Name:         testDeploymentName,
+				FlowID:       testFlowID,
 				Paused:       false,
-				Status:       "READY",
-				Tags:         []string{"test"},
+				Status:       WorkPoolStatusReady,
+				Tags:         []string{testValueTest},
 				WorkPoolName: new("kubernetes"),
 			}
 
@@ -527,7 +527,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "test-api-key", logger)
 
 			By("Calling GetDeployment")
-			deployment, err := client.GetDeployment(ctx, "deployment-12345")
+			deployment, err := client.GetDeployment(ctx, testDeploymentID)
 
 			By("Verifying deployment was retrieved")
 			Expect(err).NotTo(HaveOccurred())
@@ -542,14 +542,14 @@ var _ = Describe("Prefect HTTP Client", func() {
 		It("Should update an existing deployment", func() {
 			By("Setting up mock server for deployment update")
 			updatedDeployment := Deployment{
-				ID:           "deployment-12345",
+				ID:           testDeploymentID,
 				Created:      time.Now().Add(-time.Hour),
 				Updated:      time.Now(),
 				Name:         "updated-deployment",
-				FlowID:       "flow-123",
+				FlowID:       testFlowID,
 				Paused:       true,
-				Tags:         []string{"updated", "test"},
-				Parameters:   map[string]any{"param1": "updated_value"},
+				Tags:         []string{"updated", testValueTest},
+				Parameters:   map[string]any{testParam1: "updated_value"},
 				WorkPoolName: new("kubernetes"),
 			}
 
@@ -576,17 +576,17 @@ var _ = Describe("Prefect HTTP Client", func() {
 			By("Calling UpdateDeployment")
 			deploymentSpec := &DeploymentSpec{
 				Name:       "updated-deployment",
-				FlowID:     "flow-123",
+				FlowID:     testFlowID,
 				Paused:     new(true),
-				Tags:       []string{"updated", "test"},
-				Parameters: map[string]any{"param1": "updated_value"},
+				Tags:       []string{"updated", testValueTest},
+				Parameters: map[string]any{testParam1: "updated_value"},
 			}
-			deployment, err := client.UpdateDeployment(ctx, "deployment-12345", deploymentSpec)
+			deployment, err := client.UpdateDeployment(ctx, testDeploymentID, deploymentSpec)
 
 			By("Verifying deployment was updated")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
-			Expect(deployment.ID).To(Equal("deployment-12345"))
+			Expect(deployment.ID).To(Equal(testDeploymentID))
 			Expect(deployment.Name).To(Equal("updated-deployment"))
 			Expect(deployment.Paused).To(BeTrue())
 		})
@@ -608,7 +608,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient(mockServer.URL, "test-api-key", logger)
 
 			By("Calling DeleteDeployment")
-			err := client.DeleteDeployment(ctx, "deployment-12345")
+			err := client.DeleteDeployment(ctx, testDeploymentID)
 
 			By("Verifying deployment was deleted")
 			Expect(err).NotTo(HaveOccurred())
@@ -654,7 +654,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			client = NewClient("http://test.com", "test-api-key", logger)
 
 			By("Calling GetDeploymentByName")
-			deployment, err := client.GetDeploymentByName(ctx, "test-deployment", "flow-123")
+			deployment, err := client.GetDeploymentByName(ctx, testDeploymentName, testFlowID)
 
 			By("Verifying unimplemented error")
 			Expect(err).To(HaveOccurred())
@@ -695,8 +695,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 				client = NewClient(mockServer.URL, "test-api-key", logger)
 				spec := &DeploymentSpec{
-					Name:   "test-deployment",
-					FlowID: "flow-123",
+					Name:   testDeploymentName,
+					FlowID: testFlowID,
 				}
 				deployment, err := client.CreateOrUpdateDeployment(ctx, spec)
 
@@ -782,7 +782,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 				client = NewClient(mockServer.URL, "test-api-key", logger)
 				spec := &DeploymentSpec{
 					Name:   "invalid-deployment",
-					FlowID: "flow-123",
+					FlowID: testFlowID,
 				}
 				deployment, err := client.CreateOrUpdateDeployment(ctx, spec)
 
@@ -824,7 +824,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 					// vs what it should produce if it accepted a fallback namespace parameter
 
 					serverRef := &prefectiov1.PrefectServerReference{
-						Name: "prefect-server",
+						Name: testServerName,
 						// Namespace is empty
 					}
 
@@ -842,7 +842,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 				It("should use provided fallback namespace when server namespace is empty (AFTER FIX)", func() {
 					serverRef := &prefectiov1.PrefectServerReference{
-						Name: "prefect-server",
+						Name: testServerName,
 						// Namespace is empty - should use fallback namespace parameter
 					}
 
@@ -881,7 +881,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Context("URL generation for different scenarios", func() {
 				It("should correctly generate in-cluster URLs when namespace is specified", func() {
 					serverRef := &prefectiov1.PrefectServerReference{
-						Name:      "prefect-server",
+						Name:      testServerName,
 						Namespace: "prefect-system",
 					}
 
@@ -897,7 +897,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 				It("should use fallback namespace when server namespace is empty", func() {
 					serverRef := &prefectiov1.PrefectServerReference{
-						Name: "prefect-server",
+						Name: testServerName,
 						// Namespace is empty - should use fallback
 					}
 
@@ -925,7 +925,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 				It("should demonstrate the bug: NewClientFromK8s doesn't pass fallback namespace", func() {
 					// Test the URL generation directly to show the bug without port-forwarding issues
 					serverRef := &prefectiov1.PrefectServerReference{
-						Name: "prefect-server",
+						Name: testServerName,
 						// Namespace is empty - should use deployment's namespace
 					}
 
@@ -956,7 +956,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 					// For in-cluster servers, verify the namespace fallback logic would work
 					inClusterRef := &prefectiov1.PrefectServerReference{
-						Name: "prefect-server",
+						Name: testServerName,
 						// Namespace is empty - should use deployment-namespace as fallback
 					}
 

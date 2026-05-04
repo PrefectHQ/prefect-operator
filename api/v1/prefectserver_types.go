@@ -91,16 +91,16 @@ type EphemeralConfiguration struct {
 func (s *EphemeralConfiguration) ToEnvVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
-			Name:  "PREFECT_API_DATABASE_DRIVER",
-			Value: "sqlite+aiosqlite",
+			Name:  EnvPrefectAPIDatabaseDriver,
+			Value: DatabaseDriverSQLite,
 		},
 		{
-			Name:  "PREFECT_API_DATABASE_NAME",
-			Value: "/var/lib/prefect/prefect.db",
+			Name:  EnvPrefectAPIDatabaseName,
+			Value: PrefectSQLitePath,
 		},
 		{
-			Name:  "PREFECT_API_DATABASE_MIGRATE_ON_START",
-			Value: "True",
+			Name:  EnvPrefectAPIDatabaseMigrateOnStart,
+			Value: MigrateOnStartTrue,
 		},
 	}
 }
@@ -116,16 +116,16 @@ type SQLiteConfiguration struct {
 func (s *SQLiteConfiguration) ToEnvVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
-			Name:  "PREFECT_API_DATABASE_DRIVER",
-			Value: "sqlite+aiosqlite",
+			Name:  EnvPrefectAPIDatabaseDriver,
+			Value: DatabaseDriverSQLite,
 		},
 		{
-			Name:  "PREFECT_API_DATABASE_NAME",
-			Value: "/var/lib/prefect/prefect.db",
+			Name:  EnvPrefectAPIDatabaseName,
+			Value: PrefectSQLitePath,
 		},
 		{
-			Name:  "PREFECT_API_DATABASE_MIGRATE_ON_START",
-			Value: "True",
+			Name:  EnvPrefectAPIDatabaseMigrateOnStart,
+			Value: MigrateOnStartTrue,
 		},
 	}
 }
@@ -146,8 +146,8 @@ type PostgresConfiguration struct {
 func (p *PostgresConfiguration) ToEnvVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
-			Name:  "PREFECT_API_DATABASE_DRIVER",
-			Value: "postgresql+asyncpg",
+			Name:  EnvPrefectAPIDatabaseDriver,
+			Value: DatabaseDriverPostgres,
 		},
 		p.HostEnvVar(),
 		p.PortEnvVar(),
@@ -155,8 +155,8 @@ func (p *PostgresConfiguration) ToEnvVars() []corev1.EnvVar {
 		p.PasswordEnvVar(),
 		p.DatabaseEnvVar(),
 		{
-			Name:  "PREFECT_API_DATABASE_MIGRATE_ON_START",
-			Value: "False",
+			Name:  EnvPrefectAPIDatabaseMigrateOnStart,
+			Value: MigrateOnStartFalse,
 		},
 	}
 }
@@ -164,12 +164,12 @@ func (p *PostgresConfiguration) ToEnvVars() []corev1.EnvVar {
 func (p *PostgresConfiguration) HostEnvVar() corev1.EnvVar {
 	if p.Host != nil && *p.Host != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_API_DATABASE_HOST",
+			Name:  EnvPrefectAPIDatabaseHost,
 			Value: *p.Host,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_API_DATABASE_HOST",
+		Name:      EnvPrefectAPIDatabaseHost,
 		ValueFrom: p.HostFrom,
 	}
 }
@@ -177,12 +177,12 @@ func (p *PostgresConfiguration) HostEnvVar() corev1.EnvVar {
 func (p *PostgresConfiguration) PortEnvVar() corev1.EnvVar {
 	if p.Port != nil && *p.Port != 0 {
 		return corev1.EnvVar{
-			Name:  "PREFECT_API_DATABASE_PORT",
+			Name:  EnvPrefectAPIDatabasePort,
 			Value: strconv.Itoa(*p.Port),
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_API_DATABASE_PORT",
+		Name:      EnvPrefectAPIDatabasePort,
 		ValueFrom: p.PortFrom,
 	}
 }
@@ -190,12 +190,12 @@ func (p *PostgresConfiguration) PortEnvVar() corev1.EnvVar {
 func (p *PostgresConfiguration) UserEnvVar() corev1.EnvVar {
 	if p.User != nil && *p.User != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_API_DATABASE_USER",
+			Name:  EnvPrefectAPIDatabaseUser,
 			Value: *p.User,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_API_DATABASE_USER",
+		Name:      EnvPrefectAPIDatabaseUser,
 		ValueFrom: p.UserFrom,
 	}
 }
@@ -203,12 +203,12 @@ func (p *PostgresConfiguration) UserEnvVar() corev1.EnvVar {
 func (p *PostgresConfiguration) PasswordEnvVar() corev1.EnvVar {
 	if p.Password != nil && *p.Password != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_API_DATABASE_PASSWORD",
+			Name:  EnvPrefectAPIDatabasePassword,
 			Value: *p.Password,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_API_DATABASE_PASSWORD",
+		Name:      EnvPrefectAPIDatabasePassword,
 		ValueFrom: p.PasswordFrom,
 	}
 }
@@ -216,12 +216,12 @@ func (p *PostgresConfiguration) PasswordEnvVar() corev1.EnvVar {
 func (p *PostgresConfiguration) DatabaseEnvVar() corev1.EnvVar {
 	if p.Database != nil && *p.Database != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_API_DATABASE_NAME",
+			Name:  EnvPrefectAPIDatabaseName,
 			Value: *p.Database,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_API_DATABASE_NAME",
+		Name:      EnvPrefectAPIDatabaseName,
 		ValueFrom: p.DatabaseFrom,
 	}
 }
@@ -242,12 +242,12 @@ type RedisConfiguration struct {
 func (r *RedisConfiguration) ToEnvVars() []corev1.EnvVar {
 	var envVars = []corev1.EnvVar{
 		{
-			Name:  "PREFECT_MESSAGING_BROKER",
-			Value: "prefect_redis.messaging",
+			Name:  EnvPrefectMessagingBroker,
+			Value: RedisMessagingPackage,
 		},
 		{
-			Name:  "PREFECT_MESSAGING_CACHE",
-			Value: "prefect_redis.messaging",
+			Name:  EnvPrefectMessagingCache,
+			Value: RedisMessagingPackage,
 		},
 	}
 
@@ -273,12 +273,12 @@ func (r *RedisConfiguration) ToEnvVars() []corev1.EnvVar {
 func (r *RedisConfiguration) HostEnvVar() corev1.EnvVar {
 	if r.Host != nil && *r.Host != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_REDIS_MESSAGING_HOST",
+			Name:  EnvPrefectRedisMessagingHost,
 			Value: *r.Host,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_REDIS_MESSAGING_HOST",
+		Name:      EnvPrefectRedisMessagingHost,
 		ValueFrom: r.HostFrom,
 	}
 }
@@ -286,12 +286,12 @@ func (r *RedisConfiguration) HostEnvVar() corev1.EnvVar {
 func (r *RedisConfiguration) PortEnvVar() corev1.EnvVar {
 	if r.Port != nil && *r.Port != 0 {
 		return corev1.EnvVar{
-			Name:  "PREFECT_REDIS_MESSAGING_PORT",
+			Name:  EnvPrefectRedisMessagingPort,
 			Value: strconv.Itoa(*r.Port),
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_REDIS_MESSAGING_PORT",
+		Name:      EnvPrefectRedisMessagingPort,
 		ValueFrom: r.PortFrom,
 	}
 }
@@ -299,12 +299,12 @@ func (r *RedisConfiguration) PortEnvVar() corev1.EnvVar {
 func (r *RedisConfiguration) DatabaseEnvVar() corev1.EnvVar {
 	if r.Database != nil {
 		return corev1.EnvVar{
-			Name:  "PREFECT_REDIS_MESSAGING_DB",
+			Name:  EnvPrefectRedisMessagingDB,
 			Value: strconv.Itoa(*r.Database),
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_REDIS_MESSAGING_DB",
+		Name:      EnvPrefectRedisMessagingDB,
 		ValueFrom: r.DatabaseFrom,
 	}
 }
@@ -312,12 +312,12 @@ func (r *RedisConfiguration) DatabaseEnvVar() corev1.EnvVar {
 func (r *RedisConfiguration) UsernameEnvVar() corev1.EnvVar {
 	if r.Username != nil && *r.Username != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_REDIS_MESSAGING_USERNAME",
+			Name:  EnvPrefectRedisMessagingUsername,
 			Value: *r.Username,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_REDIS_MESSAGING_USERNAME",
+		Name:      EnvPrefectRedisMessagingUsername,
 		ValueFrom: r.UsernameFrom,
 	}
 }
@@ -325,12 +325,12 @@ func (r *RedisConfiguration) UsernameEnvVar() corev1.EnvVar {
 func (r *RedisConfiguration) PasswordEnvVar() corev1.EnvVar {
 	if r.Password != nil && *r.Password != "" {
 		return corev1.EnvVar{
-			Name:  "PREFECT_REDIS_MESSAGING_PASSWORD",
+			Name:  EnvPrefectRedisMessagingPassword,
 			Value: *r.Password,
 		}
 	}
 	return corev1.EnvVar{
-		Name:      "PREFECT_REDIS_MESSAGING_PASSWORD",
+		Name:      EnvPrefectRedisMessagingPassword,
 		ValueFrom: r.PasswordFrom,
 	}
 }
@@ -363,8 +363,8 @@ type PrefectServer struct {
 
 func (s *PrefectServer) ServerLabels() map[string]string {
 	labels := map[string]string{
-		"prefect.io/server": s.Name,
-		"app":               "prefect-server",
+		LabelPrefectIOServer: s.Name,
+		"app":                AppLabelPrefectServer,
 	}
 	maps.Copy(labels, s.Spec.DeploymentLabels)
 	return labels
@@ -372,7 +372,7 @@ func (s *PrefectServer) ServerLabels() map[string]string {
 
 func (s *PrefectServer) ServiceLabels() map[string]string {
 	labels := map[string]string{
-		"prefect.io/server": s.Name,
+		LabelPrefectIOServer: s.Name,
 	}
 	maps.Copy(labels, s.Spec.ServiceLabels)
 	return labels
@@ -380,7 +380,7 @@ func (s *PrefectServer) ServiceLabels() map[string]string {
 
 func (s *PrefectServer) MigrationJobLabels() map[string]string {
 	labels := map[string]string{
-		"prefect.io/server": s.Name,
+		LabelPrefectIOServer: s.Name,
 	}
 	maps.Copy(labels, s.Spec.MigrationJobLabels)
 	return labels
@@ -403,7 +403,7 @@ func (s *PrefectServer) EntrypointArguments() []string {
 	}
 
 	command := make([]string, 0, 5+len(s.Spec.ExtraArgs))
-	command = append(command, "prefect", "server", "start", "--host", host)
+	command = append(command, PrefectCLI, ServerSubcommand, StartCommand, ServerArgHost, host)
 	command = append(command, s.Spec.ExtraArgs...)
 
 	return command
@@ -412,8 +412,8 @@ func (s *PrefectServer) EntrypointArguments() []string {
 func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{
-			Name:  "PREFECT_HOME",
-			Value: "/var/lib/prefect/",
+			Name:  EnvPrefectHome,
+			Value: PrefectHomePath,
 		},
 	}
 

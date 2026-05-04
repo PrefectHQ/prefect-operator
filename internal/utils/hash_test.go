@@ -12,7 +12,7 @@ func MigrationJobStub() *batchv1.Job {
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-migration-job",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: batchv1.JobSpec{
 			TTLSecondsAfterFinished: new(int32(60 * 60)), // 1 hour
