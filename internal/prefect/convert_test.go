@@ -37,8 +37,8 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		flowID = "test-flow-123"
 		k8sDeployment = &prefectiov1.PrefectDeployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-deployment",
-				Namespace: "test-namespace",
+				Name:      testDeploymentName,
+				Namespace: testNamespace,
 			},
 			Spec: prefectiov1.PrefectDeploymentSpec{
 				WorkPool: prefectiov1.PrefectWorkPoolReference{
@@ -57,7 +57,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(spec).NotTo(BeNil())
-			Expect(spec.Name).To(Equal("test-deployment"))
+			Expect(spec.Name).To(Equal(testDeploymentName))
 			Expect(spec.FlowID).To(Equal(flowID))
 			Expect(spec.Entrypoint).To(Equal(new("flows.py:main_flow")))
 			Expect(spec.WorkPoolName).To(Equal(new("test-workpool")))
@@ -118,7 +118,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 		It("Should handle valid parameters", func() {
 			params := map[string]any{
-				"key1": "value1",
+				"key1": testValue1,
 				"key2": 42,
 			}
 			paramsJSON, _ := json.Marshal(params)
@@ -130,7 +130,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(spec.Parameters).To(HaveKey("key1"))
-			Expect(spec.Parameters["key1"]).To(Equal("value1"))
+			Expect(spec.Parameters["key1"]).To(Equal(testValue1))
 			Expect(spec.Parameters).To(HaveKey("key2"))
 			Expect(spec.Parameters["key2"]).To(BeNumerically("==", 42))
 		})
@@ -199,10 +199,10 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 		It("Should handle valid parameter schema", func() {
 			schema := map[string]any{
-				"type": "object",
+				testJSONType: "object",
 				"properties": map[string]any{
 					"name": map[string]any{
-						"type": "string",
+						testJSONType: "string",
 					},
 				},
 			}
@@ -309,7 +309,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			It("Should handle interval schedule without anchor date", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
-						Slug:     "daily-interval",
+						Slug:     testDailyInterval,
 						Interval: new(86400), // 1 day in seconds
 						Timezone: new("UTC"),
 						Active:   new(true),
@@ -332,7 +332,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			It("Should handle interval schedule with anchor date", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
-						Slug:             "daily-interval",
+						Slug:             testDailyInterval,
 						Interval:         new(86400),
 						AnchorDate:       new("2024-01-01T00:00:00Z"),
 						Timezone:         new("UTC"),
@@ -353,7 +353,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 			It("Should return error for invalid anchor date format", func() {
 				k8sDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
 					{
-						Slug:       "daily-interval",
+						Slug:       testDailyInterval,
 						Interval:   new(86400),
 						AnchorDate: new("invalid-date-format"),
 					},
@@ -591,9 +591,9 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 	Context("Complete deployment with all fields", func() {
 		It("Should handle deployment with all optional fields populated", func() {
 			// Set up comprehensive deployment with all fields
-			params := map[string]any{"param1": "value1"}
+			params := map[string]any{testParam1: testValue1}
 			jobVars := map[string]any{"cpu": "100m"}
-			schema := map[string]any{"type": "object"}
+			schema := map[string]any{testJSONType: "object"}
 			pullStep := map[string]any{"step": "git_clone"}
 
 			paramsJSON, _ := json.Marshal(params)
@@ -603,7 +603,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 			k8sDeployment.Spec.Deployment = prefectiov1.PrefectDeploymentConfiguration{
 				Description: new("Test deployment"),
-				Tags:        []string{"test", "example"},
+				Tags:        []string{testValueTest, testTagExample},
 				VersionInfo: &prefectiov1.PrefectVersionInfo{
 					Version: new("v1.0.0"),
 				},
@@ -639,7 +639,7 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 
 			// Verify all fields are properly converted
 			Expect(spec.Description).To(Equal(new("Test deployment")))
-			Expect(spec.Tags).To(Equal([]string{"test", "example"}))
+			Expect(spec.Tags).To(Equal([]string{testValueTest, testTagExample}))
 			Expect(spec.Version).To(Equal(new("v1.0.0")))
 			Expect(spec.Path).To(Equal(new("/opt/flows")))
 			Expect(spec.Parameters).To(Equal(params))
@@ -667,15 +667,15 @@ var _ = Describe("UpdateDeploymentStatus", func() {
 	BeforeEach(func() {
 		k8sDeployment = &prefectiov1.PrefectDeployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-deployment",
-				Namespace: "test-namespace",
+				Name:      testDeploymentName,
+				Namespace: testNamespace,
 			},
 		}
 
 		prefectDeployment = &Deployment{
 			ID:     "deployment-123",
 			FlowID: "flow-456",
-			Status: "READY",
+			Status: WorkPoolStatusReady,
 		}
 	})
 
@@ -710,13 +710,13 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		mockClient = NewMockClient()
 		k8sDeployment = &prefectiov1.PrefectDeployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-deployment",
-				Namespace: "test-namespace",
+				Name:      testDeploymentName,
+				Namespace: testNamespace,
 			},
 			Spec: prefectiov1.PrefectDeploymentSpec{
 				Deployment: prefectiov1.PrefectDeploymentConfiguration{
 					Entrypoint: "foo.py:test_flow",
-					Tags:       []string{"test", "deployment"},
+					Tags:       []string{testValueTest, testTagDeployment},
 					Labels:     map[string]string{"env": "test"},
 				},
 			},

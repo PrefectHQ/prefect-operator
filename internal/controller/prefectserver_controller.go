@@ -360,7 +360,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 				NodeSelector: server.Spec.NodeSelector,
 				Volumes: []corev1.Volume{
 					{
-						Name: "prefect-data",
+						Name: constants.PrefectDataVolumeName,
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
@@ -368,7 +368,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 				},
 				Containers: []corev1.Container{
 					{
-						Name: "prefect-server",
+						Name: prefectiov1.AppLabelPrefectServer,
 
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -376,14 +376,14 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 						Args: server.EntrypointArguments(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      "prefect-data",
-								MountPath: "/var/lib/prefect/",
+								Name:      constants.PrefectDataVolumeName,
+								MountPath: constants.PrefectHomeMountPath,
 							},
 						},
 						Env: server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{
-								Name:          "api",
+								Name:          constants.APIPortName,
 								ContainerPort: 4200,
 								Protocol:      corev1.ProtocolTCP,
 							},
@@ -395,7 +395,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
 
-						TerminationMessagePath:   "/dev/termination-log",
+						TerminationMessagePath:   constants.TerminationMessagePath,
 						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
@@ -442,7 +442,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 				NodeSelector: server.Spec.NodeSelector,
 				Volumes: []corev1.Volume{
 					{
-						Name: "prefect-data",
+						Name: constants.PrefectDataVolumeName,
 						VolumeSource: corev1.VolumeSource{
 							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 								ClaimName: pvc.Name,
@@ -452,7 +452,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 				},
 				Containers: []corev1.Container{
 					{
-						Name: "prefect-server",
+						Name: prefectiov1.AppLabelPrefectServer,
 
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -460,14 +460,14 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 						Args: server.EntrypointArguments(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      "prefect-data",
-								MountPath: "/var/lib/prefect/",
+								Name:      constants.PrefectDataVolumeName,
+								MountPath: constants.PrefectHomeMountPath,
 							},
 						},
 						Env: server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{
-								Name:          "api",
+								Name:          constants.APIPortName,
 								ContainerPort: 4200,
 								Protocol:      corev1.ProtocolTCP,
 							},
@@ -479,7 +479,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
 
-						TerminationMessagePath:   "/dev/termination-log",
+						TerminationMessagePath:   constants.TerminationMessagePath,
 						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
@@ -508,7 +508,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 				},
 				Containers: []corev1.Container{
 					{
-						Name: "prefect-server",
+						Name: prefectiov1.AppLabelPrefectServer,
 
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -517,7 +517,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 						Env:  server.ToEnvVars(),
 						Ports: []corev1.ContainerPort{
 							{
-								Name:          "api",
+								Name:          constants.APIPortName,
 								ContainerPort: 4200,
 								Protocol:      corev1.ProtocolTCP,
 							},
@@ -529,7 +529,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 						ReadinessProbe: server.ReadinessProbe(),
 						LivenessProbe:  server.LivenessProbe(),
 
-						TerminationMessagePath:   "/dev/termination-log",
+						TerminationMessagePath:   constants.TerminationMessagePath,
 						TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 					},
 				},
@@ -554,7 +554,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 					{
 						Name:    "prefect-server-migration",
 						Image:   server.Image(),
-						Command: []string{"prefect", "server", "database", "upgrade", "--yes"},
+						Command: []string{prefectiov1.PrefectCLI, prefectiov1.ServerSubcommand, "database", "upgrade", "--yes"},
 						Env:     server.ToEnvVars(),
 					},
 				},
@@ -586,10 +586,10 @@ func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.Prefe
 			Selector: server.ServerLabels(),
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "api",
+					Name:       constants.APIPortName,
 					Protocol:   corev1.ProtocolTCP,
 					Port:       4200,
-					TargetPort: intstr.FromString("api"),
+					TargetPort: intstr.FromString(constants.APIPortName),
 				},
 			},
 		},

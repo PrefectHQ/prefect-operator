@@ -63,14 +63,14 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "postgresql+asyncpg"},
-				{Name: "PREFECT_API_DATABASE_HOST", Value: "postgres.example.com"},
-				{Name: "PREFECT_API_DATABASE_PORT", Value: "5432"},
-				{Name: "PREFECT_API_DATABASE_USER", Value: "prefect"},
-				{Name: "PREFECT_API_DATABASE_PASSWORD", Value: "secret123"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "prefect"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "False"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "postgresql+asyncpg"},
+				{Name: EnvPrefectAPIDatabaseHost, Value: "postgres.example.com"},
+				{Name: EnvPrefectAPIDatabasePort, Value: "5432"},
+				{Name: EnvPrefectAPIDatabaseUser, Value: "prefect"},
+				{Name: EnvPrefectAPIDatabasePassword, Value: "secret123"},
+				{Name: EnvPrefectAPIDatabaseName, Value: "prefect"},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: MigrateOnStartFalse},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -117,10 +117,10 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "postgresql+asyncpg"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "postgresql+asyncpg"},
 				{
-					Name: "PREFECT_API_DATABASE_HOST",
+					Name: EnvPrefectAPIDatabaseHost,
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "postgres-config"},
@@ -129,7 +129,7 @@ var _ = Describe("PrefectServer type", func() {
 					},
 				},
 				{
-					Name: "PREFECT_API_DATABASE_PORT",
+					Name: EnvPrefectAPIDatabasePort,
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "postgres-config"},
@@ -138,7 +138,7 @@ var _ = Describe("PrefectServer type", func() {
 					},
 				},
 				{
-					Name: "PREFECT_API_DATABASE_USER",
+					Name: EnvPrefectAPIDatabaseUser,
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "postgres-secret"},
@@ -147,7 +147,7 @@ var _ = Describe("PrefectServer type", func() {
 					},
 				},
 				{
-					Name: "PREFECT_API_DATABASE_PASSWORD",
+					Name: EnvPrefectAPIDatabasePassword,
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "postgres-secret"},
@@ -156,7 +156,7 @@ var _ = Describe("PrefectServer type", func() {
 					},
 				},
 				{
-					Name: "PREFECT_API_DATABASE_NAME",
+					Name: EnvPrefectAPIDatabaseName,
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "postgres-config"},
@@ -164,7 +164,7 @@ var _ = Describe("PrefectServer type", func() {
 						},
 					},
 				},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "False"},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: MigrateOnStartFalse},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -183,10 +183,10 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "sqlite+aiosqlite"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "/var/lib/prefect/prefect.db"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "True"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "sqlite+aiosqlite"},
+				{Name: EnvPrefectAPIDatabaseName, Value: PrefectSQLitePath},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: "True"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -202,10 +202,10 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "sqlite+aiosqlite"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "/var/lib/prefect/prefect.db"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "True"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "sqlite+aiosqlite"},
+				{Name: EnvPrefectAPIDatabaseName, Value: PrefectSQLitePath},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: "True"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -216,8 +216,8 @@ var _ = Describe("PrefectServer type", func() {
 				Spec: PrefectServerSpec{
 					Ephemeral: &EphemeralConfiguration{},
 					Settings: []corev1.EnvVar{
-						{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
-						{Name: "PREFECT_ANOTHER_SETTING", Value: "another-value"},
+						{Name: envPrefectExtraSetting, Value: "extra-value"},
+						{Name: envPrefectAnotherSetting, Value: "another-value"},
 					},
 				},
 			}
@@ -225,12 +225,12 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "sqlite+aiosqlite"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "/var/lib/prefect/prefect.db"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "True"},
-				{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
-				{Name: "PREFECT_ANOTHER_SETTING", Value: "another-value"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "sqlite+aiosqlite"},
+				{Name: EnvPrefectAPIDatabaseName, Value: PrefectSQLitePath},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: "True"},
+				{Name: envPrefectExtraSetting, Value: "extra-value"},
+				{Name: envPrefectAnotherSetting, Value: "another-value"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -252,7 +252,7 @@ var _ = Describe("PrefectServer type", func() {
 						Database: new(0),
 					},
 					Settings: []corev1.EnvVar{
-						{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
+						{Name: envPrefectExtraSetting, Value: "extra-value"},
 					},
 				},
 			}
@@ -260,23 +260,23 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
 				// Postgres vars
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "postgresql+asyncpg"},
-				{Name: "PREFECT_API_DATABASE_HOST", Value: "postgres.example.com"},
-				{Name: "PREFECT_API_DATABASE_PORT", Value: "5432"},
-				{Name: "PREFECT_API_DATABASE_USER", Value: "prefect"},
-				{Name: "PREFECT_API_DATABASE_PASSWORD", Value: "secret123"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "prefect"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "False"},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "postgresql+asyncpg"},
+				{Name: EnvPrefectAPIDatabaseHost, Value: "postgres.example.com"},
+				{Name: EnvPrefectAPIDatabasePort, Value: "5432"},
+				{Name: EnvPrefectAPIDatabaseUser, Value: "prefect"},
+				{Name: EnvPrefectAPIDatabasePassword, Value: "secret123"},
+				{Name: EnvPrefectAPIDatabaseName, Value: "prefect"},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: MigrateOnStartFalse},
 				// Redis vars
-				{Name: "PREFECT_MESSAGING_BROKER", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_MESSAGING_CACHE", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_REDIS_MESSAGING_HOST", Value: "redis.example.com"},
+				{Name: EnvPrefectMessagingBroker, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingCache, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectRedisMessagingHost, Value: "redis.example.com"},
 				{Name: "PREFECT_REDIS_MESSAGING_PORT", Value: "6379"},
-				{Name: "PREFECT_REDIS_MESSAGING_DB", Value: "0"},
+				{Name: EnvPrefectRedisMessagingDB, Value: "0"},
 				// Extra settings
-				{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
+				{Name: envPrefectExtraSetting, Value: "extra-value"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -300,13 +300,13 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.Spec.Redis.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_MESSAGING_BROKER", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_MESSAGING_CACHE", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_REDIS_MESSAGING_HOST", Value: "redis.example.com"},
+				{Name: EnvPrefectMessagingBroker, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingCache, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectRedisMessagingHost, Value: "redis.example.com"},
 				{Name: "PREFECT_REDIS_MESSAGING_PORT", Value: "6379"},
-				{Name: "PREFECT_REDIS_MESSAGING_DB", Value: "0"},
+				{Name: EnvPrefectRedisMessagingDB, Value: "0"},
 				{Name: "PREFECT_REDIS_MESSAGING_USERNAME", Value: "prefect"},
-				{Name: "PREFECT_REDIS_MESSAGING_PASSWORD", Value: "secret123"},
+				{Name: EnvPrefectRedisMessagingPassword, Value: "secret123"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -353,10 +353,10 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.Spec.Redis.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_MESSAGING_BROKER", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_MESSAGING_CACHE", Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingBroker, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingCache, Value: "prefect_redis.messaging"},
 				{
-					Name: "PREFECT_REDIS_MESSAGING_HOST",
+					Name: EnvPrefectRedisMessagingHost,
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "redis-config"},
@@ -374,7 +374,7 @@ var _ = Describe("PrefectServer type", func() {
 					},
 				},
 				{
-					Name: "PREFECT_REDIS_MESSAGING_DB",
+					Name: EnvPrefectRedisMessagingDB,
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "redis-config"},
@@ -392,7 +392,7 @@ var _ = Describe("PrefectServer type", func() {
 					},
 				},
 				{
-					Name: "PREFECT_REDIS_MESSAGING_PASSWORD",
+					Name: EnvPrefectRedisMessagingPassword,
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "redis-secret"},
@@ -419,11 +419,11 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedRedisEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_MESSAGING_BROKER", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_MESSAGING_CACHE", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_REDIS_MESSAGING_HOST", Value: "redis.example.com"},
+				{Name: EnvPrefectMessagingBroker, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingCache, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectRedisMessagingHost, Value: "redis.example.com"},
 				{Name: "PREFECT_REDIS_MESSAGING_PORT", Value: "6379"},
-				{Name: "PREFECT_REDIS_MESSAGING_DB", Value: "0"},
+				{Name: EnvPrefectRedisMessagingDB, Value: "0"},
 			}
 
 			for _, expected := range expectedRedisEnvVars {
@@ -444,9 +444,9 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.Spec.Redis.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_MESSAGING_BROKER", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_MESSAGING_CACHE", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_REDIS_MESSAGING_HOST", Value: "redis.example.com"},
+				{Name: EnvPrefectMessagingBroker, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingCache, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectRedisMessagingHost, Value: "redis.example.com"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -459,8 +459,8 @@ var _ = Describe("PrefectServer type", func() {
 				Spec: PrefectServerSpec{
 					Ephemeral: &EphemeralConfiguration{},
 					Settings: []corev1.EnvVar{
-						{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
-						{Name: "PREFECT_ANOTHER_SETTING", Value: "another-value"},
+						{Name: envPrefectExtraSetting, Value: "extra-value"},
+						{Name: envPrefectAnotherSetting, Value: "another-value"},
 					},
 				},
 			}
@@ -468,12 +468,12 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "sqlite+aiosqlite"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "/var/lib/prefect/prefect.db"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "True"},
-				{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
-				{Name: "PREFECT_ANOTHER_SETTING", Value: "another-value"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "sqlite+aiosqlite"},
+				{Name: EnvPrefectAPIDatabaseName, Value: PrefectSQLitePath},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: "True"},
+				{Name: envPrefectExtraSetting, Value: "extra-value"},
+				{Name: envPrefectAnotherSetting, Value: "another-value"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -485,7 +485,7 @@ var _ = Describe("PrefectServer type", func() {
 					Ephemeral: &EphemeralConfiguration{},
 					Settings: []corev1.EnvVar{
 						{
-							Name: "PREFECT_EXTRA_SETTING",
+							Name: envPrefectExtraSetting,
 							ValueFrom: &corev1.EnvVarSource{
 								ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 									LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-config"},
@@ -509,12 +509,12 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "sqlite+aiosqlite"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "/var/lib/prefect/prefect.db"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "True"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "sqlite+aiosqlite"},
+				{Name: EnvPrefectAPIDatabaseName, Value: PrefectSQLitePath},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: "True"},
 				{
-					Name: "PREFECT_EXTRA_SETTING",
+					Name: envPrefectExtraSetting,
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-config"},
@@ -552,7 +552,7 @@ var _ = Describe("PrefectServer type", func() {
 						Database: new(0),
 					},
 					Settings: []corev1.EnvVar{
-						{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
+						{Name: envPrefectExtraSetting, Value: "extra-value"},
 						{
 							Name: "PREFECT_SECRET_SETTING",
 							ValueFrom: &corev1.EnvVarSource{
@@ -569,23 +569,23 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
 				// Postgres vars
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "postgresql+asyncpg"},
-				{Name: "PREFECT_API_DATABASE_HOST", Value: "postgres.example.com"},
-				{Name: "PREFECT_API_DATABASE_PORT", Value: "5432"},
-				{Name: "PREFECT_API_DATABASE_USER", Value: "prefect"},
-				{Name: "PREFECT_API_DATABASE_PASSWORD", Value: "secret123"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "prefect"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "False"},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "postgresql+asyncpg"},
+				{Name: EnvPrefectAPIDatabaseHost, Value: "postgres.example.com"},
+				{Name: EnvPrefectAPIDatabasePort, Value: "5432"},
+				{Name: EnvPrefectAPIDatabaseUser, Value: "prefect"},
+				{Name: EnvPrefectAPIDatabasePassword, Value: "secret123"},
+				{Name: EnvPrefectAPIDatabaseName, Value: "prefect"},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: MigrateOnStartFalse},
 				// Redis vars
-				{Name: "PREFECT_MESSAGING_BROKER", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_MESSAGING_CACHE", Value: "prefect_redis.messaging"},
-				{Name: "PREFECT_REDIS_MESSAGING_HOST", Value: "redis.example.com"},
+				{Name: EnvPrefectMessagingBroker, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectMessagingCache, Value: "prefect_redis.messaging"},
+				{Name: EnvPrefectRedisMessagingHost, Value: "redis.example.com"},
 				{Name: "PREFECT_REDIS_MESSAGING_PORT", Value: "6379"},
-				{Name: "PREFECT_REDIS_MESSAGING_DB", Value: "0"},
+				{Name: EnvPrefectRedisMessagingDB, Value: "0"},
 				// Extra settings
-				{Name: "PREFECT_EXTRA_SETTING", Value: "extra-value"},
+				{Name: envPrefectExtraSetting, Value: "extra-value"},
 				{
 					Name: "PREFECT_SECRET_SETTING",
 					ValueFrom: &corev1.EnvVarSource{
@@ -611,10 +611,10 @@ var _ = Describe("PrefectServer type", func() {
 			envVars := server.ToEnvVars()
 
 			expectedEnvVars := []corev1.EnvVar{
-				{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
-				{Name: "PREFECT_API_DATABASE_DRIVER", Value: "sqlite+aiosqlite"},
-				{Name: "PREFECT_API_DATABASE_NAME", Value: "/var/lib/prefect/prefect.db"},
-				{Name: "PREFECT_API_DATABASE_MIGRATE_ON_START", Value: "True"},
+				{Name: EnvPrefectHome, Value: PrefectHomePath},
+				{Name: EnvPrefectAPIDatabaseDriver, Value: "sqlite+aiosqlite"},
+				{Name: EnvPrefectAPIDatabaseName, Value: PrefectSQLitePath},
+				{Name: EnvPrefectAPIDatabaseMigrateOnStart, Value: "True"},
 			}
 
 			Expect(envVars).To(ConsistOf(expectedEnvVars))
@@ -627,7 +627,7 @@ var _ = Describe("PrefectServer type", func() {
 				}
 
 				args := server.EntrypointArguments()
-				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "0.0.0.0"}))
+				Expect(args).To(Equal([]string{PrefectCLI, ServerSubcommand, StartCommand, ServerArgHost, "0.0.0.0"}))
 			})
 
 			It("should use empty string for IPv6/dual-stack when specified", func() {
@@ -638,7 +638,7 @@ var _ = Describe("PrefectServer type", func() {
 				}
 
 				args := server.EntrypointArguments()
-				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", ""}))
+				Expect(args).To(Equal([]string{PrefectCLI, ServerSubcommand, StartCommand, ServerArgHost, ""}))
 			})
 
 			It("should use custom host with ExtraArgs", func() {
@@ -650,7 +650,7 @@ var _ = Describe("PrefectServer type", func() {
 				}
 
 				args := server.EntrypointArguments()
-				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "", "--some-arg", "some-value"}))
+				Expect(args).To(Equal([]string{PrefectCLI, ServerSubcommand, StartCommand, ServerArgHost, "", "--some-arg", "some-value"}))
 			})
 
 			It("should use specific IPv4 address when specified", func() {
@@ -661,7 +661,7 @@ var _ = Describe("PrefectServer type", func() {
 				}
 
 				args := server.EntrypointArguments()
-				Expect(args).To(Equal([]string{"prefect", "server", "start", "--host", "127.0.0.1"}))
+				Expect(args).To(Equal([]string{PrefectCLI, ServerSubcommand, StartCommand, ServerArgHost, "127.0.0.1"}))
 			})
 		})
 	})

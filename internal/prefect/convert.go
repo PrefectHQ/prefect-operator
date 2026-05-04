@@ -275,8 +275,11 @@ func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.Prefect
 	return spec, nil
 }
 
+// WorkPoolStatusReady is the Prefect API status string indicating a work pool is ready.
+const WorkPoolStatusReady = "READY"
+
 // UpdateDeploymentStatus updates the K8s PrefectDeployment status from a Prefect API Deployment
 func UpdateWorkPoolStatus(k8sWorkPool *prefectiov1.PrefectWorkPool, prefectWorkPool *WorkPool) {
 	k8sWorkPool.Status.Id = &prefectWorkPool.ID
-	k8sWorkPool.Status.Ready = prefectWorkPool.Status == "READY"
+	k8sWorkPool.Status.Ready = prefectWorkPool.Status == WorkPoolStatusReady
 }

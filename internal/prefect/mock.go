@@ -113,7 +113,7 @@ func (m *MockClient) CreateOrUpdateDeployment(ctx context.Context, deployment *D
 		JobVariables:            deployment.JobVariables,
 		WorkQueueName:           deployment.WorkQueueName,
 		WorkPoolName:            deployment.WorkPoolName,
-		Status:                  "READY", // Default status
+		Status:                  WorkPoolStatusReady, // Default status
 		Schedules:               deployment.Schedules,
 		ConcurrencyLimit:        deployment.ConcurrencyLimit,
 		GlobalConcurrencyLimits: deployment.GlobalConcurrencyLimits,
@@ -452,7 +452,7 @@ func (m *MockClient) CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec)
 		BaseJobTemplate:  workPool.BaseJobTemplate,
 		IsPaused:         workPool.IsPaused != nil && *workPool.IsPaused,
 		ConcurrencyLimit: workPool.ConcurrencyLimit,
-		Status:           "READY", // Default status
+		Status:           WorkPoolStatusReady, // Default status
 		DefaultQueueID:   nil,
 	}
 

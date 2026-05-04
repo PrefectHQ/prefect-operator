@@ -36,7 +36,7 @@ var _ = Describe("PrefectWorkPool type", func() {
 					Namespace: "default",
 					Name:      "prefect",
 				},
-				Type:    "kubernetes",
+				Type:    WorkPoolTypeK8s,
 				Workers: int32(2),
 			}}
 
@@ -60,9 +60,9 @@ var _ = Describe("PrefectWorkPool type", func() {
 			args := workPool.EntrypointArguments()
 			Expect(args).To(ContainElement("prefect-work-pool"))
 			Expect(args).To(Equal([]string{
-				"prefect", "worker", "start",
-				"--pool", "prefect-work-pool", "--type", "kubernetes",
-				"--with-healthcheck",
+				PrefectCLI, "worker", StartCommand,
+				WorkerArgPool, "prefect-work-pool", WorkerArgType, "kubernetes",
+				WorkerArgWithHealthcheck,
 			}))
 		})
 
@@ -79,9 +79,9 @@ var _ = Describe("PrefectWorkPool type", func() {
 			args := workPool.EntrypointArguments()
 			Expect(args).To(ContainElement("my-work-pool"))
 			Expect(args).To(Equal([]string{
-				"prefect", "worker", "start",
-				"--pool", "my-work-pool", "--type", "process",
-				"--with-healthcheck",
+				PrefectCLI, "worker", StartCommand,
+				WorkerArgPool, "my-work-pool", WorkerArgType, "process",
+				WorkerArgWithHealthcheck,
 			}))
 		})
 

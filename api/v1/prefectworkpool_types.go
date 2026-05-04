@@ -125,7 +125,7 @@ func (s *PrefectWorkPool) WorkerLabels() map[string]string {
 
 func (s *PrefectWorkPool) Image() string {
 	suffix := ""
-	if s.Spec.Type == "kubernetes" {
+	if s.Spec.Type == WorkPoolTypeK8s {
 		suffix = "-kubernetes"
 	}
 
@@ -149,9 +149,9 @@ func (s *PrefectWorkPool) ServiceAccount() string {
 
 func (s *PrefectWorkPool) EntrypointArguments() []string {
 	return []string{
-		"prefect", "worker", "start",
-		"--pool", s.Name, "--type", s.Spec.Type,
-		"--with-healthcheck",
+		PrefectCLI, WorkerSubcommand, StartCommand,
+		WorkerArgPool, s.Name, WorkerArgType, s.Spec.Type,
+		WorkerArgWithHealthcheck,
 	}
 }
 
@@ -164,8 +164,8 @@ func (s *PrefectWorkPool) PrefectAPIURL() string {
 func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{
-			Name:  "PREFECT_HOME",
-			Value: "/var/lib/prefect/",
+			Name:  EnvPrefectHome,
+			Value: PrefectHomePath,
 		},
 		{
 			Name:  "PREFECT_API_URL",

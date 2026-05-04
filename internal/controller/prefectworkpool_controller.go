@@ -170,7 +170,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					ServiceAccountName: workPool.ServiceAccount(),
 					Volumes: []corev1.Volume{
 						{
-							Name: "prefect-data",
+							Name: constants.PrefectDataVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -186,8 +186,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 							Args: workPool.EntrypointArguments(),
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "prefect-data",
-									MountPath: "/var/lib/prefect/",
+									Name:      constants.PrefectDataVolumeName,
+									MountPath: constants.PrefectHomeMountPath,
 								},
 							},
 							Env: append(workPool.ToEnvVars(), workPool.Spec.Settings...),
@@ -198,7 +198,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 							ReadinessProbe: workPool.ReadinessProbe(),
 							LivenessProbe:  workPool.LivenessProbe(),
 
-							TerminationMessagePath:   "/dev/termination-log",
+							TerminationMessagePath:   constants.TerminationMessagePath,
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 						},
 					}, workPool.Spec.ExtraContainers...),
