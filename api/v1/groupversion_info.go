@@ -20,8 +20,9 @@ limitations under the License.
 package v1
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 var (
@@ -29,8 +30,29 @@ var (
 	GroupVersion = schema.GroupVersion{Group: "prefect.io", Version: "v1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
-	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+	SchemeBuilder = &schemeBuilder{GroupVersion: GroupVersion}
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
 )
+
+// schemeBuilder mirrors sigs.k8s.io/controller-runtime/pkg/scheme.Builder but
+// depends only on k8s.io/apimachinery, keeping this api package importable
+// without pulling in controller-runtime.
+type schemeBuilder struct {
+	GroupVersion schema.GroupVersion
+	runtime.SchemeBuilder
+}
+
+func (bld *schemeBuilder) Register(object ...runtime.Object) *schemeBuilder {
+	bld.SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(bld.GroupVersion, object...)
+		metav1.AddToGroupVersion(s, bld.GroupVersion)
+		return nil
+	})
+	return bld
+}
+
+func (bld *schemeBuilder) AddToScheme(s *runtime.Scheme) error {
+	return bld.SchemeBuilder.AddToScheme(s)
+}
