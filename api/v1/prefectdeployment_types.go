@@ -74,7 +74,7 @@ type PrefectDeploymentConfiguration struct {
 	// FlowName overrides the flow name derived from the entrypoint. When set, this
 	// value is used instead of the function name after ":" in the entrypoint.
 	// +optional
-	FlowName *string `json:"flowName,omitempty"`
+	FlowName *string `json:"flow_name,omitempty"`
 
 	// Path is the path to the flow code
 	// +optional

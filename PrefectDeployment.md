@@ -153,7 +153,7 @@ Deployment configuration defining the Prefect deployment
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>flowName</b></td>
+        <td><b>flow_name</b></td>
         <td>string</td>
         <td>
           FlowName overrides the flow name derived from the entrypoint. When set, this

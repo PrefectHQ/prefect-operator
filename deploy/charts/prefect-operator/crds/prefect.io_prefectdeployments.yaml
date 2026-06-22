@@ -72,7 +72,7 @@ spec:
                     description: Entrypoint is the entrypoint for the flow (e.g.,
                       "my_code.py:my_function")
                     type: string
-                  flowName:
+                  flow_name:
                     description: |-
                       FlowName overrides the flow name derived from the entrypoint. When set, this
                       value is used instead of the function name after ":" in the entrypoint.
