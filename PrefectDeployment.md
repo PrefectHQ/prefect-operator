@@ -153,6 +153,14 @@ Deployment configuration defining the Prefect deployment
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>flowName</b></td>
+        <td>string</td>
+        <td>
+          FlowName overrides the flow name derived from the entrypoint. When set, this
+value is used instead of the function name after ":" in the entrypoint.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectdeploymentspecdeploymentglobalconcurrencylimit">globalConcurrencyLimit</a></b></td>
         <td>object</td>
         <td>
@@ -293,7 +301,9 @@ GlobalConcurrencyLimit references a global concurrency limit
 
 
 
-PrefectSchedule defines a schedule for the deployment
+PrefectSchedule defines a schedule for the deployment.
+This structure exactly matches Prefect's prefect.yaml and API format.
+Exactly one of Interval, Cron, or RRule must be specified.
 
 <table>
     <thead>
@@ -305,72 +315,80 @@ PrefectSchedule defines a schedule for the deployment
         </tr>
     </thead>
     <tbody><tr>
-        <td><b><a href="#prefectdeploymentspecdeploymentschedulesindexschedule">schedule</a></b></td>
-        <td>object</td>
-        <td>
-          Schedule defines the schedule configuration<br/>
-        </td>
-        <td>true</td>
-      </tr><tr>
         <td><b>slug</b></td>
         <td>string</td>
         <td>
-          Slug is a unique identifier for the schedule<br/>
+          Slug is a unique identifier for the schedule
+Maps to: DeploymentScheduleCreate.slug (string)<br/>
         </td>
         <td>true</td>
-      </tr></tbody>
-</table>
-
-
-### PrefectDeployment.spec.deployment.schedules[index].schedule
-<sup><sup>[↩ Parent](#prefectdeploymentspecdeploymentschedulesindex)</sup></sup>
-
-
-
-Schedule defines the schedule configuration
-
-<table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Description</th>
-            <th>Required</th>
-        </tr>
-    </thead>
-    <tbody><tr>
+      </tr><tr>
         <td><b>active</b></td>
         <td>boolean</td>
         <td>
-          Active indicates if the schedule is active<br/>
+          Active indicates if the schedule is active
+Maps to: DeploymentScheduleCreate.active (boolean, default: true)<br/>
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>anchorDate</b></td>
+        <td><b>anchor_date</b></td>
         <td>string</td>
         <td>
-          AnchorDate is the anchor date for the schedule<br/>
+          AnchorDate is the anchor date for interval schedules in RFC3339 format
+Maps to: IntervalSchedule.anchor_date (string, format: date-time)
+Example: "2024-01-01T00:00:00Z"<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>cron</b></td>
+        <td>string</td>
+        <td>
+          Cron is a valid cron expression (required for cron schedules)
+Maps to: CronSchedule.cron (string, required)
+Examples: "0 9 * * *" (daily at 9am), "*/5 * * * *" (every 5 minutes)<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>day_or</b></td>
+        <td>boolean</td>
+        <td>
+          DayOr controls how croniter handles day and day_of_week entries
+Maps to: CronSchedule.day_or (boolean, default: true)
+true = OR logic (standard cron), false = AND logic (like fcron)<br/>
         </td>
         <td>false</td>
       </tr><tr>
         <td><b>interval</b></td>
         <td>integer</td>
         <td>
-          Interval is the schedule interval in seconds<br/>
+          Interval is the schedule interval in seconds (required for interval schedules)
+Maps to: IntervalSchedule.interval (number, required)<br/>
         </td>
         <td>false</td>
       </tr><tr>
-        <td><b>maxScheduledRuns</b></td>
+        <td><b>max_scheduled_runs</b></td>
         <td>integer</td>
         <td>
-          MaxScheduledRuns limits the number of scheduled runs<br/>
+          MaxScheduledRuns limits the number of scheduled runs
+Maps to: DeploymentScheduleCreate.max_scheduled_runs (integer > 0)<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>rrule</b></td>
+        <td>string</td>
+        <td>
+          RRule is a valid RFC 5545 RRULE string (required for rrule schedules)
+Maps to: RRuleSchedule.rrule (string, required)
+Examples: "RRULE:FREQ=WEEKLY;BYDAY=MO", "RRULE:FREQ=MONTHLY;BYDAY=1FR"<br/>
         </td>
         <td>false</td>
       </tr><tr>
         <td><b>timezone</b></td>
         <td>string</td>
         <td>
-          Timezone for the schedule<br/>
+          Timezone for the schedule (IANA timezone string)
+Maps to: IntervalSchedule.timezone, CronSchedule.timezone, RRuleSchedule.timezone
+Examples: "America/New_York", "UTC", "Europe/London"<br/>
         </td>
         <td>false</td>
       </tr></tbody>
