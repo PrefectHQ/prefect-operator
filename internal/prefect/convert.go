@@ -188,6 +188,9 @@ func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeplo
 	}
 
 	flowName := after
+	if k8sDeployment.Spec.Deployment.FlowName != nil && *k8sDeployment.Spec.Deployment.FlowName != "" {
+		flowName = *k8sDeployment.Spec.Deployment.FlowName
+	}
 
 	flowSpec := &FlowSpec{
 		Name:   flowName,

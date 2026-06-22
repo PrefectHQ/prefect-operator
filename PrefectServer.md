@@ -119,6 +119,16 @@ PrefectServerSpec defines the desired state of a PrefectServer
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>host</b></td>
+        <td>string</td>
+        <td>
+          Host defines the host address to bind the Prefect Server to.
+Defaults to "0.0.0.0" for IPv4 compatibility.
+Use "" (empty string) to bind to all interfaces for IPv6-only or dual-stack environments.
+Note: Prefect does not accept "::" as a valid host value.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>image</b></td>
         <td>string</td>
         <td>
@@ -332,7 +342,8 @@ More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#cont
         <td><b><a href="#prefectserverspecextracontainersindexresizepolicyindex">resizePolicy</a></b></td>
         <td>[]object</td>
         <td>
-          Resources resize policy for the container.<br/>
+          Resources resize policy for the container.
+This field cannot be set on ephemeral containers.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -2481,7 +2492,6 @@ Note that this field cannot be set when spec.os.name is windows.<br/>
           procMount denotes the type of proc mount to use for the containers.
 The default value is Default which uses the container runtime defaults for
 readonly paths and masked paths.
-This requires the ProcMountType feature flag to be enabled.
 Note that this field cannot be set when spec.os.name is windows.<br/>
         </td>
         <td>false</td>

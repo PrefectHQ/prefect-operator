@@ -769,4 +769,46 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(flowID).To(BeEmpty())
 	})
+
+	Context("FlowName field", func() {
+		It("Should use entrypoint suffix as flow name when FlowName is nil", func() {
+			k8sDeployment.Spec.Deployment.FlowName = nil
+
+			_, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			flow, err := mockClient.CreateOrGetFlow(ctx, &FlowSpec{Name: "test_flow"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(flow).NotTo(BeNil())
+		})
+
+		It("Should use FlowName when set, ignoring entrypoint suffix", func() {
+			k8sDeployment.Spec.Deployment.FlowName = new("my-custom-flow")
+
+			flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(flowID).NotTo(BeEmpty())
+
+			flow, err := mockClient.CreateOrGetFlow(ctx, &FlowSpec{Name: "my-custom-flow"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(flow.ID).To(Equal(flowID))
+
+			// The entrypoint suffix ("test_flow") should not have been registered
+			noFlow, err := mockClient.GetFlowByName(ctx, "test_flow")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(noFlow).To(BeNil())
+		})
+
+		It("Should fall back to entrypoint suffix when FlowName is empty string", func() {
+			empty := ""
+			k8sDeployment.Spec.Deployment.FlowName = &empty
+
+			_, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			flow, err := mockClient.CreateOrGetFlow(ctx, &FlowSpec{Name: "test_flow"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(flow).NotTo(BeNil())
+		})
+	})
 })

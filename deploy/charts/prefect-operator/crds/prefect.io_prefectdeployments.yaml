@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: prefectdeployments.prefect.io
 spec:
   group: prefect.io
@@ -71,6 +71,11 @@ spec:
                   entrypoint:
                     description: Entrypoint is the entrypoint for the flow (e.g.,
                       "my_code.py:my_function")
+                    type: string
+                  flow_name:
+                    description: |-
+                      FlowName overrides the flow name derived from the entrypoint. When set, this
+                      value is used instead of the function name after ":" in the entrypoint.
                     type: string
                   globalConcurrencyLimit:
                     description: GlobalConcurrencyLimit references a global concurrency
