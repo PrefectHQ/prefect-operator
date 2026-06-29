@@ -205,6 +205,11 @@ func (in *PrefectDeploymentConfiguration) DeepCopyInto(out *PrefectDeploymentCon
 		*out = new(PrefectVersionInfo)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.FlowName != nil {
+		in, out := &in.FlowName, &out.FlowName
+		*out = new(string)
+		**out = **in
+	}
 	if in.Path != nil {
 		in, out := &in.Path, &out.Path
 		*out = new(string)

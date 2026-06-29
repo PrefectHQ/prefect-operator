@@ -71,6 +71,11 @@ type PrefectDeploymentConfiguration struct {
 	// Entrypoint is the entrypoint for the flow (e.g., "my_code.py:my_function")
 	Entrypoint string `json:"entrypoint"`
 
+	// FlowName overrides the flow name derived from the entrypoint. When set, this
+	// value is used instead of the function name after ":" in the entrypoint.
+	// +optional
+	FlowName *string `json:"flow_name,omitempty"`
+
 	// Path is the path to the flow code
 	// +optional
 	Path *string `json:"path,omitempty"`
