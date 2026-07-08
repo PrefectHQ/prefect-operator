@@ -19,7 +19,7 @@ jobs:
       contents: read
     steps:
       - name: checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: install updatecli
         uses: updatecli/updatecli-action@v2
