@@ -64,6 +64,16 @@ type PrefectClient interface {
 	DeleteWorkPool(ctx context.Context, id string) error
 	// GetWorkerMetadata retrieves aggregate metadata for all worker types
 	GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error)
+	// CreateAutomation creates a new automation
+	CreateAutomation(ctx context.Context, automation *AutomationSpec) (*Automation, error)
+	// GetAutomation retrieves an automation by ID
+	GetAutomation(ctx context.Context, id string) (*Automation, error)
+	// UpdateAutomation updates an existing automation by ID
+	UpdateAutomation(ctx context.Context, id string, automation *AutomationSpec) (*Automation, error)
+	// DeleteAutomation deletes an automation by ID
+	DeleteAutomation(ctx context.Context, id string) error
+	// FindDeploymentByName resolves a deployment by its name (tenant-wide) to its ID
+	FindDeploymentByName(ctx context.Context, name string) (*Deployment, error)
 }
 
 // HTTPClient represents an HTTP client interface for testing
