@@ -13,6 +13,10 @@ The [PrefectServer CRD](./PrefectServer.md)
 
 The [PrefectWorkPool CRD](./PrefectWorkPool.md)
 
+### PrefectDeployment
+
+The [PrefectDeployment CRD](./PrefectDeployment.md)
+
 ## Getting Started
 
 ### Prerequisites
