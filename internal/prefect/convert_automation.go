@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strconv"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
@@ -312,10 +311,16 @@ func nonNilStrings(s []string) []string {
 }
 
 // UpdateAutomationStatus updates the K8s PrefectAutomation status from an API Automation.
+//
+// LastSyncTime is deliberately NOT stamped: needsSync treats a nil LastSyncTime
+// as "sync now", so leaving it unset makes the controller reconcile against
+// Prefect on every pass and self-heal an out-of-band edit/delete within one
+// requeue interval — matching PrefectDeployment, whose status likewise carries
+// no LastSyncTime. Persisting it here previously gated re-sync behind a 10-minute
+// drift window, so a manual change in Prefect wasn't corrected until then (or an
+// operator restart).
 func UpdateAutomationStatus(k8sAutomation *prefectiov1.PrefectAutomation, automation *Automation) {
 	id := automation.ID
 	k8sAutomation.Status.Id = &id
 	k8sAutomation.Status.Ready = true
-	now := metav1.Now()
-	k8sAutomation.Status.LastSyncTime = &now
 }
