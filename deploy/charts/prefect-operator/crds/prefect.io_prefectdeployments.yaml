@@ -211,6 +211,13 @@ spec:
                 required:
                 - entrypoint
                 type: object
+              interval:
+                description: |-
+                  Interval is how often to re-check this deployment against the Prefect API
+                  to correct out-of-band drift (edits or deletes made directly in Prefect).
+                  Defaults to the operator's --default-resync-interval when unset. Values
+                  below 10s are clamped.
+                type: string
               server:
                 description: Server configuration for connecting to Prefect API
                 properties:

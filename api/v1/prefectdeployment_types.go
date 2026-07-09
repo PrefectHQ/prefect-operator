@@ -29,6 +29,13 @@ type PrefectDeploymentSpec struct {
 	// Server configuration for connecting to Prefect API
 	Server PrefectServerReference `json:"server"`
 
+	// Interval is how often to re-check this deployment against the Prefect API
+	// to correct out-of-band drift (edits or deletes made directly in Prefect).
+	// Defaults to the operator's --default-resync-interval when unset. Values
+	// below 10s are clamped.
+	// +optional
+	Interval *metav1.Duration `json:"interval,omitempty"`
+
 	// WorkPool configuration specifying where the deployment should run
 	WorkPool PrefectWorkPoolReference `json:"workPool"`
 

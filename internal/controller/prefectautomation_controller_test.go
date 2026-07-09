@@ -101,9 +101,10 @@ var _ = Describe("PrefectAutomation controller", func() {
 
 		mockClient = prefect.NewMockClient()
 		reconciler = &PrefectAutomationReconciler{
-			Client:        k8sClient,
-			Scheme:        k8sClient.Scheme(),
-			PrefectClient: mockClient,
+			Client:                k8sClient,
+			Scheme:                k8sClient.Scheme(),
+			PrefectClient:         mockClient,
+			DefaultResyncInterval: testResyncInterval,
 		}
 	})
 
@@ -134,7 +135,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			By("Second reconciliation - syncing with Prefect")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(RequeueIntervalReady))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			Expect(k8sClient.Get(ctx, name, automation)).To(Succeed())
 			Expect(automation.Status.Id).NotTo(BeNil())
@@ -154,16 +155,35 @@ var _ = Describe("PrefectAutomation controller", func() {
 	})
 
 	Context("When the spec is unchanged", func() {
-		It("Should not re-sync", func() {
+		It("Should not re-sync within the resync interval", func() {
 			fresh := syncedAutomation()
 			initialHash := fresh.Status.SpecHash
 
+			By("Confirming the sync stamped LastSyncTime")
+			Expect(fresh.Status.LastSyncTime).NotTo(BeNil())
+			initialSyncTime := fresh.Status.LastSyncTime.Time
+
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(RequeueIntervalReady))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
 			Expect(fresh.Status.SpecHash).To(Equal(initialHash))
+			// No re-sync happened, so LastSyncTime is unchanged.
+			Expect(fresh.Status.LastSyncTime.Time).To(BeTemporally("~", initialSyncTime, time.Second))
+		})
+	})
+
+	Context("When spec.interval is set", func() {
+		It("Should requeue on the per-resource interval, not the default", func() {
+			automation.Spec.Interval = &metav1.Duration{Duration: 90 * time.Second}
+			fresh := syncedAutomation()
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			// Requeue honors spec.interval (90s), not DefaultResyncInterval.
+			Expect(result.RequeueAfter).To(BeJitteredResync(90 * time.Second))
+			Expect(fresh.Status.Ready).To(BeTrue())
 		})
 	})
 
@@ -177,7 +197,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(RequeueIntervalReady))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
 			Expect(fresh.Status.Ready).To(BeTrue())
@@ -261,7 +281,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			By("Now it resolves and syncs")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(RequeueIntervalReady))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			Expect(k8sClient.Get(ctx, name, automation)).To(Succeed())
 			Expect(automation.Status.Id).NotTo(BeNil())
@@ -292,7 +312,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			By("Next reconcile recreates the automation")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(RequeueIntervalReady))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
 			Expect(fresh.Status.Id).NotTo(BeNil())

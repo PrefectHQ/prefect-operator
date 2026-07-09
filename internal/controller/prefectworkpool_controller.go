@@ -62,6 +62,15 @@ type PrefectWorkPoolReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	PrefectClient prefect.PrefectClient
+	// DefaultResyncInterval is the fallback drift-detection interval used when a
+	// PrefectWorkPool does not set spec.interval.
+	DefaultResyncInterval time.Duration
+}
+
+// resyncInterval returns the effective drift-detection interval for the work
+// pool: its spec.interval when set, otherwise the operator default.
+func (r *PrefectWorkPoolReconciler) resyncInterval(workPool *prefectiov1.PrefectWorkPool) time.Duration {
+	return utils.ResyncInterval(workPool.Spec.Interval, r.DefaultResyncInterval)
 }
 
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools,verbs=get;list;watch;create;update;patch;delete
@@ -236,7 +245,9 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	r.setCondition(&workPool, PrefectWorkPoolConditionReady, metav1.ConditionTrue, "WorkPoolReady", "Work pool is ready and operational")
 
-	return ctrl.Result{}, nil
+	// Requeue on the resync interval so out-of-band drift in Prefect is corrected
+	// even without an incoming watch event.
+	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(&workPool))}, nil
 }
 
 func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkPool, currentSpecHash string, baseJobTemplateConfigMap *corev1.ConfigMap) bool {
@@ -256,13 +267,13 @@ func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkP
 		return true
 	}
 
-	// Drift detection: sync if last sync was too long ago
+	// Drift detection: re-check Prefect once the resync interval has elapsed so
+	// out-of-band edits/deletes are corrected.
 	if workPool.Status.LastSyncTime == nil {
 		return true
 	}
 
-	timeSinceLastSync := time.Since(workPool.Status.LastSyncTime.Time)
-	return timeSinceLastSync > 10*time.Minute
+	return time.Since(workPool.Status.LastSyncTime.Time) > r.resyncInterval(workPool)
 }
 
 func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPool *prefectiov1.PrefectWorkPool, baseJobTemplateConfigMap *corev1.ConfigMap) error {

@@ -358,6 +358,13 @@ spec:
               enabled:
                 description: Enabled activates or deactivates the automation
                 type: boolean
+              interval:
+                description: |-
+                  Interval is how often to re-check this automation against the Prefect API
+                  to correct out-of-band drift (edits or deletes made directly in Prefect).
+                  Defaults to the operator's --default-resync-interval when unset. Values
+                  below 10s are clamped.
+                type: string
               name:
                 description: Name of the automation
                 type: string

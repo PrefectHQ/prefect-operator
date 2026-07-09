@@ -104,6 +104,16 @@ PrefectDeploymentSpec defines the desired state of a PrefectDeployment
           WorkPool configuration specifying where the deployment should run<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>interval</b></td>
+        <td>string</td>
+        <td>
+          Interval is how often to re-check this deployment against the Prefect API
+to correct out-of-band drift (edits or deletes made directly in Prefect).
+Defaults to the operator's --default-resync-interval when unset. Values
+below 10s are clamped.<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 

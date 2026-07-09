@@ -112,6 +112,16 @@ PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>interval</b></td>
+        <td>string</td>
+        <td>
+          Interval is how often to re-check this work pool against the Prefect API
+to correct out-of-band drift (edits or deletes made directly in Prefect).
+Defaults to the operator's --default-resync-interval when unset. Values
+below 10s are clamped.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectworkpoolspecresources">resources</a></b></td>
         <td>object</td>
         <td>

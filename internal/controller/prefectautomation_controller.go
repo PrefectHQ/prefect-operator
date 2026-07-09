@@ -52,6 +52,15 @@ type PrefectAutomationReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	PrefectClient prefect.PrefectClient
+	// DefaultResyncInterval is the fallback drift-detection interval used when a
+	// PrefectAutomation does not set spec.interval.
+	DefaultResyncInterval time.Duration
+}
+
+// resyncInterval returns the effective drift-detection interval for the
+// automation: its spec.interval when set, otherwise the operator default.
+func (r *PrefectAutomationReconciler) resyncInterval(automation *prefectiov1.PrefectAutomation) time.Duration {
+	return utils.ResyncInterval(automation.Spec.Interval, r.DefaultResyncInterval)
 }
 
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations,verbs=get;list;watch;create;update;patch;delete
@@ -107,7 +116,7 @@ func (r *PrefectAutomationReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.syncWithPrefect(ctx, &automation)
 	}
 
-	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
+	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(&automation))}, nil
 }
 
 // needsSync determines if the automation needs to be synced with the Prefect API
@@ -121,10 +130,12 @@ func (r *PrefectAutomationReconciler) needsSync(automation *prefectiov1.PrefectA
 	if automation.Status.ObservedGeneration < automation.Generation {
 		return true
 	}
+	// Drift detection: re-check Prefect once the resync interval has elapsed so
+	// out-of-band edits/deletes are corrected.
 	if automation.Status.LastSyncTime == nil {
 		return true
 	}
-	return time.Since(automation.Status.LastSyncTime.Time) > 10*time.Minute
+	return time.Since(automation.Status.LastSyncTime.Time) > r.resyncInterval(automation)
 }
 
 // syncWithPrefect creates or updates the automation in the Prefect API
@@ -203,6 +214,10 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 		return ctrl.Result{}, err
 	}
 	automation.Status.ObservedGeneration = automation.Generation
+	// Stamp the sync time so needsSync gates the next Prefect re-check by the
+	// resync interval instead of hitting the API on every reconcile.
+	now := metav1.Now()
+	automation.Status.LastSyncTime = &now
 
 	r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Automation successfully synced with Prefect API")
 	r.setCondition(automation, PrefectAutomationConditionReady, metav1.ConditionTrue, "AutomationReady", "Automation is ready and operational")
@@ -213,7 +228,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 	}
 
 	log.Info("Successfully synced automation with Prefect", "automationId", result.ID)
-	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
+	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(automation))}, nil
 }
 
 func (r *PrefectAutomationReconciler) setCondition(automation *prefectiov1.PrefectAutomation, conditionType string, status metav1.ConditionStatus, reason, message string) {

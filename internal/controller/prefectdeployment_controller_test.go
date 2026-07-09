@@ -112,9 +112,10 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 		mockClient = prefect.NewMockClient()
 		reconciler = &PrefectDeploymentReconciler{
-			Client:        k8sClient,
-			Scheme:        k8sClient.Scheme(),
-			PrefectClient: mockClient,
+			Client:                k8sClient,
+			Scheme:                k8sClient.Scheme(),
+			PrefectClient:         mockClient,
+			DefaultResyncInterval: testResyncInterval,
 		}
 	})
 
@@ -281,7 +282,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Reconciling without any changes")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(RequeueIntervalReady))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			By("Checking that no sync occurred")
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())

@@ -51,14 +51,8 @@ const (
 	// PrefectDeploymentConditionWorkPoolAvailable indicates the referenced work pool is available
 	PrefectDeploymentConditionWorkPoolAvailable = "WorkPoolAvailable"
 
-	// RequeueIntervalReady is the interval for requeuing when deployment is ready
-	RequeueIntervalReady = 10 * time.Second
-
 	// RequeueIntervalError is the interval for requeuing on errors
 	RequeueIntervalError = 30 * time.Second
-
-	// RequeueIntervalSync is the interval for requeuing during sync operations
-	RequeueIntervalSync = 10 * time.Second
 )
 
 // PrefectDeploymentReconciler reconciles a PrefectDeployment object
@@ -66,6 +60,15 @@ type PrefectDeploymentReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	PrefectClient prefect.PrefectClient
+	// DefaultResyncInterval is the fallback drift-detection interval used when a
+	// PrefectDeployment does not set spec.interval.
+	DefaultResyncInterval time.Duration
+}
+
+// resyncInterval returns the effective drift-detection interval for the
+// deployment: its spec.interval when set, otherwise the operator default.
+func (r *PrefectDeploymentReconciler) resyncInterval(deployment *prefectiov1.PrefectDeployment) time.Duration {
+	return utils.ResyncInterval(deployment.Spec.Interval, r.DefaultResyncInterval)
 }
 
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -117,7 +120,7 @@ func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return result, nil
 	}
 
-	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
+	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(&deployment))}, nil
 }
 
 // needsSync determines if the deployment needs to be synced with Prefect API
@@ -134,13 +137,13 @@ func (r *PrefectDeploymentReconciler) needsSync(deployment *prefectiov1.PrefectD
 		return true
 	}
 
-	// Drift detection: sync if last sync was too long ago
+	// Drift detection: re-check Prefect once the resync interval has elapsed so
+	// out-of-band edits/deletes are corrected.
 	if deployment.Status.LastSyncTime == nil {
 		return true
 	}
 
-	timeSinceLastSync := time.Since(deployment.Status.LastSyncTime.Time)
-	return timeSinceLastSync > 10*time.Minute
+	return time.Since(deployment.Status.LastSyncTime.Time) > r.resyncInterval(deployment)
 }
 
 // syncWithPrefect syncs the deployment with the Prefect API
@@ -200,6 +203,10 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	}
 	deployment.Status.SpecHash = specHash
 	deployment.Status.ObservedGeneration = deployment.Generation
+	// Stamp the sync time so needsSync gates the next Prefect re-check by the
+	// resync interval instead of hitting the API on every reconcile.
+	now := metav1.Now()
+	deployment.Status.LastSyncTime = &now
 
 	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Deployment successfully synced with Prefect API")
 	r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionTrue, "DeploymentReady", "Deployment is ready and operational")
@@ -210,7 +217,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	}
 
 	log.Info("Successfully synced deployment with Prefect", "deploymentId", prefectDeployment.ID)
-	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
+	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(deployment))}, nil
 }
 
 // setCondition sets a condition on the deployment status

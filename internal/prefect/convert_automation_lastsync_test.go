@@ -22,11 +22,11 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 )
 
-// UpdateAutomationStatus must set Id/Ready but leave LastSyncTime nil: needsSync
-// treats a nil LastSyncTime as "sync now", so this is what makes the controller
-// reconcile against Prefect every pass and self-heal an out-of-band edit/delete
-// (parity with PrefectDeployment, whose status also carries no LastSyncTime).
-func TestUpdateAutomationStatusLeavesLastSyncTimeNil(t *testing.T) {
+// UpdateAutomationStatus maps the Prefect API result onto the CR status (Id +
+// Ready). It does NOT stamp LastSyncTime: the controller owns that, stamping it
+// only after a successful sync so needsSync can gate the next re-check by the
+// resync interval. This test pins that division of responsibility.
+func TestUpdateAutomationStatusDoesNotStampLastSyncTime(t *testing.T) {
 	k8s := &prefectiov1.PrefectAutomation{}
 	UpdateAutomationStatus(k8s, &Automation{ID: "abc"})
 
@@ -37,6 +37,6 @@ func TestUpdateAutomationStatusLeavesLastSyncTimeNil(t *testing.T) {
 		t.Fatal("Status.Ready = false, want true")
 	}
 	if k8s.Status.LastSyncTime != nil {
-		t.Fatal("Status.LastSyncTime must stay nil so the controller re-syncs every reconcile")
+		t.Fatal("UpdateAutomationStatus must not stamp LastSyncTime; the controller owns it")
 	}
 }

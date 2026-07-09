@@ -311,6 +311,11 @@ func (in *PrefectAutomationList) DeepCopyObject() runtime.Object {
 func (in *PrefectAutomationSpec) DeepCopyInto(out *PrefectAutomationSpec) {
 	*out = *in
 	in.Server.DeepCopyInto(&out.Server)
+	if in.Interval != nil {
+		in, out := &in.Interval, &out.Interval
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.Description != nil {
 		in, out := &in.Description, &out.Description
 		*out = new(string)
@@ -632,6 +637,11 @@ func (in *PrefectDeploymentList) DeepCopyObject() runtime.Object {
 func (in *PrefectDeploymentSpec) DeepCopyInto(out *PrefectDeploymentSpec) {
 	*out = *in
 	in.Server.DeepCopyInto(&out.Server)
+	if in.Interval != nil {
+		in, out := &in.Interval, &out.Interval
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	in.WorkPool.DeepCopyInto(&out.WorkPool)
 	in.Deployment.DeepCopyInto(&out.Deployment)
 }
@@ -1235,6 +1245,11 @@ func (in *PrefectWorkPoolSpec) DeepCopyInto(out *PrefectWorkPoolSpec) {
 		**out = **in
 	}
 	in.Server.DeepCopyInto(&out.Server)
+	if in.Interval != nil {
+		in, out := &in.Interval, &out.Interval
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	if in.ExtraContainers != nil {
 		in, out := &in.ExtraContainers, &out.ExtraContainers
