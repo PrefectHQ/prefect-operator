@@ -163,4 +163,36 @@ var _ = Describe("ConvertToAutomationSpec", func() {
 		_, err := ConvertToAutomationSpec(a, map[string]string{})
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("propagates invalid JSON in action parameters", func() {
+		a := newAutomation(prefectiov1.PrefectAutomationTrigger{
+			Event: &prefectiov1.PrefectEventTrigger{Posture: "Reactive"},
+		})
+		a.Spec.Actions = []prefectiov1.PrefectAutomationAction{
+			{
+				Type:       "run-deployment",
+				Source:     ptr("inferred"),
+				Parameters: &runtime.RawExtension{Raw: []byte(`{"bad": json}`)},
+			},
+		}
+		_, err := ConvertToAutomationSpec(a, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("parameters"))
+	})
+
+	It("propagates invalid JSON in action jobVariables", func() {
+		a := newAutomation(prefectiov1.PrefectAutomationTrigger{
+			Event: &prefectiov1.PrefectEventTrigger{Posture: "Reactive"},
+		})
+		a.Spec.Actions = []prefectiov1.PrefectAutomationAction{
+			{
+				Type:         "run-deployment",
+				Source:       ptr("inferred"),
+				JobVariables: &runtime.RawExtension{Raw: []byte(`{"bad": json}`)},
+			},
+		}
+		_, err := ConvertToAutomationSpec(a, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("job_variables"))
+	})
 })

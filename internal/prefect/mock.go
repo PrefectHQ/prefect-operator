@@ -101,7 +101,7 @@ func (m *MockClient) UpdateAutomation(ctx context.Context, id string, automation
 	defer m.mu.Unlock()
 	existing, ok := m.automations[id]
 	if !ok {
-		return nil, fmt.Errorf("automation %s not found", id)
+		return nil, fmt.Errorf("automation %s: %w", id, ErrAutomationNotFound)
 	}
 	existing.Name = automation.Name
 	existing.Description = automation.Description

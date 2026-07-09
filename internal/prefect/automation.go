@@ -20,11 +20,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 )
+
+// ErrAutomationNotFound is returned when an automation no longer exists in
+// Prefect (e.g. it was deleted out-of-band). Callers can use errors.Is to
+// distinguish this from other API errors and recreate rather than loop.
+var ErrAutomationNotFound = errors.New("automation not found")
 
 // AutomationSpec is the request payload for creating/updating an automation.
 // Trigger and actions are kept as generic maps so the client stays agnostic to
@@ -160,6 +166,10 @@ func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *Au
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
+	// A 404 means the automation was deleted out-of-band; signal recreate.
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrAutomationNotFound
+	}
 	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
@@ -169,9 +179,10 @@ func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *Au
 }
 
 // FindDeploymentByName resolves a deployment by name (tenant-wide) via
-// POST /deployments/filter. Errors if no deployment matches; if several share
-// the name it returns the first (deployment names are unique per flow, and in
-// practice unique across our pipelines).
+// POST /deployments/filter. Deployment names are only unique per flow (the
+// canonical reference is "{flow}/{deployment}"), so a bare name can match more
+// than one deployment. Errors if no deployment matches, and errors if the name
+// is ambiguous (>1 match) rather than silently resolving to an arbitrary one.
 func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deployment, error) {
 	url := fmt.Sprintf("%s/deployments/filter", c.BaseURL)
 	c.log.V(1).Info("Finding deployment by name", "url", url, "name", name)
@@ -180,7 +191,7 @@ func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deploy
 		"deployments": map[string]any{
 			keyName: map[string]any{"any_": []string{name}},
 		},
-		"limit": 1,
+		"limit": 2,
 	}
 	jsonData, err := json.Marshal(filter)
 	if err != nil {
@@ -213,6 +224,9 @@ func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deploy
 	}
 	if len(results) == 0 {
 		return nil, fmt.Errorf("no deployment found with name %q", name)
+	}
+	if len(results) > 1 {
+		return nil, fmt.Errorf("deployment name %q is ambiguous: it matches multiple deployments (names are only unique per flow); use a flow-qualified reference", name)
 	}
 	return &results[0], nil
 }

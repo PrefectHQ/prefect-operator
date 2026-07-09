@@ -275,10 +275,18 @@ func buildAction(a prefectiov1.PrefectAutomationAction, deploymentIDs map[string
 	putStr("subject", a.Subject)
 	putStr("body", a.Body)
 	putStr("payload", a.Payload)
-	if params, err := rawToMap(a.Parameters); err == nil && a.Parameters != nil {
+	if a.Parameters != nil {
+		params, err := rawToMap(a.Parameters)
+		if err != nil {
+			return nil, fmt.Errorf("action parameters: %w", err)
+		}
 		m["parameters"] = params
 	}
-	if jv, err := rawToMap(a.JobVariables); err == nil && a.JobVariables != nil {
+	if a.JobVariables != nil {
+		jv, err := rawToMap(a.JobVariables)
+		if err != nil {
+			return nil, fmt.Errorf("action job_variables: %w", err)
+		}
 		m["job_variables"] = jv
 	}
 	return m, nil
