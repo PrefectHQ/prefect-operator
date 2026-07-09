@@ -17,6 +17,10 @@ The [PrefectWorkPool CRD](./PrefectWorkPool.md)
 
 The [PrefectDeployment CRD](./PrefectDeployment.md)
 
+### PrefectAutomation
+
+The [PrefectAutomation CRD](./PrefectAutomation.md)
+
 ## Getting Started
 
 ### Prerequisites

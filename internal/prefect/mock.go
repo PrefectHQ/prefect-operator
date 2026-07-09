@@ -32,6 +32,7 @@ type MockClient struct {
 	deployments map[string]*Deployment
 	flows       map[string]*Flow
 	workPools   map[string]*WorkPool
+	automations map[string]*Automation
 
 	// Test configuration
 	ShouldFailCreate     bool
@@ -48,7 +49,97 @@ func NewMockClient() *MockClient {
 		deployments: make(map[string]*Deployment),
 		flows:       make(map[string]*Flow),
 		workPools:   make(map[string]*WorkPool),
+		automations: make(map[string]*Automation),
 	}
+}
+
+// CreateAutomation stores a new automation in the mock store
+func (m *MockClient) CreateAutomation(ctx context.Context, automation *AutomationSpec) (*Automation, error) {
+	if m.ShouldFailCreate {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := &Automation{
+		ID:               uuid.NewString(),
+		Created:          time.Now(),
+		Updated:          time.Now(),
+		Name:             automation.Name,
+		Description:      automation.Description,
+		Trigger:          automation.Trigger,
+		Actions:          automation.Actions,
+		ActionsOnTrigger: automation.ActionsOnTrigger,
+		ActionsOnResolve: automation.ActionsOnResolve,
+	}
+	if automation.Enabled != nil {
+		result.Enabled = *automation.Enabled
+	}
+	m.automations[result.ID] = result
+	return result, nil
+}
+
+// GetAutomation retrieves an automation from the mock store
+func (m *MockClient) GetAutomation(ctx context.Context, id string) (*Automation, error) {
+	if m.ShouldFailGet {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	a, ok := m.automations[id]
+	if !ok {
+		return nil, fmt.Errorf("automation %s not found", id)
+	}
+	return a, nil
+}
+
+// UpdateAutomation updates an automation in the mock store
+func (m *MockClient) UpdateAutomation(ctx context.Context, id string, automation *AutomationSpec) (*Automation, error) {
+	if m.ShouldFailUpdate {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.automations[id]
+	if !ok {
+		return nil, fmt.Errorf("automation %s not found", id)
+	}
+	existing.Name = automation.Name
+	existing.Description = automation.Description
+	existing.Trigger = automation.Trigger
+	existing.Actions = automation.Actions
+	existing.ActionsOnTrigger = automation.ActionsOnTrigger
+	existing.ActionsOnResolve = automation.ActionsOnResolve
+	existing.Updated = time.Now()
+	if automation.Enabled != nil {
+		existing.Enabled = *automation.Enabled
+	}
+	return existing, nil
+}
+
+// FindDeploymentByName resolves a deployment by name from the mock store
+func (m *MockClient) FindDeploymentByName(ctx context.Context, name string) (*Deployment, error) {
+	if m.ShouldFailGet {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, d := range m.deployments {
+		if d.Name == name {
+			return d, nil
+		}
+	}
+	return nil, fmt.Errorf("no deployment found with name %q", name)
+}
+
+// DeleteAutomation removes an automation from the mock store
+func (m *MockClient) DeleteAutomation(ctx context.Context, id string) error {
+	if m.ShouldFailDelete {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.automations, id)
+	return nil
 }
 
 // CreateOrUpdateDeployment creates or updates a deployment in the mock store
