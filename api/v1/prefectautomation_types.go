@@ -184,6 +184,13 @@ type PrefectSequenceTrigger struct {
 	Triggers []PrefectChildTrigger `json:"triggers"`
 }
 
+// Deployment-target action types (their target is a deployment).
+const (
+	ActionRunDeployment    = "run-deployment"
+	ActionPauseDeployment  = "pause-deployment"
+	ActionResumeDeployment = "resume-deployment"
+)
+
 // PrefectAutomationAction matches Prefect's action union. `type` selects the
 // action; the remaining fields apply to the relevant action types.
 type PrefectAutomationAction struct {
@@ -325,6 +332,62 @@ func (a *PrefectAutomation) Validate() error {
 	}
 	if set != 1 {
 		return fmt.Errorf("exactly one of trigger.event, trigger.metric, trigger.compound, or trigger.sequence must be set (got %d)", set)
+	}
+
+	for _, list := range []struct {
+		field   string
+		actions []PrefectAutomationAction
+	}{
+		{"actions", a.Spec.Actions},
+		{"actionsOnTrigger", a.Spec.ActionsOnTrigger},
+		{"actionsOnResolve", a.Spec.ActionsOnResolve},
+	} {
+		for i := range list.actions {
+			if err := validateAction(list.field, i, list.actions[i]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// deploymentTargetActions are the action types whose target is a deployment.
+var deploymentTargetActions = map[string]struct{}{
+	ActionRunDeployment:    {},
+	ActionPauseDeployment:  {},
+	ActionResumeDeployment: {},
+}
+
+// validateAction enforces the deploymentId/deploymentName rules that mirror the
+// Prefect API: the two fields are two ways to supply the same deployment_id (so
+// never both), and for deployment-target actions the presence of a target is
+// governed by `source` ("selected" requires exactly one, "inferred" requires
+// neither). Source defaults to "selected" per the API.
+func validateAction(field string, i int, action PrefectAutomationAction) error {
+	hasID := action.DeploymentID != nil && *action.DeploymentID != ""
+	hasName := action.DeploymentName != nil && *action.DeploymentName != ""
+
+	if hasID && hasName {
+		return fmt.Errorf("%s[%d] (%s): deploymentId and deploymentName are mutually exclusive", field, i, action.Type)
+	}
+
+	if _, isDeploymentAction := deploymentTargetActions[action.Type]; !isDeploymentAction {
+		return nil
+	}
+
+	source := "selected"
+	if action.Source != nil && *action.Source != "" {
+		source = *action.Source
+	}
+	switch source {
+	case "inferred":
+		if hasID || hasName {
+			return fmt.Errorf("%s[%d] (%s): deploymentId/deploymentName must not be set when source is 'inferred'", field, i, action.Type)
+		}
+	default: // "selected"
+		if !hasID && !hasName {
+			return fmt.Errorf("%s[%d] (%s): exactly one of deploymentId or deploymentName must be set when source is 'selected'", field, i, action.Type)
+		}
 	}
 	return nil
 }

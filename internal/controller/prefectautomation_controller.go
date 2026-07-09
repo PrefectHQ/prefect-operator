@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -171,6 +172,18 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 	var result *prefect.Automation
 	if automation.Status.Id != nil && *automation.Status.Id != "" {
 		result, err = prefectClient.UpdateAutomation(ctx, *automation.Status.Id, automationSpec)
+		// If the automation was deleted out-of-band, clear the stale ID and
+		// requeue so the next pass recreates it instead of looping on SyncError.
+		if errors.Is(err, prefect.ErrAutomationNotFound) {
+			log.Info("Automation no longer exists in Prefect, recreating", "automation", automation.Name, "prefectId", *automation.Status.Id)
+			automation.Status.Id = nil
+			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "Recreating", "Automation was deleted in Prefect; recreating")
+			automation.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
+				log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
+			}
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
 	} else {
 		result, err = prefectClient.CreateAutomation(ctx, automationSpec)
 	}
