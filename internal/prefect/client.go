@@ -50,6 +50,9 @@ type PrefectClient interface {
 	UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error)
 	// DeleteDeployment deletes a deployment
 	DeleteDeployment(ctx context.Context, id string) error
+	CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error
+	UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error
+	DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error
 	// CreateOrGetFlow creates a new flow or returns an existing one with the same name
 	CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error)
 	// GetFlowByName retrieves a flow by name
@@ -243,7 +246,7 @@ type Schedule struct {
 // DeploymentSchedule represents a deployment schedule in the Prefect API.
 // This matches the DeploymentScheduleCreate schema which wraps the schedule object.
 type DeploymentSchedule struct {
-	// Slug is a unique identifier for the schedule
+	ID   string  `json:"id,omitempty"`
 	Slug *string `json:"slug,omitempty"`
 
 	// Schedule contains the actual schedule configuration (interval, cron, or rrule)
@@ -402,9 +405,19 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
 	c.log.V(1).Info("Updating deployment", "url", url, "deploymentId", id)
 
-	jsonData, err := json.Marshal(deployment)
+	raw, err := json.Marshal(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal deployment updates: %w", err)
+	}
+	var updateBody map[string]any
+	if err := json.Unmarshal(raw, &updateBody); err != nil {
+		return nil, fmt.Errorf("failed to prepare deployment update body: %w", err)
+	}
+	delete(updateBody, "name")
+	delete(updateBody, "flow_id")
+	jsonData, err := json.Marshal(updateBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal deployment update body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewBuffer(jsonData))
@@ -434,6 +447,10 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 
 	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	if resp.StatusCode == http.StatusNoContent || len(bytes.TrimSpace(body)) == 0 {
+		return &Deployment{ID: id, FlowID: deployment.FlowID}, nil
 	}
 
 	var result Deployment
@@ -476,6 +493,65 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 
 	c.log.V(1).Info("Deployment deleted successfully", "deploymentId", id)
 	return nil
+}
+
+type DeploymentScheduleUpdate struct {
+	Schedule         *Schedule `json:"schedule,omitempty"`
+	Active           *bool     `json:"active,omitempty"`
+	MaxScheduledRuns *int      `json:"max_scheduled_runs,omitempty"`
+}
+
+func (c *Client) scheduleSubResource(ctx context.Context, method, url string, jsonData []byte) error {
+	var bodyReader io.Reader
+	if jsonData != nil {
+		bodyReader = bytes.NewBuffer(jsonData)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	if jsonData != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+	if !isSuccessStatusCode(resp.StatusCode) {
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (c *Client) CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error {
+	url := fmt.Sprintf("%s/deployments/%s/schedules", c.BaseURL, deploymentID)
+	jsonData, err := json.Marshal(schedules)
+	if err != nil {
+		return fmt.Errorf("failed to marshal schedules: %w", err)
+	}
+	return c.scheduleSubResource(ctx, "POST", url, jsonData)
+}
+
+func (c *Client) UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error {
+	url := fmt.Sprintf("%s/deployments/%s/schedules/%s", c.BaseURL, deploymentID, scheduleID)
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		return fmt.Errorf("failed to marshal schedule update: %w", err)
+	}
+	return c.scheduleSubResource(ctx, "PATCH", url, jsonData)
+}
+
+func (c *Client) DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error {
+	url := fmt.Sprintf("%s/deployments/%s/schedules/%s", c.BaseURL, deploymentID, scheduleID)
+	return c.scheduleSubResource(ctx, "DELETE", url, nil)
 }
 
 // CreateOrGetFlow creates a new flow or returns an existing one with the same name

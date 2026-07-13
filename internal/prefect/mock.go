@@ -326,6 +326,76 @@ func (m *MockClient) DeleteDeployment(ctx context.Context, deploymentID string) 
 	return nil
 }
 
+func (m *MockClient) CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error {
+	if m.ShouldFailUpdate {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	d, ok := m.deployments[deploymentID]
+	if !ok {
+		return fmt.Errorf("mock error: deployment %s not found", deploymentID)
+	}
+	for _, s := range schedules {
+		if s.ID == "" {
+			if s.Slug != nil {
+				s.ID = "sched-" + *s.Slug
+			} else {
+				s.ID = fmt.Sprintf("sched-%d", len(d.Schedules))
+			}
+		}
+		d.Schedules = append(d.Schedules, s)
+	}
+	return nil
+}
+
+func (m *MockClient) UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error {
+	if m.ShouldFailUpdate {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	d, ok := m.deployments[deploymentID]
+	if !ok {
+		return fmt.Errorf("mock error: deployment %s not found", deploymentID)
+	}
+	for i := range d.Schedules {
+		if d.Schedules[i].ID == scheduleID {
+			if update.Schedule != nil {
+				d.Schedules[i].Schedule = *update.Schedule
+			}
+			if update.Active != nil {
+				d.Schedules[i].Active = update.Active
+			}
+			if update.MaxScheduledRuns != nil {
+				d.Schedules[i].MaxScheduledRuns = update.MaxScheduledRuns
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("mock error: schedule %s not found", scheduleID)
+}
+
+func (m *MockClient) DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error {
+	if m.ShouldFailDelete {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	d, ok := m.deployments[deploymentID]
+	if !ok {
+		return fmt.Errorf("mock error: deployment %s not found", deploymentID)
+	}
+	kept := make([]DeploymentSchedule, 0, len(d.Schedules))
+	for _, s := range d.Schedules {
+		if s.ID != scheduleID {
+			kept = append(kept, s)
+		}
+	}
+	d.Schedules = kept
+	return nil
+}
+
 // Helper methods for testing
 
 // GetAllDeployments returns all deployments in the mock store (for testing)
