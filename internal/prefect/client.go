@@ -50,6 +50,12 @@ type PrefectClient interface {
 	UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error)
 	// DeleteDeployment deletes a deployment
 	DeleteDeployment(ctx context.Context, id string) error
+	// CreateDeploymentSchedules creates schedules on a deployment (.../schedules)
+	CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error
+	// UpdateDeploymentSchedule updates a schedule in place, preserving its ID
+	UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error
+	// DeleteDeploymentSchedule removes a schedule from a deployment
+	DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error
 	// CreateOrGetFlow creates a new flow or returns an existing one with the same name
 	CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error)
 	// GetFlowByName retrieves a flow by name
@@ -243,6 +249,10 @@ type Schedule struct {
 // DeploymentSchedule represents a deployment schedule in the Prefect API.
 // This matches the DeploymentScheduleCreate schema which wraps the schedule object.
 type DeploymentSchedule struct {
+	// ID is the deployment-schedule ID (populated on responses; used to PATCH/DELETE
+	// a schedule in place via the .../schedules/{id} sub-resource).
+	ID string `json:"id,omitempty"`
+
 	// Slug is a unique identifier for the schedule
 	Slug *string `json:"slug,omitempty"`
 
@@ -476,6 +486,80 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 
 	c.log.V(1).Info("Deployment deleted successfully", "deploymentId", id)
 	return nil
+}
+
+// DeploymentScheduleUpdate is the PATCH body for updating a single deployment schedule
+// in place (.../schedules/{id}) — preserving the schedule ID so the auto-scheduler's
+// idempotency key stays stable and does not re-create scheduled runs.
+type DeploymentScheduleUpdate struct {
+	Schedule         *Schedule `json:"schedule,omitempty"`
+	Active           *bool     `json:"active,omitempty"`
+	MaxScheduledRuns *int      `json:"max_scheduled_runs,omitempty"`
+}
+
+// scheduleSubResource performs a schedule sub-resource request with no meaningful
+// response body (POST create / PATCH update / DELETE).
+func (c *Client) scheduleSubResource(ctx context.Context, method, url string, jsonData []byte) error {
+	var bodyReader io.Reader
+	if jsonData != nil {
+		bodyReader = bytes.NewBuffer(jsonData)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	if jsonData != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+	if !isSuccessStatusCode(resp.StatusCode) {
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// CreateDeploymentSchedules creates one or more schedules on a deployment
+// (POST /deployments/{id}/schedules). The body is a list of DeploymentScheduleCreate.
+func (c *Client) CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error {
+	url := fmt.Sprintf("%s/deployments/%s/schedules", c.BaseURL, deploymentID)
+	c.log.V(1).Info("Creating deployment schedules", "url", url, "count", len(schedules))
+	jsonData, err := json.Marshal(schedules)
+	if err != nil {
+		return fmt.Errorf("failed to marshal schedules: %w", err)
+	}
+	return c.scheduleSubResource(ctx, "POST", url, jsonData)
+}
+
+// UpdateDeploymentSchedule updates a single deployment schedule in place, preserving
+// its ID (PATCH /deployments/{id}/schedules/{scheduleID}). This mirrors what the
+// Prefect UI does on schedule edit, unlike POST /deployments/ which replaces schedules.
+func (c *Client) UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error {
+	url := fmt.Sprintf("%s/deployments/%s/schedules/%s", c.BaseURL, deploymentID, scheduleID)
+	c.log.V(1).Info("Updating deployment schedule", "url", url, "scheduleId", scheduleID)
+	jsonData, err := json.Marshal(update)
+	if err != nil {
+		return fmt.Errorf("failed to marshal schedule update: %w", err)
+	}
+	return c.scheduleSubResource(ctx, "PATCH", url, jsonData)
+}
+
+// DeleteDeploymentSchedule removes a schedule from a deployment
+// (DELETE /deployments/{id}/schedules/{scheduleID}).
+func (c *Client) DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error {
+	url := fmt.Sprintf("%s/deployments/%s/schedules/%s", c.BaseURL, deploymentID, scheduleID)
+	c.log.V(1).Info("Deleting deployment schedule", "url", url, "scheduleId", scheduleID)
+	return c.scheduleSubResource(ctx, "DELETE", url, nil)
 }
 
 // CreateOrGetFlow creates a new flow or returns an existing one with the same name

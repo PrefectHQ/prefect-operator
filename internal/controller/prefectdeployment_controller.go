@@ -184,10 +184,24 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 
+	// Schedules are reconciled via the dedicated .../schedules sub-resource (below),
+	// NOT through the deployment upsert. POST /deployments/ replaces the schedule set
+	// (minting new schedule IDs each call), which makes the auto-scheduler re-create
+	// scheduled runs and produces duplicate flow runs on every reconcile. Managing
+	// schedules in place (PATCH by ID, keyed by slug) keeps the schedule ID stable.
+	desiredSchedules := deploymentSpec.Schedules
+	deploymentSpec.Schedules = nil
+
 	prefectDeployment, err := prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
 	if err != nil {
 		log.Error(err, "Failed to create or update deployment in Prefect", "deployment", deployment.Name)
 		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileSchedules(ctx, prefectClient, prefectDeployment.ID, desiredSchedules); err != nil {
+		log.Error(err, "Failed to reconcile deployment schedules", "deployment", deployment.Name)
+		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ScheduleSyncError", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -211,6 +225,99 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 
 	log.Info("Successfully synced deployment with Prefect", "deploymentId", prefectDeployment.ID)
 	return ctrl.Result{RequeueAfter: RequeueIntervalReady}, nil
+}
+
+// reconcileSchedules brings the deployment's schedules in line with the desired set
+// using the .../schedules sub-resource, matched by slug, so existing schedule IDs are
+// preserved (in-place PATCH) instead of being replaced on every deployment upsert.
+//
+// The current schedules are read via GetDeployment rather than trusting the
+// CreateOrUpdateDeployment response: that upsert is sent without a schedules field
+// (so Prefect leaves them untouched), and its response therefore carries no schedules
+// — using it would make every reconcile see an empty set and POST a brand-new
+// schedule (re-minting the ID) instead of matching the existing one by slug.
+func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, client prefect.PrefectClient, deploymentID string, desired []prefect.DeploymentSchedule) error {
+	current, err := client.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return fmt.Errorf("get current schedules: %w", err)
+	}
+	existing := current.Schedules
+
+	existingBySlug := make(map[string]prefect.DeploymentSchedule, len(existing))
+	for _, e := range existing {
+		if e.Slug != nil {
+			existingBySlug[*e.Slug] = e
+		}
+	}
+
+	var toCreate []prefect.DeploymentSchedule
+	for _, d := range desired {
+		slug := ""
+		if d.Slug != nil {
+			slug = *d.Slug
+		}
+		e, ok := existingBySlug[slug]
+		if !ok {
+			toCreate = append(toCreate, d)
+			continue
+		}
+		delete(existingBySlug, slug) // matched -> keep
+		if scheduleDiffers(e, d) {
+			if err := client.UpdateDeploymentSchedule(ctx, deploymentID, e.ID, prefect.DeploymentScheduleUpdate{
+				Schedule:         &d.Schedule,
+				Active:           d.Active,
+				MaxScheduledRuns: d.MaxScheduledRuns,
+			}); err != nil {
+				return fmt.Errorf("update schedule %q: %w", slug, err)
+			}
+		}
+	}
+
+	if len(toCreate) > 0 {
+		if err := client.CreateDeploymentSchedules(ctx, deploymentID, toCreate); err != nil {
+			return fmt.Errorf("create schedules: %w", err)
+		}
+	}
+
+	// Anything still in the map is no longer desired -> delete.
+	for slug, e := range existingBySlug {
+		if err := client.DeleteDeploymentSchedule(ctx, deploymentID, e.ID); err != nil {
+			return fmt.Errorf("delete schedule %q: %w", slug, err)
+		}
+	}
+	return nil
+}
+
+// scheduleDiffers reports whether the schedule config (cron/interval/rrule/timezone/
+// day_or/active) of an existing schedule differs from the desired one.
+func scheduleDiffers(a, b prefect.DeploymentSchedule) bool {
+	return !strPtrEq(a.Schedule.Cron, b.Schedule.Cron) ||
+		!strPtrEq(a.Schedule.RRule, b.Schedule.RRule) ||
+		!strPtrEq(a.Schedule.Timezone, b.Schedule.Timezone) ||
+		!f64PtrEq(a.Schedule.Interval, b.Schedule.Interval) ||
+		!boolPtrEq(a.Schedule.DayOr, b.Schedule.DayOr) ||
+		!boolPtrEq(a.Active, b.Active)
+}
+
+func strPtrEq(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func boolPtrEq(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func f64PtrEq(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // setCondition sets a condition on the deployment status
