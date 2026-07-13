@@ -247,7 +247,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Requeue on the resync interval so out-of-band drift in Prefect is corrected
 	// even without an incoming watch event.
-	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(&workPool))}, nil
+	return ctrl.Result{RequeueAfter: utils.NextResyncDelay(workPool.Status.LastSyncTime, r.resyncInterval(&workPool))}, nil
 }
 
 func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkPool, currentSpecHash string, baseJobTemplateConfigMap *corev1.ConfigMap) bool {
@@ -273,7 +273,7 @@ func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkP
 		return true
 	}
 
-	return time.Since(workPool.Status.LastSyncTime.Time) > r.resyncInterval(workPool)
+	return time.Since(workPool.Status.LastSyncTime.Time) >= r.resyncInterval(workPool)
 }
 
 func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPool *prefectiov1.PrefectWorkPool, baseJobTemplateConfigMap *corev1.ConfigMap) error {

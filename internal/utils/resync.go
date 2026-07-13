@@ -33,13 +33,32 @@ const MinResyncInterval = 10 * time.Second
 // The result is clamped to MinResyncInterval.
 func ResyncInterval(specInterval *metav1.Duration, defaultInterval time.Duration) time.Duration {
 	interval := defaultInterval
-	if specInterval != nil && specInterval.Duration > 0 {
+	if specInterval != nil {
 		interval = specInterval.Duration
 	}
 	if interval < MinResyncInterval {
 		interval = MinResyncInterval
 	}
 	return interval
+}
+
+// NextResyncDelay returns the remaining time until the next jittered resync.
+// Measuring from the last successful sync prevents reconciles caused by restarts
+// or watch events from postponing drift detection by another full interval.
+func NextResyncDelay(lastSyncTime *metav1.Time, interval time.Duration) time.Duration {
+	jitteredInterval := JitterResyncInterval(interval)
+	if lastSyncTime == nil {
+		return jitteredInterval
+	}
+
+	elapsed := time.Since(lastSyncTime.Time)
+	if elapsed <= 0 {
+		return jitteredInterval
+	}
+	if elapsed >= jitteredInterval {
+		return 0
+	}
+	return jitteredInterval - elapsed
 }
 
 // JitterResyncInterval applies up to ~10% positive jitter to an interval so that

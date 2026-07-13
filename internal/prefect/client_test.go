@@ -559,10 +559,10 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Expect(r.URL.Path).To(Equal("/deployments/deployment-12345"))
 				Expect(r.Header.Get("Content-Type")).To(Equal("application/json"))
 
-				// Verify request body contains updated deployment spec
 				var deploymentSpec DeploymentSpec
 				_ = json.NewDecoder(r.Body).Decode(&deploymentSpec)
-				Expect(deploymentSpec.Name).To(Equal("updated-deployment"))
+				Expect(deploymentSpec.Name).To(BeEmpty())
+				Expect(deploymentSpec.FlowID).To(BeEmpty())
 				Expect(*deploymentSpec.Paused).To(BeTrue())
 
 				w.Header().Set("Content-Type", "application/json")

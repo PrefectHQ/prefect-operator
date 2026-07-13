@@ -1,0 +1,13 @@
+suite: operator deployment
+
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: configures the default resync interval
+    set:
+      operator.defaultResyncInterval: 90s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-resync-interval=90s

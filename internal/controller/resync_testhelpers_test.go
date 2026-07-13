@@ -27,11 +27,12 @@ import (
 // requeue assertions are deterministic (above the MinResyncInterval floor).
 const testResyncInterval = 30 * time.Second
 
-// BeJitteredResync asserts a RequeueAfter falls within the jitter window that
-// JitterResyncInterval produces for the given base interval: [base, base+10%].
+// BeJitteredResync asserts a RequeueAfter falls within the jitter window for a
+// resource synced within the last second. The lower tolerance accounts for
+// NextResyncDelay subtracting time elapsed since LastSyncTime was stamped.
 func BeJitteredResync(base time.Duration) types.GomegaMatcher {
 	return And(
-		BeNumerically(">=", base),
+		BeNumerically(">=", base-time.Second),
 		BeNumerically("<=", base+base/10+1),
 	)
 }

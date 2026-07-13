@@ -33,6 +33,9 @@ operator:
   # -- number of operator replicas to deploy
   replicaCount: 1
 
+  # -- default interval for checking Prefect resources for out-of-band drift
+  defaultResyncInterval: 5m
+
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
   livenessProbe:
     enabled: true

@@ -88,6 +88,8 @@ PrefectDeploymentSpec defines the desired state of a PrefectDeployment
         <td>object</td>
         <td>
           Deployment configuration defining the Prefect deployment<br/>
+          <br/>
+            <i>Validations</i>:<li>!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name == oldSelf.flow_name: flow_name is immutable; delete and recreate the deployment to change the flow</li>
         </td>
         <td>true</td>
       </tr><tr>

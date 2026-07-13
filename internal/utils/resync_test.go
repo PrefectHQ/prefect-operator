@@ -32,7 +32,8 @@ func TestResyncInterval(t *testing.T) {
 		want         time.Duration
 	}{
 		{"nil spec uses default", nil, def},
-		{"zero spec uses default", &metav1.Duration{Duration: 0}, def},
+		{"zero spec clamps", &metav1.Duration{Duration: 0}, MinResyncInterval},
+		{"negative spec clamps", &metav1.Duration{Duration: -time.Second}, MinResyncInterval},
 		{"spec overrides default", &metav1.Duration{Duration: 90 * time.Second}, 90 * time.Second},
 		{"spec below floor clamps", &metav1.Duration{Duration: time.Second}, MinResyncInterval},
 	}
@@ -50,6 +51,32 @@ func TestResyncIntervalClampsDefaultBelowFloor(t *testing.T) {
 	if got := ResyncInterval(nil, 0); got != MinResyncInterval {
 		t.Fatalf("ResyncInterval(nil, 0) = %v, want %v", got, MinResyncInterval)
 	}
+}
+
+func TestNextResyncDelay(t *testing.T) {
+	base := 30 * time.Second
+
+	t.Run("uses the full interval without a previous sync", func(t *testing.T) {
+		got := NextResyncDelay(nil, base)
+		if got < base || got > base+base/10 {
+			t.Fatalf("NextResyncDelay(nil, %v) = %v, want [%v, %v]", base, got, base, base+base/10)
+		}
+	})
+
+	t.Run("uses the time remaining since the previous sync", func(t *testing.T) {
+		lastSync := metav1.NewTime(time.Now().Add(-20 * time.Second))
+		got := NextResyncDelay(&lastSync, base)
+		if got < 9*time.Second || got > 14*time.Second {
+			t.Fatalf("NextResyncDelay() = %v, want approximately 10s plus jitter", got)
+		}
+	})
+
+	t.Run("returns zero when the jittered interval elapsed", func(t *testing.T) {
+		lastSync := metav1.NewTime(time.Now().Add(-2 * base))
+		if got := NextResyncDelay(&lastSync, base); got != 0 {
+			t.Fatalf("NextResyncDelay() = %v, want 0", got)
+		}
+	})
 }
 
 func TestJitterResyncInterval(t *testing.T) {

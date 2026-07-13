@@ -211,6 +211,11 @@ spec:
                 required:
                 - entrypoint
                 type: object
+                x-kubernetes-validations:
+                - message: flow_name is immutable; delete and recreate the deployment
+                    to change the flow
+                  rule: '!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name
+                    == oldSelf.flow_name'
               interval:
                 description: |-
                   Interval is how often to re-check this deployment against the Prefect API

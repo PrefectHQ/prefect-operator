@@ -91,6 +91,7 @@ tbd
 | operator.affinity | object | `{}` | affinity for operator pods assignment |
 | operator.containerSecurityContext.allowPrivilegeEscalation | bool | `false` | set operator containers' security context allowPrivilegeEscalation |
 | operator.containerSecurityContext.capabilities | object | `{"drop":["ALL"]}` | set operator container's security context capabilities |
+| operator.defaultResyncInterval | string | `"5m"` | default interval for checking Prefect resources for out-of-band drift |
 | operator.extraEnvVars | list | `[]` | array with environment variables to add to operator container |
 | operator.image.pullPolicy | string | `"IfNotPresent"` | operator image pull policy |
 | operator.image.pullSecrets | list | `[]` | operator image pull secrets |

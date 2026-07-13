@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -120,7 +121,7 @@ func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return result, nil
 	}
 
-	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(&deployment))}, nil
+	return ctrl.Result{RequeueAfter: utils.NextResyncDelay(deployment.Status.LastSyncTime, r.resyncInterval(&deployment))}, nil
 }
 
 // needsSync determines if the deployment needs to be synced with Prefect API
@@ -143,7 +144,7 @@ func (r *PrefectDeploymentReconciler) needsSync(deployment *prefectiov1.PrefectD
 		return true
 	}
 
-	return time.Since(deployment.Status.LastSyncTime.Time) > r.resyncInterval(deployment)
+	return time.Since(deployment.Status.LastSyncTime.Time) >= r.resyncInterval(deployment)
 }
 
 // syncWithPrefect syncs the deployment with the Prefect API
@@ -187,10 +188,27 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 
-	prefectDeployment, err := prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
+	desiredSchedules := deploymentSpec.Schedules
+	deploymentSpec.Schedules = nil
+
+	var prefectDeployment *prefect.Deployment
+	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
+		prefectDeployment, err = prefectClient.UpdateDeployment(ctx, *deployment.Status.Id, deploymentSpec)
+		if errors.Is(err, prefect.ErrDeploymentNotFound) {
+			prefectDeployment, err = prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
+		}
+	} else {
+		prefectDeployment, err = prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
+	}
 	if err != nil {
 		log.Error(err, "Failed to create or update deployment in Prefect", "deployment", deployment.Name)
 		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileSchedules(ctx, prefectClient, prefectDeployment.ID, desiredSchedules); err != nil {
+		log.Error(err, "Failed to reconcile deployment schedules", "deployment", deployment.Name)
+		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ScheduleSyncError", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -218,6 +236,83 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 
 	log.Info("Successfully synced deployment with Prefect", "deploymentId", prefectDeployment.ID)
 	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(deployment))}, nil
+}
+
+func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, client prefect.PrefectClient, deploymentID string, desired []prefect.DeploymentSchedule) error {
+	current, err := client.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return fmt.Errorf("get current schedules: %w", err)
+	}
+
+	desiredBySlug := make(map[string]prefect.DeploymentSchedule, len(desired))
+	var toCreate []prefect.DeploymentSchedule
+	for _, d := range desired {
+		if d.Slug == nil {
+			toCreate = append(toCreate, d)
+			continue
+		}
+		desiredBySlug[*d.Slug] = d
+	}
+
+	for _, e := range current.Schedules {
+		d, ok := desiredBySlug[slugValue(e.Slug)]
+		if e.Slug == nil || !ok {
+			if err := client.DeleteDeploymentSchedule(ctx, deploymentID, e.ID); err != nil {
+				return fmt.Errorf("delete schedule: %w", err)
+			}
+			continue
+		}
+		delete(desiredBySlug, *e.Slug)
+		if scheduleNeedsUpdate(e, d) {
+			if err := client.UpdateDeploymentSchedule(ctx, deploymentID, e.ID, prefect.DeploymentScheduleUpdate{
+				Schedule:         &d.Schedule,
+				Active:           d.Active,
+				MaxScheduledRuns: d.MaxScheduledRuns,
+			}); err != nil {
+				return fmt.Errorf("update schedule: %w", err)
+			}
+		}
+	}
+
+	for _, d := range desiredBySlug {
+		toCreate = append(toCreate, d)
+	}
+	if len(toCreate) > 0 {
+		if err := client.CreateDeploymentSchedules(ctx, deploymentID, toCreate); err != nil {
+			return fmt.Errorf("create schedules: %w", err)
+		}
+	}
+	return nil
+}
+
+func slugValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
+	c, d := current.Schedule, desired.Schedule
+	if d.Cron != nil && (c.Cron == nil || *c.Cron != *d.Cron) {
+		return true
+	}
+	if d.RRule != nil && (c.RRule == nil || *c.RRule != *d.RRule) {
+		return true
+	}
+	if d.Interval != nil && (c.Interval == nil || *c.Interval != *d.Interval) {
+		return true
+	}
+	if d.Timezone != nil && (c.Timezone == nil || *c.Timezone != *d.Timezone) {
+		return true
+	}
+	if d.DayOr != nil && (c.DayOr == nil || *c.DayOr != *d.DayOr) {
+		return true
+	}
+	if desired.Active != nil && (current.Active == nil || *current.Active != *desired.Active) {
+		return true
+	}
+	return false
 }
 
 // setCondition sets a condition on the deployment status

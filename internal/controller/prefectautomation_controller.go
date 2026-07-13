@@ -116,7 +116,7 @@ func (r *PrefectAutomationReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.syncWithPrefect(ctx, &automation)
 	}
 
-	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(&automation))}, nil
+	return ctrl.Result{RequeueAfter: utils.NextResyncDelay(automation.Status.LastSyncTime, r.resyncInterval(&automation))}, nil
 }
 
 // needsSync determines if the automation needs to be synced with the Prefect API
@@ -135,7 +135,7 @@ func (r *PrefectAutomationReconciler) needsSync(automation *prefectiov1.PrefectA
 	if automation.Status.LastSyncTime == nil {
 		return true
 	}
-	return time.Since(automation.Status.LastSyncTime.Time) > r.resyncInterval(automation)
+	return time.Since(automation.Status.LastSyncTime.Time) >= r.resyncInterval(automation)
 }
 
 // syncWithPrefect creates or updates the automation in the Prefect API
