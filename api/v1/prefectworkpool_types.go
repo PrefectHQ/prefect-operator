@@ -48,6 +48,9 @@ type PrefectWorkPoolSpec struct {
 	// Workers defines the number of workers to run in the Work Pool
 	Workers int32 `json:"workers,omitempty"`
 
+	// Affinity defines the scheduling affinity/anti-affinity for the worker pods.
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
 	// Resources defines the CPU and memory resources for each worker in the Work Pool
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 

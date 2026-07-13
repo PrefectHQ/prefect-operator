@@ -302,12 +302,15 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 	} else if server.Spec.Postgres != nil {
 		migrationJob = r.postgresMigrationJob(server)
 		deploymentSpec = r.postgresDeploymentSpec(server)
+		deploymentSpec.Replicas = server.Replicas()
 	} else {
 		if server.Spec.Ephemeral == nil {
 			server.Spec.Ephemeral = &prefectiov1.EphemeralConfiguration{}
 		}
 		deploymentSpec = r.ephemeralDeploymentSpec(server)
 	}
+
+	deploymentSpec.Template.Spec.Affinity = server.Spec.Affinity
 
 	// Append any extra containers into the Deployment if configured.
 	if server.Spec.ExtraContainers != nil {
