@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -32,6 +33,10 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// ErrDeploymentNotFound is returned when a deployment no longer exists in Prefect
+// (e.g. deleted in the UI), so callers can fall back to recreating it.
+var ErrDeploymentNotFound = errors.New("deployment not found")
 
 // isSuccessStatusCode returns true if the HTTP status code indicates success (2xx range)
 func isSuccessStatusCode(statusCode int) bool {
@@ -445,12 +450,15 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrDeploymentNotFound
+	}
 	if !isSuccessStatusCode(resp.StatusCode) {
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	if resp.StatusCode == http.StatusNoContent || len(bytes.TrimSpace(body)) == 0 {
-		return &Deployment{ID: id, FlowID: deployment.FlowID}, nil
+		return c.GetDeployment(ctx, id)
 	}
 
 	var result Deployment

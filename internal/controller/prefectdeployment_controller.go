@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -190,6 +191,9 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	var prefectDeployment *prefect.Deployment
 	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
 		prefectDeployment, err = prefectClient.UpdateDeployment(ctx, *deployment.Status.Id, deploymentSpec)
+		if errors.Is(err, prefect.ErrDeploymentNotFound) {
+			prefectDeployment, err = prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
+		}
 	} else {
 		prefectDeployment, err = prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
 	}
@@ -233,46 +237,75 @@ func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, cl
 		return fmt.Errorf("get current schedules: %w", err)
 	}
 
-	existingBySlug := make(map[string]prefect.DeploymentSchedule, len(current.Schedules))
-	for _, e := range current.Schedules {
-		if e.Slug != nil {
-			existingBySlug[*e.Slug] = e
-		}
-	}
-
+	desiredBySlug := make(map[string]prefect.DeploymentSchedule, len(desired))
 	var toCreate []prefect.DeploymentSchedule
 	for _, d := range desired {
 		if d.Slug == nil {
 			toCreate = append(toCreate, d)
 			continue
 		}
-		e, ok := existingBySlug[*d.Slug]
-		if !ok {
-			toCreate = append(toCreate, d)
+		desiredBySlug[*d.Slug] = d
+	}
+
+	for _, e := range current.Schedules {
+		d, ok := desiredBySlug[slugValue(e.Slug)]
+		if e.Slug == nil || !ok {
+			if err := client.DeleteDeploymentSchedule(ctx, deploymentID, e.ID); err != nil {
+				return fmt.Errorf("delete schedule: %w", err)
+			}
 			continue
 		}
-		delete(existingBySlug, *d.Slug)
-		if err := client.UpdateDeploymentSchedule(ctx, deploymentID, e.ID, prefect.DeploymentScheduleUpdate{
-			Schedule:         &d.Schedule,
-			Active:           d.Active,
-			MaxScheduledRuns: d.MaxScheduledRuns,
-		}); err != nil {
-			return fmt.Errorf("update schedule: %w", err)
+		delete(desiredBySlug, *e.Slug)
+		if scheduleNeedsUpdate(e, d) {
+			if err := client.UpdateDeploymentSchedule(ctx, deploymentID, e.ID, prefect.DeploymentScheduleUpdate{
+				Schedule:         &d.Schedule,
+				Active:           d.Active,
+				MaxScheduledRuns: d.MaxScheduledRuns,
+			}); err != nil {
+				return fmt.Errorf("update schedule: %w", err)
+			}
 		}
 	}
 
+	for _, d := range desiredBySlug {
+		toCreate = append(toCreate, d)
+	}
 	if len(toCreate) > 0 {
 		if err := client.CreateDeploymentSchedules(ctx, deploymentID, toCreate); err != nil {
 			return fmt.Errorf("create schedules: %w", err)
 		}
 	}
-
-	for _, e := range existingBySlug {
-		if err := client.DeleteDeploymentSchedule(ctx, deploymentID, e.ID); err != nil {
-			return fmt.Errorf("delete schedule: %w", err)
-		}
-	}
 	return nil
+}
+
+func slugValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
+	c, d := current.Schedule, desired.Schedule
+	if d.Cron != nil && (c.Cron == nil || *c.Cron != *d.Cron) {
+		return true
+	}
+	if d.RRule != nil && (c.RRule == nil || *c.RRule != *d.RRule) {
+		return true
+	}
+	if d.Interval != nil && (c.Interval == nil || *c.Interval != *d.Interval) {
+		return true
+	}
+	if d.Timezone != nil && (c.Timezone == nil || *c.Timezone != *d.Timezone) {
+		return true
+	}
+	if d.DayOr != nil && (c.DayOr == nil || *c.DayOr != *d.DayOr) {
+		return true
+	}
+	if desired.Active != nil && (current.Active == nil || *current.Active != *desired.Active) {
+		return true
+	}
+	return false
 }
 
 // setCondition sets a condition on the deployment status

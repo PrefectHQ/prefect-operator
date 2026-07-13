@@ -337,6 +337,13 @@ func (m *MockClient) CreateDeploymentSchedules(ctx context.Context, deploymentID
 		return fmt.Errorf("mock error: deployment %s not found", deploymentID)
 	}
 	for _, s := range schedules {
+		if s.Slug != nil {
+			for _, ex := range d.Schedules {
+				if ex.Slug != nil && *ex.Slug == *s.Slug {
+					return fmt.Errorf("mock error: schedule slug %q already exists (409)", *s.Slug)
+				}
+			}
+		}
 		if s.ID == "" {
 			if s.Slug != nil {
 				s.ID = "sched-" + *s.Slug
