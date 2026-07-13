@@ -56,6 +56,9 @@ spec:
             - /manager
           args:
             - --leader-elect
+            {{- if .Values.operator.defaultResyncInterval }}
+            - {{ printf "--default-resync-interval=%s" .Values.operator.defaultResyncInterval | quote }}
+            {{- end }}
           env:
             {{- if .Values.operator.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVars "context" $) | nindent 12 }}

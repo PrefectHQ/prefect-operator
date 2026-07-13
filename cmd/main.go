@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -57,6 +58,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var enableHTTP2 bool
+	var defaultResyncInterval time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -64,6 +66,9 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.DurationVar(&defaultResyncInterval, "default-resync-interval", 5*time.Minute,
+		"How often to re-check each Prefect resource against the Prefect API to correct "+
+			"out-of-band drift, unless a resource sets its own spec.interval.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -131,26 +136,29 @@ func main() {
 	}
 
 	if err = (&controller.PrefectWorkPoolReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkPool")
 		os.Exit(1)
 	}
 
 	if err = (&controller.PrefectDeploymentReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		PrefectClient: nil, // Will create client dynamically from deployment config
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		PrefectClient:         nil, // Will create client dynamically from deployment config
+		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectDeployment")
 		os.Exit(1)
 	}
 
 	if err = (&controller.PrefectAutomationReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		PrefectClient: nil, // Will create client dynamically from automation config
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		PrefectClient:         nil, // Will create client dynamically from automation config
+		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectAutomation")
 		os.Exit(1)

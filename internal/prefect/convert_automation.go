@@ -312,13 +312,10 @@ func nonNilStrings(s []string) []string {
 
 // UpdateAutomationStatus updates the K8s PrefectAutomation status from an API Automation.
 //
-// LastSyncTime is deliberately NOT stamped: needsSync treats a nil LastSyncTime
-// as "sync now", so leaving it unset makes the controller reconcile against
-// Prefect on every pass and self-heal an out-of-band edit/delete within one
-// requeue interval — matching PrefectDeployment, whose status likewise carries
-// no LastSyncTime. Persisting it here previously gated re-sync behind a 10-minute
-// drift window, so a manual change in Prefect wasn't corrected until then (or an
-// operator restart).
+// LastSyncTime is stamped by the controller (not here) after a successful sync,
+// so needsSync gates the next Prefect re-check by the resync interval
+// (spec.interval or --default-resync-interval) rather than hitting the API on
+// every reconcile.
 func UpdateAutomationStatus(k8sAutomation *prefectiov1.PrefectAutomation, automation *Automation) {
 	id := automation.ID
 	k8sAutomation.Status.Id = &id

@@ -144,6 +144,16 @@ Exactly one of event, metric, compound, or sequence must be set.<br/>
           Enabled activates or deactivates the automation<br/>
         </td>
         <td>false</td>
+      </tr><tr>
+        <td><b>interval</b></td>
+        <td>string</td>
+        <td>
+          Interval is how often to re-check this automation against the Prefect API
+to correct out-of-band drift (edits or deletes made directly in Prefect).
+Defaults to the operator's --default-resync-interval when unset. Values
+below 10s are clamped.<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 

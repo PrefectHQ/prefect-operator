@@ -35,6 +35,13 @@ type PrefectWorkPoolSpec struct {
 	// Server defines which Prefect Server to connect to
 	Server PrefectServerReference `json:"server,omitempty"`
 
+	// Interval is how often to re-check this work pool against the Prefect API
+	// to correct out-of-band drift (edits or deletes made directly in Prefect).
+	// Defaults to the operator's --default-resync-interval when unset. Values
+	// below 10s are clamped.
+	// +optional
+	Interval *metav1.Duration `json:"interval,omitempty"`
+
 	// The type of the work pool, such as "kubernetes" or "process"
 	Type string `json:"type,omitempty"`
 

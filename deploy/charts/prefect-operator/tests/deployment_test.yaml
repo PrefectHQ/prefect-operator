@@ -1,0 +1,19 @@
+suite: operator deployment
+
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: uses the operator default when the chart value is empty
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --default-resync-interval=5m
+
+  - it: configures the default resync interval
+    set:
+      operator.defaultResyncInterval: 90s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --default-resync-interval=90s

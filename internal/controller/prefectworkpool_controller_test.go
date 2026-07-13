@@ -72,9 +72,10 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		mockClient = prefect.NewMockClient()
 
 		reconciler = &PrefectWorkPoolReconciler{
-			Client:        k8sClient,
-			Scheme:        k8sClient.Scheme(),
-			PrefectClient: mockClient,
+			Client:                k8sClient,
+			Scheme:                k8sClient.Scheme(),
+			PrefectClient:         mockClient,
+			DefaultResyncInterval: testResyncInterval,
 		}
 
 		baseJobTemplate = map[string]any{
@@ -663,7 +664,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		It("should have default values initially", func() {
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(reconcile.Result{}))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
 			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
@@ -677,7 +678,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(reconcile.Result{}))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
 			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())
@@ -691,7 +692,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal(reconcile.Result{}))
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			updatedWorkPool := &prefectiov1.PrefectWorkPool{}
 			Expect(k8sClient.Get(ctx, name, updatedWorkPool)).To(Succeed())

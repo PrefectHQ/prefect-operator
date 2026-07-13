@@ -31,6 +31,13 @@ type PrefectAutomationSpec struct {
 	// Server configuration for connecting to the Prefect API
 	Server PrefectServerReference `json:"server"`
 
+	// Interval is how often to re-check this automation against the Prefect API
+	// to correct out-of-band drift (edits or deletes made directly in Prefect).
+	// Defaults to the operator's --default-resync-interval when unset. Values
+	// below 10s are clamped.
+	// +optional
+	Interval *metav1.Duration `json:"interval,omitempty"`
+
 	// Name of the automation
 	Name string `json:"name"`
 
