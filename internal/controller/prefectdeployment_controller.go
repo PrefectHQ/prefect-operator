@@ -296,6 +296,9 @@ func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 	if d.Interval != nil && (c.Interval == nil || *c.Interval != *d.Interval) {
 		return true
 	}
+	if d.AnchorDate != nil && (c.AnchorDate == nil || !c.AnchorDate.Equal(*d.AnchorDate)) {
+		return true
+	}
 	if d.Timezone != nil && (c.Timezone == nil || *c.Timezone != *d.Timezone) {
 		return true
 	}
@@ -303,6 +306,9 @@ func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 		return true
 	}
 	if desired.Active != nil && (current.Active == nil || *current.Active != *desired.Active) {
+		return true
+	}
+	if desired.MaxScheduledRuns != nil && (current.MaxScheduledRuns == nil || *current.MaxScheduledRuns != *desired.MaxScheduledRuns) {
 		return true
 	}
 	return false
