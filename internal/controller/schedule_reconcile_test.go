@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -35,6 +36,9 @@ var _ = Describe("PrefectDeployment schedule reconciliation", func() {
 
 	newString := func(s string) *string { return &s }
 	newBool := func(b bool) *bool { return &b }
+	newInt := func(i int) *int { return &i }
+	newFloat := func(f float64) *float64 { return &f }
+	newTime := func(t time.Time) *time.Time { return &t }
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -80,6 +84,93 @@ var _ = Describe("PrefectDeployment schedule reconciliation", func() {
 		got, err = mock.GetDeployment(ctx, depID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got.Schedules).To(BeEmpty())
+	})
+
+	It("makes no update calls when schedules are unchanged", func() {
+		desired := []prefect.DeploymentSchedule{{
+			Slug:             newString("default"),
+			Active:           newBool(true),
+			MaxScheduledRuns: newInt(3),
+			Schedule:         prefect.Schedule{Cron: newString("* * * * *")},
+		}}
+
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		Expect(mock.UpdateScheduleCalls).To(BeZero())
+	})
+
+	It("applies a maxScheduledRuns-only change in place", func() {
+		desired := []prefect.DeploymentSchedule{{
+			Slug:             newString("default"),
+			Active:           newBool(true),
+			MaxScheduledRuns: newInt(3),
+			Schedule:         prefect.Schedule{Cron: newString("* * * * *")},
+		}}
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		got, err := mock.GetDeployment(ctx, depID)
+		Expect(err).NotTo(HaveOccurred())
+		schedID := got.Schedules[0].ID
+
+		desired[0].MaxScheduledRuns = newInt(5)
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+
+		got, err = mock.GetDeployment(ctx, depID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Schedules).To(HaveLen(1))
+		Expect(got.Schedules[0].ID).To(Equal(schedID))
+		Expect(*got.Schedules[0].MaxScheduledRuns).To(Equal(5))
+	})
+
+	It("applies an anchorDate-only change to an interval schedule in place", func() {
+		anchor := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		desired := []prefect.DeploymentSchedule{{
+			Slug:   newString("hourly"),
+			Active: newBool(true),
+			Schedule: prefect.Schedule{
+				Interval:   newFloat(3600),
+				AnchorDate: newTime(anchor),
+			},
+		}}
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		got, err := mock.GetDeployment(ctx, depID)
+		Expect(err).NotTo(HaveOccurred())
+		schedID := got.Schedules[0].ID
+
+		By("not updating when the anchor is the same instant in another zone")
+		desired[0].Schedule.AnchorDate = newTime(anchor.In(time.FixedZone("UTC+5", 5*60*60)))
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		Expect(mock.UpdateScheduleCalls).To(BeZero())
+
+		By("updating in place when the anchor instant changes")
+		newAnchor := anchor.Add(30 * time.Minute)
+		desired[0].Schedule.AnchorDate = newTime(newAnchor)
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+
+		got, err = mock.GetDeployment(ctx, depID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Schedules).To(HaveLen(1))
+		Expect(got.Schedules[0].ID).To(Equal(schedID))
+		Expect(got.Schedules[0].Schedule.AnchorDate.Equal(newAnchor)).To(BeTrue())
+	})
+
+	It("does not update an interval schedule when the CR sets no anchorDate but the server defaulted one", func() {
+		By("seeding a schedule with a server-defaulted anchor date")
+		Expect(mock.CreateDeploymentSchedules(ctx, depID, []prefect.DeploymentSchedule{{
+			Slug:   newString("hourly"),
+			Active: newBool(true),
+			Schedule: prefect.Schedule{
+				Interval:   newFloat(3600),
+				AnchorDate: newTime(time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)),
+			},
+		}})).To(Succeed())
+
+		desired := []prefect.DeploymentSchedule{{
+			Slug:     newString("hourly"),
+			Active:   newBool(true),
+			Schedule: prefect.Schedule{Interval: newFloat(3600)},
+		}}
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		Expect(mock.UpdateScheduleCalls).To(BeZero())
 	})
 
 	It("prunes a schedule with no slug that isn't part of the desired set", func() {

@@ -41,6 +41,10 @@ type MockClient struct {
 	ShouldFailDelete     bool
 	ShouldFailFlowCreate bool
 	FailureMessage       string
+
+	// UpdateScheduleCalls counts UpdateDeploymentSchedule calls, so tests can
+	// assert that unchanged schedules are not PATCHed
+	UpdateScheduleCalls int
 }
 
 // NewMockClient creates a new mock Prefect client
@@ -362,6 +366,7 @@ func (m *MockClient) UpdateDeploymentSchedule(ctx context.Context, deploymentID,
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.UpdateScheduleCalls++
 	d, ok := m.deployments[deploymentID]
 	if !ok {
 		return fmt.Errorf("mock error: deployment %s not found", deploymentID)

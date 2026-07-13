@@ -24,6 +24,10 @@ name: Build Images on Pull Requests
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   run_unit_tests:
     uses: ./.github/workflows/tests.yaml
