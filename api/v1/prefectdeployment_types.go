@@ -51,6 +51,7 @@ type PrefectWorkPoolReference struct {
 }
 
 // PrefectDeploymentConfiguration defines the deployment specification
+// +kubebuilder:validation:XValidation:rule="!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name == oldSelf.flow_name",message="flow_name is immutable; delete and recreate the deployment to change the flow"
 type PrefectDeploymentConfiguration struct {
 	// Description is a human-readable description of the deployment
 	// +optional
