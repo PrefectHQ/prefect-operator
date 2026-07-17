@@ -3455,6 +3455,14 @@ database with the provided connection information
           EnvVarSource represents a source for the value of an EnvVar.<br/>
         </td>
         <td>false</td>
+      </tr><tr>
+        <td><b>waitForDatabaseImage</b></td>
+        <td>string</td>
+        <td>
+          WaitForDatabaseImage defines the image used by init containers to wait for PostgreSQL.
+The image must include pg_isready. Defaults to "postgres:16-alpine".<br/>
+        </td>
+        <td>false</td>
       </tr></tbody>
 </table>
 

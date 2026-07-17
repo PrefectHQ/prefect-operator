@@ -131,6 +131,10 @@ func (s *SQLiteConfiguration) ToEnvVars() []corev1.EnvVar {
 }
 
 type PostgresConfiguration struct {
+	// WaitForDatabaseImage defines the image used by init containers to wait for PostgreSQL.
+	// The image must include pg_isready. Defaults to "postgres:16-alpine".
+	WaitForDatabaseImage string `json:"waitForDatabaseImage,omitempty"`
+
 	Host         *string              `json:"host,omitempty"`
 	HostFrom     *corev1.EnvVarSource `json:"hostFrom,omitempty"`
 	Port         *int                 `json:"port,omitempty"`
