@@ -30,7 +30,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PrefectServerSpec defines the desired state of a PrefectServer
-// +kubebuilder:validation:XValidation:rule="!has(self.replicas) || self.replicas <= 1 || has(self.postgres)",message="replicas > 1 is only supported with the postgres backend (sqlite/ephemeral use node-local storage and must run a single replica)"
+// +kubebuilder:validation:XValidation:rule="!has(self.replicas) || self.replicas <= 1 || (has(self.postgres) && !has(self.sqlite))",message="replicas > 1 is only supported with the postgres backend alone (the controller prefers sqlite when both are set, and sqlite/ephemeral use node-local storage and must run a single replica)"
 type PrefectServerSpec struct {
 	// Version defines the version of the Prefect Server to deploy
 	Version *string `json:"version,omitempty"`
