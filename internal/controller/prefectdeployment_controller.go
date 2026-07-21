@@ -200,6 +200,13 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	}
 	deployment.Status.SpecHash = specHash
 	deployment.Status.ObservedGeneration = deployment.Generation
+	now := metav1.Now()
+	// Without this, needsSync's drift clause (LastSyncTime > 10m ago) is
+	// permanently true and every reconcile PUTs the deployment to Prefect
+	// (~every 10s). Each update deletes the deployment's not-yet-started
+	// auto-scheduled runs, leaving the scheduler ~seconds of margin - a
+	// scheduled cron minute can be lost entirely (2026-07-21 00:37 on dev).
+	deployment.Status.LastSyncTime = &now
 
 	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Deployment successfully synced with Prefect API")
 	r.setCondition(deployment, PrefectDeploymentConditionReady, metav1.ConditionTrue, "DeploymentReady", "Deployment is ready and operational")
