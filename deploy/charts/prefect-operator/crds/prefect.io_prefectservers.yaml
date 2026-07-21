@@ -3263,6 +3263,11 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
+                  waitForDatabaseImage:
+                    description: |-
+                      WaitForDatabaseImage defines the image used by init containers to wait for PostgreSQL.
+                      The image must include pg_isready. Defaults to "postgres:16-alpine".
+                    type: string
                 type: object
               redis:
                 description: Redis defines whether the server will be deployed with

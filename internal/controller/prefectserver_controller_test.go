@@ -48,6 +48,44 @@ var _ = Describe("PrefectServer controller", func() {
 		prefectserver *prefectiov1.PrefectServer
 	)
 
+	Describe("the PostgreSQL database wait image", func() {
+		var (
+			controllerReconciler *PrefectServerReconciler
+			server               *prefectiov1.PrefectServer
+		)
+
+		BeforeEach(func() {
+			controllerReconciler = &PrefectServerReconciler{}
+			server = &prefectiov1.PrefectServer{
+				Spec: prefectiov1.PrefectServerSpec{
+					Postgres: &prefectiov1.PostgresConfiguration{},
+				},
+			}
+		})
+
+		It("uses the default image", func() {
+			deployment := controllerReconciler.postgresDeploymentSpec(server)
+			migrationJob := controllerReconciler.postgresMigrationJob(server)
+
+			Expect(deployment.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(deployment.Template.Spec.InitContainers[0].Image).To(Equal("postgres:16-alpine"))
+			Expect(migrationJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(migrationJob.Spec.Template.Spec.InitContainers[0].Image).To(Equal("postgres:16-alpine"))
+		})
+
+		It("uses a configured image", func() {
+			server.Spec.Postgres.WaitForDatabaseImage = "registry.example.com/postgres:16-alpine"
+
+			deployment := controllerReconciler.postgresDeploymentSpec(server)
+			migrationJob := controllerReconciler.postgresMigrationJob(server)
+
+			Expect(deployment.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(deployment.Template.Spec.InitContainers[0].Image).To(Equal("registry.example.com/postgres:16-alpine"))
+			Expect(migrationJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(migrationJob.Spec.Template.Spec.InitContainers[0].Image).To(Equal("registry.example.com/postgres:16-alpine"))
+		})
+	})
+
 	Context("for any server", func() {
 		BeforeEach(func() {
 			ctx = context.Background()

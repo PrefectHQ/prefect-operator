@@ -10,8 +10,9 @@ const (
 	MigrationJob = "MigrationJob"
 
 	// Pod data.
-	PrefectDataVolumeName  = "prefect-data"
-	PrefectHomeMountPath   = "/var/lib/prefect/"
-	TerminationMessagePath = "/dev/termination-log"
-	APIPortName            = "api"
+	PrefectDataVolumeName    = "prefect-data"
+	PrefectHomeMountPath     = "/var/lib/prefect/"
+	TerminationMessagePath   = "/dev/termination-log"
+	APIPortName              = "api"
+	DefaultPostgresWaitImage = "postgres:16-alpine"
 )
