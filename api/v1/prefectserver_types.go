@@ -241,6 +241,14 @@ type RedisConfiguration struct {
 	UsernameFrom *corev1.EnvVarSource `json:"usernameFrom,omitempty"`
 	Password     *string              `json:"password,omitempty"`
 	PasswordFrom *corev1.EnvVarSource `json:"passwordFrom,omitempty"`
+
+	// LeaseStorage defines whether the server also stores concurrency-limit
+	// leases in this Redis (PREFECT_SERVER_CONCURRENCY_LEASE_STORAGE =
+	// prefect_redis.lease_storage), so leases are shared across server
+	// replicas instead of held in each replica's memory. Requires an image
+	// whose prefect-redis ships the lease_storage module; defaults to false
+	// to keep older images working.
+	LeaseStorage *bool `json:"leaseStorage,omitempty"`
 }
 
 func (r *RedisConfiguration) ToEnvVars() []corev1.EnvVar {
@@ -253,6 +261,13 @@ func (r *RedisConfiguration) ToEnvVars() []corev1.EnvVar {
 			Name:  EnvPrefectMessagingCache,
 			Value: RedisMessagingPackage,
 		},
+	}
+
+	if r.LeaseStorage != nil && *r.LeaseStorage {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  EnvPrefectServerConcurrencyLeaseStorage,
+			Value: RedisLeaseStoragePackage,
+		})
 	}
 
 	if r.Host != nil || r.HostFrom != nil {

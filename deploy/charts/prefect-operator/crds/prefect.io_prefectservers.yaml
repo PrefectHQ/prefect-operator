@@ -2624,6 +2624,15 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
+                  leaseStorage:
+                    description: |-
+                      LeaseStorage defines whether the server also stores concurrency-limit
+                      leases in this Redis (PREFECT_SERVER_CONCURRENCY_LEASE_STORAGE =
+                      prefect_redis.lease_storage), so leases are shared across server
+                      replicas instead of held in each replica's memory. Requires an image
+                      whose prefect-redis ships the lease_storage module; defaults to false
+                      to keep older images working.
+                    type: boolean
                   password:
                     type: string
                   passwordFrom:
