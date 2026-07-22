@@ -34,6 +34,8 @@ const (
 	EnvPrefectRedisMessagingUsername = "PREFECT_REDIS_MESSAGING_USERNAME"
 	EnvPrefectRedisMessagingPassword = "PREFECT_REDIS_MESSAGING_PASSWORD"
 
+	EnvPrefectServerConcurrencyLeaseStorage = "PREFECT_SERVER_CONCURRENCY_LEASE_STORAGE"
+
 	PrefectHomePath   = "/var/lib/prefect/"
 	PrefectSQLitePath = "/var/lib/prefect/prefect.db"
 
@@ -44,7 +46,8 @@ const (
 	WorkerArgType            = "--type"
 	WorkerArgWithHealthcheck = "--with-healthcheck"
 
-	RedisMessagingPackage = "prefect_redis.messaging"
+	RedisMessagingPackage    = "prefect_redis.messaging"
+	RedisLeaseStoragePackage = "prefect_redis.lease_storage"
 
 	PrefectCLI       = "prefect"
 	WorkPoolTypeK8s  = "kubernetes"

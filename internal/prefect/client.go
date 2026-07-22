@@ -197,28 +197,35 @@ type DeploymentSpec struct {
 
 // Deployment represents a Prefect deployment
 type Deployment struct {
-	ID                      string               `json:"id"`
-	Created                 time.Time            `json:"created"`
-	Updated                 time.Time            `json:"updated"`
-	Name                    string               `json:"name"`
-	Version                 *string              `json:"version"`
-	Description             *string              `json:"description"`
-	FlowID                  string               `json:"flow_id"`
-	Paused                  bool                 `json:"paused"`
-	Tags                    []string             `json:"tags"`
-	Parameters              map[string]any       `json:"parameters"`
-	JobVariables            map[string]any       `json:"job_variables"`
-	WorkQueueName           *string              `json:"work_queue_name"`
-	WorkPoolName            *string              `json:"work_pool_name"`
-	Status                  string               `json:"status"`
-	Schedules               []DeploymentSchedule `json:"schedules"`
-	ConcurrencyLimit        *int                 `json:"concurrency_limit"`
-	GlobalConcurrencyLimits []string             `json:"global_concurrency_limits"`
-	Entrypoint              *string              `json:"entrypoint"`
-	Path                    *string              `json:"path"`
-	PullSteps               []map[string]any     `json:"pull_steps"`
-	ParameterOpenAPISchema  map[string]any       `json:"parameter_openapi_schema"`
-	EnforceParameterSchema  bool                 `json:"enforce_parameter_schema"`
+	ID                      string                  `json:"id"`
+	Created                 time.Time               `json:"created"`
+	Updated                 time.Time               `json:"updated"`
+	Name                    string                  `json:"name"`
+	Version                 *string                 `json:"version"`
+	Description             *string                 `json:"description"`
+	FlowID                  string                  `json:"flow_id"`
+	Paused                  bool                    `json:"paused"`
+	Tags                    []string                `json:"tags"`
+	Parameters              map[string]any          `json:"parameters"`
+	JobVariables            map[string]any          `json:"job_variables"`
+	WorkQueueName           *string                 `json:"work_queue_name"`
+	WorkPoolName            *string                 `json:"work_pool_name"`
+	Status                  string                  `json:"status"`
+	Schedules               []DeploymentSchedule    `json:"schedules"`
+	ConcurrencyLimit        *int                    `json:"concurrency_limit"`
+	GlobalConcurrencyLimit  *GlobalConcurrencyLimit `json:"global_concurrency_limit,omitempty"`
+	GlobalConcurrencyLimits []string                `json:"global_concurrency_limits"`
+	Entrypoint              *string                 `json:"entrypoint"`
+	Path                    *string                 `json:"path"`
+	PullSteps               []map[string]any        `json:"pull_steps"`
+	ParameterOpenAPISchema  map[string]any          `json:"parameter_openapi_schema"`
+	EnforceParameterSchema  bool                    `json:"enforce_parameter_schema"`
+}
+
+// GlobalConcurrencyLimit carries the deployment's live concurrency limit;
+// the deprecated top-level concurrency_limit response field is always null.
+type GlobalConcurrencyLimit struct {
+	Limit int `json:"limit"`
 }
 
 // Schedule represents a Prefect deployment schedule.
