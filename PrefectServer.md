@@ -4957,6 +4957,18 @@ Redis defines whether the server will be deployed with a Redis message broker
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>leaseStorage</b></td>
+        <td>boolean</td>
+        <td>
+          LeaseStorage defines whether the server also stores concurrency-limit
+leases in this Redis (PREFECT_SERVER_CONCURRENCY_LEASE_STORAGE =
+prefect_redis.lease_storage), so leases are shared across server
+replicas instead of held in each replica's memory. Requires an image
+whose prefect-redis ships the lease_storage module; defaults to false
+to keep older images working.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>password</b></td>
         <td>string</td>
         <td>
