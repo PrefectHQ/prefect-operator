@@ -75,6 +75,10 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}()
 
+	// Surface (as a status condition, not an error) a multi-replica server
+	// running on per-replica in-memory state — see checkSharedState.
+	r.checkSharedState(server)
+
 	desiredDeployment, desiredPVC, desiredMigrationJob, err := r.prefectServerDeployment(server)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -114,6 +118,28 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// checkSharedState sets the SharedStateConfigured status condition. With
+// replicas > 1, concurrency leases default to each replica's memory, so
+// deployment/global concurrency limits under-enforce unless Redis-backed lease
+// storage (spec.redis.leaseStorage) shares them. This is a warning condition
+// rather than a validation error: single-replica servers and multi-replica
+// servers that don't use concurrency limits work fine without it.
+func (r *PrefectServerReconciler) checkSharedState(server *prefectiov1.PrefectServer) {
+	replicas := server.Replicas()
+	if replicas == nil || *replicas <= 1 {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.SharedStateConfigured("SingleReplica"))
+		return
+	}
+
+	redis := server.Spec.Redis
+	if redis != nil && redis.LeaseStorage != nil && *redis.LeaseStorage {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.SharedStateConfigured("RedisLeaseStorage"))
+		return
+	}
+
+	meta.SetStatusCondition(&server.Status.Conditions, conditions.SharedStateInMemory())
 }
 
 func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *prefectiov1.PrefectServer, desiredPVC *corev1.PersistentVolumeClaim, log logr.Logger) (*ctrl.Result, error) {
