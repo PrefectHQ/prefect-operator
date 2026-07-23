@@ -30,6 +30,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PrefectServerSpec defines the desired state of a PrefectServer
+// +kubebuilder:validation:XValidation:rule="!has(self.replicas) || self.replicas <= 1 || (has(self.postgres) && !has(self.sqlite))",message="replicas > 1 is only supported with the postgres backend alone (the controller prefers sqlite when both are set, and sqlite/ephemeral use node-local storage and must run a single replica)"
 type PrefectServerSpec struct {
 	// Version defines the version of the Prefect Server to deploy
 	Version *string `json:"version,omitempty"`
@@ -83,6 +84,22 @@ type PrefectServerSpec struct {
 
 	// NodeSelector defines the node selector for the Prefect Server Deployment and migration Job
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Replicas defines the number of Prefect Server Deployment replicas (Postgres backend only;
+	// sqlite/ephemeral must run a single replica). Defaults to 1.
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Affinity defines the scheduling affinity/anti-affinity for the Prefect Server pods.
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+}
+
+// Replicas returns the desired server Deployment replica count, defaulting to 1.
+func (s *PrefectServer) Replicas() *int32 {
+	if s.Spec.Replicas != nil {
+		return s.Spec.Replicas
+	}
+	one := int32(1)
+	return &one
 }
 
 type EphemeralConfiguration struct {

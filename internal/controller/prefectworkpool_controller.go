@@ -177,6 +177,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: workPool.ServiceAccount(),
+					Affinity:           workPool.Spec.Affinity,
 					Volumes: []corev1.Volume{
 						{
 							Name: constants.PrefectDataVolumeName,

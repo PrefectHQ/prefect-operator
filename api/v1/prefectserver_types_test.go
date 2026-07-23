@@ -701,3 +701,15 @@ var _ = Describe("PrefectServer type", func() {
 		})
 	})
 })
+
+var _ = Describe("PrefectServer.Replicas", func() {
+	It("defaults to 1 when unset", func() {
+		s := &PrefectServer{}
+		Expect(*s.Replicas()).To(Equal(int32(1)))
+	})
+
+	It("returns the configured value when set", func() {
+		s := &PrefectServer{Spec: PrefectServerSpec{Replicas: new(int32(3))}}
+		Expect(*s.Replicas()).To(Equal(int32(3)))
+	})
+})

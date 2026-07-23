@@ -75,3 +75,27 @@ func Updated(object string) metav1.Condition {
 		Status:  metav1.ConditionTrue,
 	}
 }
+
+// SharedStateConfigured reports that a multi-replica server has Redis-backed
+// concurrency lease storage (or doesn't need it at a single replica).
+func SharedStateConfigured(reason string) metav1.Condition {
+	return metav1.Condition{
+		Type:    "SharedStateConfigured",
+		Reason:  reason,
+		Message: "server state shared across replicas is configured correctly",
+		Status:  metav1.ConditionTrue,
+	}
+}
+
+// SharedStateInMemory warns that replicas > 1 is running on per-replica
+// in-memory state: concurrency leases (and the messaging broker) are not
+// shared, so concurrency limits under-enforce across replicas and
+// proactive/composite automation triggers may misfire.
+func SharedStateInMemory() metav1.Condition {
+	return metav1.Condition{
+		Type:    "SharedStateConfigured",
+		Reason:  "InMemoryLeaseStorage",
+		Message: "replicas > 1 without spec.redis.leaseStorage: concurrency leases are held in each replica's memory, so concurrency limits under-enforce; configure spec.redis with leaseStorage: true",
+		Status:  metav1.ConditionFalse,
+	}
+}
