@@ -32,6 +32,7 @@ type MockClient struct {
 	deployments map[string]*Deployment
 	flows       map[string]*Flow
 	workPools   map[string]*WorkPool
+	workQueues  map[string]*WorkQueue
 	automations map[string]*Automation
 
 	// Test configuration
@@ -45,6 +46,10 @@ type MockClient struct {
 	// UpdateScheduleCalls counts UpdateDeploymentSchedule calls, so tests can
 	// assert that unchanged schedules are not PATCHed
 	UpdateScheduleCalls int
+
+	// UpdateWorkQueueCalls counts UpdateWorkQueue calls, so tests can assert
+	// that an already-matching queue is not PATCHed
+	UpdateWorkQueueCalls int
 }
 
 // NewMockClient creates a new mock Prefect client
@@ -53,6 +58,7 @@ func NewMockClient() *MockClient {
 		deployments: make(map[string]*Deployment),
 		flows:       make(map[string]*Flow),
 		workPools:   make(map[string]*WorkPool),
+		workQueues:  make(map[string]*WorkQueue),
 		automations: make(map[string]*Automation),
 	}
 }
@@ -705,4 +711,82 @@ func (m *MockClient) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMe
 	return map[string]WorkerMetadata{
 		"kubernetes": {DefaultBaseJobTemplate: MockDefaultBaseJobTemplate},
 	}, nil
+}
+
+func workQueueKey(workPoolName, name string) string {
+	return workPoolName + "/" + name
+}
+
+// GetWorkQueue returns a stored work queue, or (nil, nil) when absent.
+func (m *MockClient) GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error) {
+	if m.ShouldFailGet {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	queue, ok := m.workQueues[workQueueKey(workPoolName, name)]
+	if !ok {
+		return nil, nil
+	}
+
+	copied := *queue
+	return &copied, nil
+}
+
+// CreateWorkQueue stores a new work queue in the mock store.
+func (m *MockClient) CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error) {
+	if m.ShouldFailCreate {
+		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	created := &WorkQueue{
+		ID:               "mock-work-queue-" + queue.Name,
+		Name:             queue.Name,
+		Description:      queue.Description,
+		IsPaused:         queue.IsPaused,
+		ConcurrencyLimit: queue.ConcurrencyLimit,
+		Priority:         queue.Priority,
+		WorkPoolName:     workPoolName,
+	}
+	m.workQueues[workQueueKey(workPoolName, queue.Name)] = created
+
+	copied := *created
+	return &copied, nil
+}
+
+// UpdateWorkQueue updates a stored work queue.
+func (m *MockClient) UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec) error {
+	if m.ShouldFailUpdate {
+		return fmt.Errorf("mock error: %s", m.FailureMessage)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.UpdateWorkQueueCalls++
+
+	existing, ok := m.workQueues[workQueueKey(workPoolName, name)]
+	if !ok {
+		return fmt.Errorf("work queue not found")
+	}
+
+	existing.Description = queue.Description
+	existing.IsPaused = queue.IsPaused
+	existing.ConcurrencyLimit = queue.ConcurrencyLimit
+	existing.Priority = queue.Priority
+
+	return nil
+}
+
+// SeedWorkQueue puts a queue into the mock store, for tests that need one to
+// already exist.
+func (m *MockClient) SeedWorkQueue(workPoolName string, queue *WorkQueue) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.workQueues[workQueueKey(workPoolName, queue.Name)] = queue
 }

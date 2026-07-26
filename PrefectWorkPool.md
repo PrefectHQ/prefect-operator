@@ -172,6 +172,17 @@ If not specified, the default ServiceAccount for the namespace will be used.<br/
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#prefectworkpoolspecworkqueuesindex">workQueues</a></b></td>
+        <td>[]object</td>
+        <td>
+          WorkQueues declares work queues within this pool. Queues referenced by a
+PrefectDeployment are created implicitly by Prefect with no concurrency
+limit; declare them here to manage that limit (and priority) as config.
+Queues are created if missing and updated if they drift; queues NOT listed
+here are left alone, so this never deletes a queue created elsewhere.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>workers</b></td>
         <td>integer</td>
         <td>
@@ -5808,6 +5819,73 @@ More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/nam
         <td>boolean</td>
         <td>
           Specify whether the Secret or its key must be defined<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.workQueues[index]
+<sup><sup>[↩ Parent](#prefectworkpoolspec)</sup></sup>
+
+
+
+PrefectWorkQueue is a work queue within a PrefectWorkPool.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Name of the work queue, as referenced by a deployment's workQueue field.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>concurrencyLimit</b></td>
+        <td>integer</td>
+        <td>
+          ConcurrencyLimit caps how many flow runs this queue may have running at
+once. Unset leaves the queue unlimited.
+
+Prefer this over a deployment-level concurrency limit when run ORDER
+matters: workers pull from a queue sorted by next scheduled start time,
+whereas a deployment limit rejects the transition and re-schedules the run
+with a fresh timestamp, which loses the original ordering.<br/>
+          <br/>
+            <i>Format</i>: int32<br/>
+            <i>Minimum</i>: 0<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>description</b></td>
+        <td>string</td>
+        <td>
+          Description of the queue.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>isPaused</b></td>
+        <td>boolean</td>
+        <td>
+          IsPaused stops the queue from serving work when true.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>priority</b></td>
+        <td>integer</td>
+        <td>
+          Priority of this queue within the pool; lower numbers are served first.<br/>
+          <br/>
+            <i>Format</i>: int32<br/>
+            <i>Minimum</i>: 1<br/>
         </td>
         <td>false</td>
       </tr></tbody>

@@ -70,6 +70,12 @@ type PrefectClient interface {
 	UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error
 	// DeleteWorkPool deletes a work pool
 	DeleteWorkPool(ctx context.Context, id string) error
+	// GetWorkQueue retrieves a work queue within a pool by name; nil when absent
+	GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error)
+	// CreateWorkQueue creates a work queue within a pool
+	CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error)
+	// UpdateWorkQueue updates an existing work queue within a pool
+	UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec) error
 	// GetWorkerMetadata retrieves aggregate metadata for all worker types
 	GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error)
 	// CreateAutomation creates a new automation
@@ -900,4 +906,145 @@ func (c *Client) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetada
 	}
 
 	return metadata, nil
+}
+
+// WorkQueueSpec is the create/update payload for a work queue.
+type WorkQueueSpec struct {
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	IsPaused         *bool   `json:"is_paused,omitempty"`
+	ConcurrencyLimit *int32  `json:"concurrency_limit,omitempty"`
+	Priority         *int32  `json:"priority,omitempty"`
+}
+
+// WorkQueue is a work queue as returned by the Prefect API.
+type WorkQueue struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	IsPaused         *bool   `json:"is_paused,omitempty"`
+	ConcurrencyLimit *int32  `json:"concurrency_limit,omitempty"`
+	Priority         *int32  `json:"priority,omitempty"`
+	WorkPoolName     string  `json:"work_pool_name,omitempty"`
+}
+
+// GetWorkQueue retrieves a work queue within a pool. Returns (nil, nil) when the
+// queue does not exist, matching GetWorkPool's contract.
+func (c *Client) GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error) {
+	url := fmt.Sprintf("%s/work_pools/%s/queues/%s", c.BaseURL, workPoolName, name)
+	c.log.V(1).Info("Getting work queue", "url", url, "workPool", workPoolName, "name", name)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if !isSuccessStatusCode(resp.StatusCode) {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result WorkQueue
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// CreateWorkQueue creates a work queue within a pool.
+func (c *Client) CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error) {
+	url := fmt.Sprintf("%s/work_pools/%s/queues", c.BaseURL, workPoolName)
+	c.log.V(1).Info("Creating work queue", "url", url, "workPool", workPoolName, "name", queue.Name)
+
+	jsonData, err := json.Marshal(queue)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal work queue: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if !isSuccessStatusCode(resp.StatusCode) {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result WorkQueue
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	c.log.V(1).Info("Work queue created successfully", "workQueueID", result.ID)
+	return &result, nil
+}
+
+// UpdateWorkQueue updates an existing work queue within a pool.
+func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec) error {
+	url := fmt.Sprintf("%s/work_pools/%s/queues/%s", c.BaseURL, workPoolName, name)
+	c.log.V(1).Info("Updating work queue", "url", url, "workPool", workPoolName, "name", name)
+
+	jsonData, err := json.Marshal(queue)
+	if err != nil {
+		return fmt.Errorf("failed to marshal work queue updates: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if !isSuccessStatusCode(resp.StatusCode) {
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }

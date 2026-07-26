@@ -336,6 +336,12 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 		}
 	}
 
+	if err := r.syncWorkQueues(ctx, prefectClient, workPool); err != nil {
+		log.Error(err, "Failed to sync work queues in Prefect", "workPool", name)
+		r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
+		return err
+	}
+
 	prefect.UpdateWorkPoolStatus(workPool, prefectWorkPool)
 
 	specHash, err := utils.Hash(workPool.Spec, 16)
@@ -354,6 +360,68 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Work pool successfully synced with Prefect API")
 
 	return nil
+}
+
+// syncWorkQueues reconciles the work queues declared on the pool: each is
+// created if missing and patched if it drifts. Queues that are not declared are
+// deliberately left untouched, so this never removes a queue that a deployment
+// (or another operator) created.
+func (r *PrefectWorkPoolReconciler) syncWorkQueues(ctx context.Context, prefectClient prefect.PrefectClient, workPool *prefectiov1.PrefectWorkPool) error {
+	log := log.FromContext(ctx)
+
+	for _, desired := range workPool.Spec.WorkQueues {
+		spec := &prefect.WorkQueueSpec{
+			Name:             desired.Name,
+			Description:      desired.Description,
+			IsPaused:         desired.IsPaused,
+			ConcurrencyLimit: desired.ConcurrencyLimit,
+			Priority:         desired.Priority,
+		}
+
+		remote, err := prefectClient.GetWorkQueue(ctx, workPool.Name, desired.Name)
+		if err != nil {
+			return fmt.Errorf("failed to get work queue %q: %w", desired.Name, err)
+		}
+
+		if remote == nil {
+			if _, err := prefectClient.CreateWorkQueue(ctx, workPool.Name, spec); err != nil {
+				return fmt.Errorf("failed to create work queue %q: %w", desired.Name, err)
+			}
+			log.Info("Created work queue", "workPool", workPool.Name, "workQueue", desired.Name)
+			continue
+		}
+
+		if workQueueMatches(desired, remote) {
+			continue
+		}
+
+		if err := prefectClient.UpdateWorkQueue(ctx, workPool.Name, desired.Name, spec); err != nil {
+			return fmt.Errorf("failed to update work queue %q: %w", desired.Name, err)
+		}
+		log.Info("Updated work queue", "workPool", workPool.Name, "workQueue", desired.Name)
+	}
+
+	return nil
+}
+
+// workQueueMatches reports whether the remote queue already has the declared
+// values. Fields left unset in the spec are not compared, so declaring only a
+// concurrency limit never fights whatever else is set on the queue.
+func workQueueMatches(desired prefectiov1.PrefectWorkQueue, remote *prefect.WorkQueue) bool {
+	if desired.ConcurrencyLimit != nil &&
+		(remote.ConcurrencyLimit == nil || *remote.ConcurrencyLimit != *desired.ConcurrencyLimit) {
+		return false
+	}
+	if desired.Priority != nil && (remote.Priority == nil || *remote.Priority != *desired.Priority) {
+		return false
+	}
+	if desired.Description != nil && (remote.Description == nil || *remote.Description != *desired.Description) {
+		return false
+	}
+	if desired.IsPaused != nil && (remote.IsPaused == nil || *remote.IsPaused != *desired.IsPaused) {
+		return false
+	}
+	return true
 }
 
 // setCondition sets a condition on the deployment status

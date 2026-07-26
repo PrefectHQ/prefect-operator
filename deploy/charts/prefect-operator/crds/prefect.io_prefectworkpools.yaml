@@ -2966,6 +2966,49 @@ spec:
                 description: Version defines the version of the Prefect Server to
                   deploy
                 type: string
+              workQueues:
+                description: |-
+                  WorkQueues declares work queues within this pool. Queues referenced by a
+                  PrefectDeployment are created implicitly by Prefect with no concurrency
+                  limit; declare them here to manage that limit (and priority) as config.
+                  Queues are created if missing and updated if they drift; queues NOT listed
+                  here are left alone, so this never deletes a queue created elsewhere.
+                items:
+                  description: PrefectWorkQueue is a work queue within a PrefectWorkPool.
+                  properties:
+                    concurrencyLimit:
+                      description: |-
+                        ConcurrencyLimit caps how many flow runs this queue may have running at
+                        once. Unset leaves the queue unlimited.
+
+                        Prefer this over a deployment-level concurrency limit when run ORDER
+                        matters: workers pull from a queue sorted by next scheduled start time,
+                        whereas a deployment limit rejects the transition and re-schedules the run
+                        with a fresh timestamp, which loses the original ordering.
+                      format: int32
+                      minimum: 0
+                      type: integer
+                    description:
+                      description: Description of the queue.
+                      type: string
+                    isPaused:
+                      description: IsPaused stops the queue from serving work when
+                        true.
+                      type: boolean
+                    name:
+                      description: Name of the work queue, as referenced by a deployment's
+                        workQueue field.
+                      type: string
+                    priority:
+                      description: Priority of this queue within the pool; lower numbers
+                        are served first.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                  required:
+                  - name
+                  type: object
+                type: array
               workers:
                 description: Workers defines the number of workers to run in the Work
                   Pool

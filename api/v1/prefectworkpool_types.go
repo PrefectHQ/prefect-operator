@@ -68,8 +68,46 @@ type PrefectWorkPoolSpec struct {
 	// +optional
 	ServiceAccountName *string `json:"serviceAccountName,omitempty"`
 
+	// WorkQueues declares work queues within this pool. Queues referenced by a
+	// PrefectDeployment are created implicitly by Prefect with no concurrency
+	// limit; declare them here to manage that limit (and priority) as config.
+	// Queues are created if missing and updated if they drift; queues NOT listed
+	// here are left alone, so this never deletes a queue created elsewhere.
+	// +optional
+	WorkQueues []PrefectWorkQueue `json:"workQueues,omitempty"`
+
 	// Base job template for flow runs in the Work Pool
 	BaseJobTemplate *RawValueSource `json:"baseJobTemplate,omitempty"`
+}
+
+// PrefectWorkQueue is a work queue within a PrefectWorkPool.
+type PrefectWorkQueue struct {
+	// Name of the work queue, as referenced by a deployment's workQueue field.
+	Name string `json:"name"`
+
+	// ConcurrencyLimit caps how many flow runs this queue may have running at
+	// once. Unset leaves the queue unlimited.
+	//
+	// Prefer this over a deployment-level concurrency limit when run ORDER
+	// matters: workers pull from a queue sorted by next scheduled start time,
+	// whereas a deployment limit rejects the transition and re-schedules the run
+	// with a fresh timestamp, which loses the original ordering.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	ConcurrencyLimit *int32 `json:"concurrencyLimit,omitempty"`
+
+	// Priority of this queue within the pool; lower numbers are served first.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Priority *int32 `json:"priority,omitempty"`
+
+	// Description of the queue.
+	// +optional
+	Description *string `json:"description,omitempty"`
+
+	// IsPaused stops the queue from serving work when true.
+	// +optional
+	IsPaused *bool `json:"isPaused,omitempty"`
 }
 
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
