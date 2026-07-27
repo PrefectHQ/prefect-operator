@@ -121,6 +121,26 @@ rules:
     resources: ["prefectdeployments/finalizers"]
     verbs:
       - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkqueues"]
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkqueues/status"]
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectworkqueues/finalizers"]
+    verbs:
+      - update
 
 ---
 kind: ClusterRoleBinding
