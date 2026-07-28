@@ -289,7 +289,7 @@ func (m *MockClient) GetDeploymentByName(ctx context.Context, name, flowID strin
 }
 
 // UpdateDeployment updates an existing deployment in the mock store
-func (m *MockClient) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error) {
+func (m *MockClient) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec, clearFields []string) (*Deployment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -310,7 +310,17 @@ func (m *MockClient) UpdateDeployment(ctx context.Context, id string, deployment
 		existing.Paused = *deployment.Paused
 	}
 	existing.Schedules = deployment.Schedules
-	existing.ConcurrencyLimit = deployment.ConcurrencyLimit
+	// Match the real API's exclude_unset semantics: omitted limit unchanged.
+	if deployment.ConcurrencyLimit != nil {
+		existing.ConcurrencyLimit = deployment.ConcurrencyLimit
+		existing.GlobalConcurrencyLimit = &GlobalConcurrencyLimit{Limit: *deployment.ConcurrencyLimit}
+	}
+	for _, f := range clearFields {
+		if f == DeploymentFieldConcurrencyLimit {
+			existing.ConcurrencyLimit = nil
+			existing.GlobalConcurrencyLimit = nil
+		}
+	}
 	existing.GlobalConcurrencyLimits = deployment.GlobalConcurrencyLimits
 	existing.Entrypoint = deployment.Entrypoint
 	existing.Path = deployment.Path

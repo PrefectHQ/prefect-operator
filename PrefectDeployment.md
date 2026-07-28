@@ -147,7 +147,8 @@ Deployment configuration defining the Prefect deployment
         <td><b>concurrencyLimit</b></td>
         <td>integer</td>
         <td>
-          ConcurrencyLimit limits concurrent runs of this deployment<br/>
+          ConcurrencyLimit limits concurrent runs of this deployment. Removing
+the field after it has been applied removes the limit in Prefect.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -890,6 +891,15 @@ PrefectDeploymentStatus defines the observed state of PrefectDeployment
           Ready indicates that the deployment exists and is configured correctly<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>appliedFields</b></td>
+        <td>[]string</td>
+        <td>
+          AppliedFields records which clear-tracked spec fields the last sync
+declared, so a removed field (currently concurrencyLimit) is reset in
+Prefect instead of keeping its old value.<br/>
+        </td>
+        <td>false</td>
       </tr><tr>
         <td><b><a href="#prefectdeploymentstatusconditionsindex">conditions</a></b></td>
         <td>[]object</td>
