@@ -58,7 +58,9 @@ spec:
                 description: Deployment configuration defining the Prefect deployment
                 properties:
                   concurrencyLimit:
-                    description: ConcurrencyLimit limits concurrent runs of this deployment
+                    description: |-
+                      ConcurrencyLimit limits concurrent runs of this deployment. Removing
+                      the field after it has been applied removes the limit in Prefect.
                     type: integer
                   description:
                     description: Description is a human-readable description of the
@@ -411,6 +413,14 @@ spec:
           status:
             description: PrefectDeploymentStatus defines the observed state of PrefectDeployment
             properties:
+              appliedFields:
+                description: |-
+                  AppliedFields records which clear-tracked spec fields the last sync
+                  declared, so a removed field (currently concurrencyLimit) is reset in
+                  Prefect instead of keeping its old value.
+                items:
+                  type: string
+                type: array
               conditions:
                 description: Conditions store the status conditions of the PrefectDeployment
                   instances

@@ -51,8 +51,10 @@ type PrefectClient interface {
 	GetDeployment(ctx context.Context, id string) (*Deployment, error)
 	// GetDeploymentByName retrieves a deployment by name and flow ID
 	GetDeploymentByName(ctx context.Context, name, flowID string) (*Deployment, error)
-	// UpdateDeployment updates an existing deployment
-	UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error)
+	// UpdateDeployment updates an existing deployment; clearFields resets
+	// previously-declared fields (e.g. the concurrency limit) instead of
+	// leaving them untouched
+	UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec, clearFields []string) (*Deployment, error)
 	// DeleteDeployment deletes a deployment
 	DeleteDeployment(ctx context.Context, id string) error
 	CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error
@@ -421,10 +423,16 @@ func (c *Client) GetDeploymentByName(ctx context.Context, name, flowID string) (
 	return nil, fmt.Errorf("GetDeploymentByName not yet implemented - use GetDeployment with ID")
 }
 
-// UpdateDeployment updates an existing deployment
-func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec) (*Deployment, error) {
+// DeploymentFieldConcurrencyLimit is the CRD JSON name of the concurrency
+// limit, used in clearFields and status.appliedFields.
+const DeploymentFieldConcurrencyLimit = "concurrencyLimit"
+
+// UpdateDeployment updates an existing deployment. Updates apply with
+// exclude_unset semantics, so clearing a field needs its explicit null —
+// clearFields names the fields to reset.
+func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec, clearFields []string) (*Deployment, error) {
 	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.V(1).Info("Updating deployment", "url", url, "deploymentId", id)
+	c.log.V(1).Info("Updating deployment", "url", url, "deploymentId", id, "clearFields", clearFields)
 
 	raw, err := json.Marshal(deployment)
 	if err != nil {
@@ -436,6 +444,11 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 	}
 	delete(updateBody, "name")
 	delete(updateBody, "flow_id")
+	for _, f := range clearFields {
+		if f == DeploymentFieldConcurrencyLimit {
+			updateBody["concurrency_limit"] = nil
+		}
+	}
 	jsonData, err := json.Marshal(updateBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal deployment update body: %w", err)
