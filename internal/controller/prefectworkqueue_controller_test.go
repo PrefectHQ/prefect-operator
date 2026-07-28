@@ -330,6 +330,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		It("Should create the new queue and leave the old one untouched", func() {
 			fresh := syncedWorkQueue()
 			originalID := *fresh.Status.Id
+			Expect(fresh.Status.ManagedName).To(Equal("ingest"))
 
 			fresh.Spec.Name = "ingest-v2"
 			Expect(k8sClient.Update(ctx, fresh)).To(Succeed())
@@ -353,6 +354,78 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
 			Expect(fresh.Status.Id).To(HaveValue(Equal(renamed.ID)))
 			Expect(*fresh.Status.Id).NotTo(Equal(originalID))
+			Expect(fresh.Status.ManagedName).To(Equal("ingest-v2"))
+		})
+
+		It("Should re-adopt when renaming a created queue onto an existing one", func() {
+			fresh := syncedWorkQueue()
+			Expect(fresh.Status.Adopted).To(HaveValue(BeFalse()))
+			Expect(fresh.Status.AppliedFields).To(ConsistOf("concurrencyLimit"))
+
+			By("Seeding an existing queue under the target name")
+			existing, err := mockClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{
+				Name:             "ingest-v2",
+				ConcurrencyLimit: new(int32(9)),
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Renaming onto it while also dropping concurrencyLimit")
+			fresh.Spec.Name = "ingest-v2"
+			fresh.Spec.ConcurrencyLimit = nil
+			Expect(k8sClient.Update(ctx, fresh)).To(Succeed())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Adoption was recomputed for the new queue")
+			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
+			Expect(fresh.Status.Adopted).To(HaveValue(BeTrue()))
+			Expect(fresh.Status.AppliedFields).To(BeEmpty())
+
+			By("The pending clear was not applied to a queue that never had our limit")
+			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(9))))
+
+			By("Deleting the CR leaves the adopted queue in place")
+			Expect(k8sClient.Delete(ctx, fresh)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			remote, err = mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).NotTo(BeNil())
+			Expect(remote.ID).To(Equal(existing.ID))
+		})
+
+		It("Should mark created when renaming an adopted queue onto a new name", func() {
+			By("Seeding an existing queue so the CR adopts it")
+			_, err := mockClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{Name: "ingest"})
+			Expect(err).NotTo(HaveOccurred())
+
+			fresh := syncedWorkQueue()
+			Expect(fresh.Status.Adopted).To(HaveValue(BeTrue()))
+
+			By("Renaming onto a name that does not exist")
+			fresh.Spec.Name = "ingest-v2"
+			Expect(k8sClient.Update(ctx, fresh)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
+			Expect(fresh.Status.Adopted).To(HaveValue(BeFalse()))
+
+			By("Deleting the CR removes the queue it created")
+			Expect(k8sClient.Delete(ctx, fresh)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).To(BeNil())
+
+			By("The originally adopted queue is untouched")
+			old, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(old).NotTo(BeNil())
 		})
 	})
 

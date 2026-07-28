@@ -179,10 +179,11 @@ func (c *Client) CreateWorkQueue(ctx context.Context, workPoolName string, queue
 // The payload carries only the fields set on the spec — Prefect applies it
 // with exclude_unset semantics, leaving omitted fields untouched. Fields named
 // in clearFields (CRD JSON names) are reset to their create-time defaults with
-// an explicit value: null for concurrencyLimit and description, false for
-// isPaused. Priority has no default (Prefect keeps pool priorities unique and
-// sequential) and cannot be cleared. The queue name is the route key and is
-// never sent in the payload, so this can never rename.
+// an explicit value: null for concurrencyLimit (nullable column), "" for
+// description (NOT NULL column, defaults to ""), false for isPaused. Priority
+// has no default (Prefect keeps pool priorities unique and sequential) and
+// cannot be cleared. The queue name is the route key and is never sent in the
+// payload, so this can never rename.
 func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec, clearFields []string) error {
 	url := c.workQueueURL(workPoolName, name)
 	c.log.V(1).Info("Updating work queue", "url", url, "workPool", workPoolName, "name", name, "clearFields", clearFields)
@@ -205,7 +206,7 @@ func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string,
 		case WorkQueueFieldConcurrencyLimit:
 			payload["concurrency_limit"] = nil
 		case WorkQueueFieldDescription:
-			payload["description"] = nil
+			payload["description"] = ""
 		case WorkQueueFieldIsPaused:
 			payload["is_paused"] = false
 		}
@@ -243,8 +244,9 @@ func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string,
 }
 
 // DeleteWorkQueue deletes a work queue via DELETE /work_pools/{pool}/queues/{name},
-// which rejects deleting the pool's default queue cleanly and renormalizes the
-// remaining queue priorities (the legacy /work_queues/{id} route does neither).
+// which rejects deleting the pool's default queue (as a 500 — the server's
+// ValueError isn't mapped to a 4xx) and renormalizes the remaining queue
+// priorities; the legacy /work_queues/{id} route does neither.
 func (c *Client) DeleteWorkQueue(ctx context.Context, workPoolName, name string) error {
 	url := c.workQueueURL(workPoolName, name)
 	c.log.V(1).Info("Deleting work queue", "url", url, "workPool", workPoolName, "name", name)

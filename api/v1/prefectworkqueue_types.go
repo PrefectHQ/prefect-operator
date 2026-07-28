@@ -95,12 +95,17 @@ type PrefectWorkQueueStatus struct {
 	// Ready indicates that the work queue exists and is configured correctly
 	Ready bool `json:"ready"`
 
-	// Adopted is true when the queue already existed in Prefect the first time
-	// this resource reconciled (e.g. it was created implicitly by a deployment
-	// referencing it). Deleting the resource leaves an adopted queue in place;
-	// only queues this resource created are deleted from Prefect.
+	// Adopted is true when the managed queue already existed in Prefect when
+	// first reconciled (e.g. created implicitly by a deployment). Deleting the
+	// resource leaves an adopted queue in place; only queues this resource
+	// created are deleted from Prefect. Recomputed when spec.name changes.
 	// +optional
 	Adopted *bool `json:"adopted,omitempty"`
+
+	// ManagedName is the queue name the last successful sync managed, so a
+	// spec.name change is recognized as switching queues.
+	// +optional
+	ManagedName string `json:"managedName,omitempty"`
 
 	// AppliedFields records which optional spec fields the last successful
 	// sync declared, so a field removed from the spec can be reset to its

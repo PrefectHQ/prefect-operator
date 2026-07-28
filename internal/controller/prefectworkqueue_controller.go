@@ -155,6 +155,11 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 		Priority:         workQueue.Spec.Priority,
 	}
 
+	// A spec.name change switches which queue is managed: adoption is decided
+	// again and pending clears (applied to the old queue) don't carry over.
+	renamed := workQueue.Status.ManagedName != "" && workQueue.Status.ManagedName != workQueue.Spec.Name
+	adoptionDecided := workQueue.Status.Adopted != nil && !renamed
+
 	remote, err := prefectClient.GetWorkQueue(ctx, workQueue.Spec.WorkPoolName, workQueue.Spec.Name)
 	adopted := false
 	if err == nil && remote == nil {
@@ -174,15 +179,11 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 		if err == nil {
 			log.Info("Created work queue", "workQueue", workQueue.Name, "prefectId", remote.ID)
 		}
-	} else if err == nil {
+	} else if err == nil && !adoptionDecided {
 		// The queue already exists — created implicitly by a deployment
-		// referencing it, or previously managed. Adopt it rather than fail;
-		// only the first sync decides adoption, so a queue we created and then
-		// re-read stays "created".
-		if workQueue.Status.Adopted == nil {
-			adopted = true
-			log.Info("Adopted existing work queue", "workQueue", workQueue.Name, "prefectId", remote.ID)
-		}
+		// referencing it, or previously managed. Adopt it rather than fail.
+		adopted = true
+		log.Info("Adopted existing work queue", "workQueue", workQueue.Name, "prefectId", remote.ID)
 	}
 
 	// Fields removed from the spec since the last sync are reset to their
@@ -191,9 +192,11 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 	// keeps the last value.
 	declared := declaredWorkQueueFields(workQueue.Spec)
 	var clears []string
-	for _, f := range workQueue.Status.AppliedFields {
-		if f != prefect.WorkQueueFieldPriority && !slices.Contains(declared, f) {
-			clears = append(clears, f)
+	if !renamed {
+		for _, f := range workQueue.Status.AppliedFields {
+			if f != prefect.WorkQueueFieldPriority && !slices.Contains(declared, f) {
+				clears = append(clears, f)
+			}
 		}
 	}
 
@@ -201,6 +204,11 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 		err = prefectClient.UpdateWorkQueue(ctx, workQueue.Spec.WorkPoolName, workQueue.Spec.Name, spec, clears)
 		if errors.Is(err, prefect.ErrWorkQueueNotFound) {
 			// Deleted between the GET and the PATCH; the next pass recreates it.
+			r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "Recreating", "Work queue was deleted in Prefect; recreating")
+			workQueue.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, workQueue); updateErr != nil {
+				log.Error(updateErr, "Failed to update work queue status", "workQueue", workQueue.Name)
+			}
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		if err == nil {
@@ -222,9 +230,10 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 	// only clears err when CreateWorkQueue returned a queue, and the adopt
 	// branch required remote != nil to be taken.
 	workQueue.Status.Id = &remote.ID
-	if workQueue.Status.Adopted == nil {
+	if !adoptionDecided {
 		workQueue.Status.Adopted = &adopted
 	}
+	workQueue.Status.ManagedName = workQueue.Spec.Name
 	workQueue.Status.AppliedFields = declared
 	workQueue.Status.Ready = true
 	workQueue.Status.SpecHash, err = utils.Hash(workQueue.Spec, 16)
@@ -320,6 +329,13 @@ func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQue
 		log.Info("Leaving adopted work queue in place in Prefect", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
 	}
 
+	// Delete the queue the last sync managed; after an unsynced rename,
+	// spec.name points at a queue this resource never touched.
+	managedName := workQueue.Status.ManagedName
+	if managedName == "" {
+		managedName = workQueue.Spec.Name
+	}
+
 	if !adopted && workQueue.Status.Id != nil && *workQueue.Status.Id != "" {
 		prefectClient := r.PrefectClient
 		if prefectClient == nil {
@@ -331,10 +347,10 @@ func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQue
 			}
 		}
 		if prefectClient != nil {
-			if err := prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, workQueue.Spec.Name); err != nil {
+			if err := prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName); err != nil {
 				// Don't block K8s deletion on a failed remote delete (e.g. the
-				// pool-scoped route's clean rejection of deleting a pool's
-				// default queue).
+				// pool-scoped route's rejection of deleting a pool's default
+				// queue).
 				log.Error(err, "Failed to delete work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
 			} else {
 				log.Info("Successfully deleted work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)

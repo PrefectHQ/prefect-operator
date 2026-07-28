@@ -186,10 +186,10 @@ var _ = Describe("Work queue client", func() {
 				defer GinkgoRecover()
 				var body map[string]any
 				Expect(json.NewDecoder(r.Body).Decode(&body)).To(Succeed())
-				// Explicit null clears the limit and description; is_paused is a
-				// plain bool server-side, so its default is an explicit false.
+				// Create-time defaults: null limit (nullable), "" description
+				// (NOT NULL column), false is_paused (plain bool server-side).
 				Expect(body).To(HaveKeyWithValue("concurrency_limit", BeNil()))
-				Expect(body).To(HaveKeyWithValue("description", BeNil()))
+				Expect(body).To(HaveKeyWithValue("description", ""))
 				Expect(body).To(HaveKeyWithValue("is_paused", false))
 				w.WriteHeader(http.StatusNoContent)
 			}))

@@ -302,10 +302,10 @@ spec:
             properties:
               adopted:
                 description: |-
-                  Adopted is true when the queue already existed in Prefect the first time
-                  this resource reconciled (e.g. it was created implicitly by a deployment
-                  referencing it). Deleting the resource leaves an adopted queue in place;
-                  only queues this resource created are deleted from Prefect.
+                  Adopted is true when the managed queue already existed in Prefect when
+                  first reconciled (e.g. created implicitly by a deployment). Deleting the
+                  resource leaves an adopted queue in place; only queues this resource
+                  created are deleted from Prefect. Recomputed when spec.name changes.
                 type: boolean
               appliedFields:
                 description: |-
@@ -380,6 +380,11 @@ spec:
                 description: LastSyncTime is the last time the work queue was synced
                   with Prefect
                 format: date-time
+                type: string
+              managedName:
+                description: |-
+                  ManagedName is the queue name the last successful sync managed, so a
+                  spec.name change is recognized as switching queues.
                 type: string
               observedGeneration:
                 description: ObservedGeneration tracks the last processed generation

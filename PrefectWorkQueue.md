@@ -604,10 +604,10 @@ PrefectWorkQueueStatus defines the observed state of a PrefectWorkQueue.
         <td><b>adopted</b></td>
         <td>boolean</td>
         <td>
-          Adopted is true when the queue already existed in Prefect the first time
-this resource reconciled (e.g. it was created implicitly by a deployment
-referencing it). Deleting the resource leaves an adopted queue in place;
-only queues this resource created are deleted from Prefect.<br/>
+          Adopted is true when the managed queue already existed in Prefect when
+first reconciled (e.g. created implicitly by a deployment). Deleting the
+resource leaves an adopted queue in place; only queues this resource
+created are deleted from Prefect. Recomputed when spec.name changes.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -640,6 +640,14 @@ create-time default in Prefect instead of silently keeping its old value.<br/>
           LastSyncTime is the last time the work queue was synced with Prefect<br/>
           <br/>
             <i>Format</i>: date-time<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>managedName</b></td>
+        <td>string</td>
+        <td>
+          ManagedName is the queue name the last successful sync managed, so a
+spec.name change is recognized as switching queues.<br/>
         </td>
         <td>false</td>
       </tr><tr>

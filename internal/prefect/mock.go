@@ -799,7 +799,9 @@ func (m *MockClient) UpdateWorkQueue(ctx context.Context, workPoolName, name str
 		case WorkQueueFieldConcurrencyLimit:
 			existing.ConcurrencyLimit = nil
 		case WorkQueueFieldDescription:
-			existing.Description = nil
+			// NOT NULL column; the create-time default is "".
+			empty := ""
+			existing.Description = &empty
 		case WorkQueueFieldIsPaused:
 			paused := false
 			existing.IsPaused = &paused
