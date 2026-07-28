@@ -30,3 +30,5 @@ go.work
 deploy/charts/*/charts
 requirements.lock
 Chart.lock
+# macOS
+.DS_Store

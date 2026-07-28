@@ -1448,6 +1448,16 @@ func (in *PrefectWorkQueueStatus) DeepCopyInto(out *PrefectWorkQueueStatus) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.Adopted != nil {
+		in, out := &in.Adopted, &out.Adopted
+		*out = new(bool)
+		**out = **in
+	}
+	if in.AppliedFields != nil {
+		in, out := &in.AppliedFields, &out.AppliedFields
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.LastSyncTime != nil {
 		in, out := &in.LastSyncTime, &out.LastSyncTime
 		*out = (*in).DeepCopy()

@@ -17,10 +17,18 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: The Prefect work queue name
+      jsonPath: .spec.name
+      name: Queue
+      type: string
     - description: The work pool this queue belongs to
       jsonPath: .spec.workPoolName
       name: Work Pool
       type: string
+    - description: The declared concurrency limit
+      jsonPath: .spec.concurrencyLimit
+      name: Concurrency
+      type: integer
     - description: Whether this Prefect work queue is ready
       jsonPath: .status.ready
       name: Ready
@@ -68,12 +76,16 @@ spec:
               concurrencyLimit:
                 description: |-
                   ConcurrencyLimit caps how many flow runs this queue may have running at
-                  once. Unset leaves the queue unlimited.
+                  once. Unset on create leaves the queue unlimited; removing the field
+                  after it has been applied clears the limit in Prefect (the operator
+                  tracks the last-applied field set in status and sends an explicit null).
                 format: int32
                 minimum: 0
                 type: integer
               description:
-                description: Description of the queue.
+                description: |-
+                  Description of the queue. Removing the field after it has been applied
+                  clears it in Prefect.
                 type: string
               interval:
                 description: |-
@@ -83,15 +95,29 @@ spec:
                   below 10s are clamped.
                 type: string
               isPaused:
-                description: IsPaused stops the queue from serving work when true.
+                description: |-
+                  IsPaused stops the queue from serving work when true. Removing the field
+                  after it has been applied unpauses the queue (resets to false, the
+                  create-time default).
                 type: boolean
               name:
-                description: Name of the work queue, as referenced by a deployment's
-                  workQueue field
+                description: |-
+                  Name of the work queue, as referenced by a deployment's workQueue field.
+                  The queue is managed by (workPoolName, name), never renamed in place:
+                  changing this stops managing the old queue (it is left untouched in
+                  Prefect) and creates — or adopts, if it already exists — a queue under
+                  the new name.
                 type: string
               priority:
-                description: Priority of this queue within the pool; lower numbers
-                  are served first.
+                description: |-
+                  Priority of this queue within the pool; lower numbers are served first.
+                  Priority is POOL-WIDE state, not per-queue state: Prefect keeps
+                  priorities unique and sequential across the pool, so applying one here
+                  reshuffles the pool's other queues. Two PrefectWorkQueues in the same
+                  pool declaring the same priority is not rejected — Prefect renormalizes
+                  and the last writer wins the slot. Unlike the other optional fields,
+                  priority has no create-time default to restore, so removing it keeps
+                  the last value.
                 format: int32
                 minimum: 1
                 type: integer
@@ -274,6 +300,21 @@ spec:
           status:
             description: PrefectWorkQueueStatus defines the observed state of a PrefectWorkQueue.
             properties:
+              adopted:
+                description: |-
+                  Adopted is true when the queue already existed in Prefect the first time
+                  this resource reconciled (e.g. it was created implicitly by a deployment
+                  referencing it). Deleting the resource leaves an adopted queue in place;
+                  only queues this resource created are deleted from Prefect.
+                type: boolean
+              appliedFields:
+                description: |-
+                  AppliedFields records which optional spec fields the last successful
+                  sync declared, so a field removed from the spec can be reset to its
+                  create-time default in Prefect instead of silently keeping its old value.
+                items:
+                  type: string
+                type: array
               conditions:
                 description: Conditions store the status conditions of the PrefectWorkQueue
                   instances

@@ -107,7 +107,11 @@ which loses the original ordering.
         <td><b>name</b></td>
         <td>string</td>
         <td>
-          Name of the work queue, as referenced by a deployment's workQueue field<br/>
+          Name of the work queue, as referenced by a deployment's workQueue field.
+The queue is managed by (workPoolName, name), never renamed in place:
+changing this stops managing the old queue (it is left untouched in
+Prefect) and creates — or adopts, if it already exists — a queue under
+the new name.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -132,7 +136,9 @@ between pools, so this field is immutable.<br/>
         <td>integer</td>
         <td>
           ConcurrencyLimit caps how many flow runs this queue may have running at
-once. Unset leaves the queue unlimited.<br/>
+once. Unset on create leaves the queue unlimited; removing the field
+after it has been applied clears the limit in Prefect (the operator
+tracks the last-applied field set in status and sends an explicit null).<br/>
           <br/>
             <i>Format</i>: int32<br/>
             <i>Minimum</i>: 0<br/>
@@ -142,7 +148,8 @@ once. Unset leaves the queue unlimited.<br/>
         <td><b>description</b></td>
         <td>string</td>
         <td>
-          Description of the queue.<br/>
+          Description of the queue. Removing the field after it has been applied
+clears it in Prefect.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -159,14 +166,23 @@ below 10s are clamped.<br/>
         <td><b>isPaused</b></td>
         <td>boolean</td>
         <td>
-          IsPaused stops the queue from serving work when true.<br/>
+          IsPaused stops the queue from serving work when true. Removing the field
+after it has been applied unpauses the queue (resets to false, the
+create-time default).<br/>
         </td>
         <td>false</td>
       </tr><tr>
         <td><b>priority</b></td>
         <td>integer</td>
         <td>
-          Priority of this queue within the pool; lower numbers are served first.<br/>
+          Priority of this queue within the pool; lower numbers are served first.
+Priority is POOL-WIDE state, not per-queue state: Prefect keeps
+priorities unique and sequential across the pool, so applying one here
+reshuffles the pool's other queues. Two PrefectWorkQueues in the same
+pool declaring the same priority is not rejected — Prefect renormalizes
+and the last writer wins the slot. Unlike the other optional fields,
+priority has no create-time default to restore, so removing it keeps
+the last value.<br/>
           <br/>
             <i>Format</i>: int32<br/>
             <i>Minimum</i>: 1<br/>
@@ -584,6 +600,25 @@ PrefectWorkQueueStatus defines the observed state of a PrefectWorkQueue.
           Ready indicates that the work queue exists and is configured correctly<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>adopted</b></td>
+        <td>boolean</td>
+        <td>
+          Adopted is true when the queue already existed in Prefect the first time
+this resource reconciled (e.g. it was created implicitly by a deployment
+referencing it). Deleting the resource leaves an adopted queue in place;
+only queues this resource created are deleted from Prefect.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>appliedFields</b></td>
+        <td>[]string</td>
+        <td>
+          AppliedFields records which optional spec fields the last successful
+sync declared, so a field removed from the spec can be reset to its
+create-time default in Prefect instead of silently keeping its old value.<br/>
+        </td>
+        <td>false</td>
       </tr><tr>
         <td><b><a href="#prefectworkqueuestatusconditionsindex">conditions</a></b></td>
         <td>[]object</td>

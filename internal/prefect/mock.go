@@ -713,6 +713,10 @@ func (m *MockClient) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMe
 	}, nil
 }
 
+func workQueueKey(workPoolName, name string) string {
+	return workPoolName + "/" + name
+}
+
 // GetWorkQueue returns a stored work queue by pool and name, or (nil, nil) when absent.
 func (m *MockClient) GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error) {
 	if m.ShouldFailGet {
@@ -722,25 +726,7 @@ func (m *MockClient) GetWorkQueue(ctx context.Context, workPoolName, name string
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for _, queue := range m.workQueues {
-		if queue.WorkPoolName == workPoolName && queue.Name == name {
-			copied := *queue
-			return &copied, nil
-		}
-	}
-	return nil, nil
-}
-
-// GetWorkQueueByID returns a stored work queue by ID, or (nil, nil) when absent.
-func (m *MockClient) GetWorkQueueByID(ctx context.Context, id string) (*WorkQueue, error) {
-	if m.ShouldFailGet {
-		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
-	}
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	queue, ok := m.workQueues[id]
+	queue, ok := m.workQueues[workQueueKey(workPoolName, name)]
 	if !ok {
 		return nil, nil
 	}
@@ -748,7 +734,9 @@ func (m *MockClient) GetWorkQueueByID(ctx context.Context, id string) (*WorkQueu
 	return &copied, nil
 }
 
-// CreateWorkQueue stores a new work queue in the mock store.
+// CreateWorkQueue stores a new work queue in the mock store. Like the real
+// pool-scoped route, it fails with ErrWorkPoolNotFound when the pool does not
+// exist — seed the pool with CreateWorkPool first.
 func (m *MockClient) CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error) {
 	if m.ShouldFailCreate {
 		return nil, fmt.Errorf("mock error: %s", m.FailureMessage)
@@ -756,6 +744,10 @@ func (m *MockClient) CreateWorkQueue(ctx context.Context, workPoolName string, q
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if _, ok := m.workPools[workPoolName]; !ok {
+		return nil, fmt.Errorf("work pool %q: %w", workPoolName, ErrWorkPoolNotFound)
+	}
 
 	created := &WorkQueue{
 		ID:               uuid.NewString(),
@@ -766,15 +758,16 @@ func (m *MockClient) CreateWorkQueue(ctx context.Context, workPoolName string, q
 		Priority:         queue.Priority,
 		WorkPoolName:     workPoolName,
 	}
-	m.workQueues[created.ID] = created
+	m.workQueues[workQueueKey(workPoolName, queue.Name)] = created
 
 	copied := *created
 	return &copied, nil
 }
 
-// UpdateWorkQueue updates a stored work queue by ID. Only fields set in the
-// spec are applied, matching the PATCH semantics of the real API.
-func (m *MockClient) UpdateWorkQueue(ctx context.Context, id string, queue *WorkQueueSpec) error {
+// UpdateWorkQueue updates a stored work queue by pool and name. Only fields
+// set in the spec are applied, matching the exclude_unset PATCH semantics of
+// the real API; clearFields reset fields to their create-time defaults.
+func (m *MockClient) UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec, clearFields []string) error {
 	if m.ShouldFailUpdate {
 		return fmt.Errorf("mock error: %s", m.FailureMessage)
 	}
@@ -784,12 +777,11 @@ func (m *MockClient) UpdateWorkQueue(ctx context.Context, id string, queue *Work
 
 	m.UpdateWorkQueueCalls++
 
-	existing, ok := m.workQueues[id]
+	existing, ok := m.workQueues[workQueueKey(workPoolName, name)]
 	if !ok {
-		return fmt.Errorf("work queue %s: %w", id, ErrWorkQueueNotFound)
+		return fmt.Errorf("work queue %q in pool %q: %w", name, workPoolName, ErrWorkQueueNotFound)
 	}
 
-	existing.Name = queue.Name
 	if queue.Description != nil {
 		existing.Description = queue.Description
 	}
@@ -802,12 +794,23 @@ func (m *MockClient) UpdateWorkQueue(ctx context.Context, id string, queue *Work
 	if queue.Priority != nil {
 		existing.Priority = queue.Priority
 	}
+	for _, f := range clearFields {
+		switch f {
+		case WorkQueueFieldConcurrencyLimit:
+			existing.ConcurrencyLimit = nil
+		case WorkQueueFieldDescription:
+			existing.Description = nil
+		case WorkQueueFieldIsPaused:
+			paused := false
+			existing.IsPaused = &paused
+		}
+	}
 	return nil
 }
 
-// DeleteWorkQueue removes a stored work queue by ID; absent IDs are a no-op,
-// matching the idempotent-delete contract of the real client.
-func (m *MockClient) DeleteWorkQueue(ctx context.Context, id string) error {
+// DeleteWorkQueue removes a stored work queue by pool and name; absent queues
+// are a no-op, matching the idempotent-delete contract of the real client.
+func (m *MockClient) DeleteWorkQueue(ctx context.Context, workPoolName, name string) error {
 	if m.ShouldFailDelete {
 		return fmt.Errorf("mock error: %s", m.FailureMessage)
 	}
@@ -815,6 +818,6 @@ func (m *MockClient) DeleteWorkQueue(ctx context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.workQueues, id)
+	delete(m.workQueues, workQueueKey(workPoolName, name))
 	return nil
 }

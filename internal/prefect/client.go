@@ -72,14 +72,13 @@ type PrefectClient interface {
 	DeleteWorkPool(ctx context.Context, id string) error
 	// GetWorkQueue retrieves a work queue within a pool by name; nil when absent
 	GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error)
-	// GetWorkQueueByID retrieves a work queue by ID; nil when absent
-	GetWorkQueueByID(ctx context.Context, id string) (*WorkQueue, error)
 	// CreateWorkQueue creates a work queue within a pool
 	CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error)
-	// UpdateWorkQueue updates an existing work queue by ID
-	UpdateWorkQueue(ctx context.Context, id string, queue *WorkQueueSpec) error
-	// DeleteWorkQueue deletes a work queue by ID
-	DeleteWorkQueue(ctx context.Context, id string) error
+	// UpdateWorkQueue updates a work queue in place; clearFields resets
+	// previously-declared fields to their create-time defaults
+	UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec, clearFields []string) error
+	// DeleteWorkQueue deletes a work queue within a pool by name
+	DeleteWorkQueue(ctx context.Context, workPoolName, name string) error
 	// GetWorkerMetadata retrieves aggregate metadata for all worker types
 	GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error)
 	// CreateAutomation creates a new automation

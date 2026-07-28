@@ -13,6 +13,10 @@ The [PrefectServer CRD](./PrefectServer.md)
 
 The [PrefectWorkPool CRD](./PrefectWorkPool.md)
 
+### PrefectWorkQueue
+
+The [PrefectWorkQueue CRD](./PrefectWorkQueue.md)
+
 ### PrefectDeployment
 
 The [PrefectDeployment CRD](./PrefectDeployment.md)
