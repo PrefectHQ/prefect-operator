@@ -581,7 +581,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Tags:       []string{"updated", testValueTest},
 				Parameters: map[string]any{testParam1: "updated_value"},
 			}
-			deployment, err := client.UpdateDeployment(ctx, testDeploymentID, deploymentSpec)
+			deployment, err := client.UpdateDeployment(ctx, testDeploymentID, deploymentSpec, nil)
 
 			By("Verifying deployment was updated")
 			Expect(err).NotTo(HaveOccurred())
@@ -589,6 +589,37 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Expect(deployment.ID).To(Equal(testDeploymentID))
 			Expect(deployment.Name).To(Equal("updated-deployment"))
 			Expect(deployment.Paused).To(BeTrue())
+		})
+
+		It("Should omit an unset concurrency limit from the payload", func() {
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				var body map[string]any
+				Expect(json.NewDecoder(r.Body).Decode(&body)).To(Succeed())
+				Expect(body).NotTo(HaveKey("concurrency_limit"))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(Deployment{ID: testDeploymentID})
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			_, err := client.UpdateDeployment(ctx, testDeploymentID, &DeploymentSpec{Paused: new(true)}, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should send an explicit null when clearing the concurrency limit", func() {
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				var body map[string]any
+				Expect(json.NewDecoder(r.Body).Decode(&body)).To(Succeed())
+				Expect(body).To(HaveKeyWithValue("concurrency_limit", BeNil()))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(Deployment{ID: testDeploymentID})
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			_, err := client.UpdateDeployment(ctx, testDeploymentID, &DeploymentSpec{},
+				[]string{DeploymentFieldConcurrencyLimit})
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
