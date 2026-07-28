@@ -1,0 +1,23 @@
+apiVersion: prefect.io/v1
+kind: PrefectWorkQueue
+metadata:
+  labels:
+    app.kubernetes.io/name: prefect-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sample-work-queue
+spec:
+  server:
+    name: prefect-ephemeral
+  # The Prefect queue name, as referenced by a deployment's workQueue field.
+  # If the queue already exists (e.g. created implicitly by a deployment), it
+  # is adopted rather than recreated — and an adopted queue is left in place
+  # when this resource is deleted.
+  name: ingest
+  workPoolName: sample-k8s-pool
+  # Prefer a work-queue concurrency limit over a deployment-level one when run
+  # ORDER matters: workers drain a queue oldest-scheduled-first, whereas a
+  # deployment limit re-schedules waiting runs with a fresh timestamp.
+  concurrencyLimit: 1
+  # priority: 1        # Optional: pool-wide — Prefect keeps priorities unique per pool
+  # description: ""    # Optional
+  # isPaused: false    # Optional
