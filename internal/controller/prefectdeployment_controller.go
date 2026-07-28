@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -191,16 +192,26 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	desiredSchedules := deploymentSpec.Schedules
 	deploymentSpec.Schedules = nil
 
+	// Fields declared on the last sync (status.appliedFields) but removed from
+	// the spec are cleared in Prefect instead of keeping their old value.
+	declared := declaredDeploymentFields(deployment.Spec)
+	var clears []string
+	for _, f := range deployment.Status.AppliedFields {
+		if !slices.Contains(declared, f) {
+			clears = append(clears, f)
+		}
+	}
+
 	var prefectDeployment *prefect.Deployment
 	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
 		// Skip the update when nothing changed: every update deletes the
 		// deployment's future auto-scheduled runs.
 		remote, getErr := prefectClient.GetDeployment(ctx, *deployment.Status.Id)
-		if getErr == nil && prefect.DeploymentUpToDate(remote, deploymentSpec) {
+		if getErr == nil && prefect.DeploymentUpToDate(remote, deploymentSpec) && prefect.DeploymentClearsApplied(remote, clears) {
 			log.Info("Prefect deployment already up to date, skipping update", "deployment", deployment.Name)
 			prefectDeployment = remote
 		} else {
-			prefectDeployment, err = prefectClient.UpdateDeployment(ctx, *deployment.Status.Id, deploymentSpec)
+			prefectDeployment, err = prefectClient.UpdateDeployment(ctx, *deployment.Status.Id, deploymentSpec, clears)
 			if errors.Is(err, prefect.ErrDeploymentNotFound) {
 				prefectDeployment, err = prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
 			}
@@ -228,6 +239,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 	deployment.Status.SpecHash = specHash
+	deployment.Status.AppliedFields = declared
 	deployment.Status.ObservedGeneration = deployment.Generation
 	// Stamp the sync time so needsSync gates the next Prefect re-check by the
 	// resync interval instead of hitting the API on every reconcile.
@@ -330,6 +342,16 @@ func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 }
 
 // setCondition sets a condition on the deployment status
+// declaredDeploymentFields lists the clear-tracked spec fields currently set,
+// by their CRD JSON names, for status.appliedFields.
+func declaredDeploymentFields(spec prefectiov1.PrefectDeploymentSpec) []string {
+	var fields []string
+	if spec.Deployment.ConcurrencyLimit != nil {
+		fields = append(fields, prefect.DeploymentFieldConcurrencyLimit)
+	}
+	return fields
+}
+
 func (r *PrefectDeploymentReconciler) setCondition(deployment *prefectiov1.PrefectDeployment, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	condition := metav1.Condition{
 		Type:               conditionType,
