@@ -122,6 +122,26 @@ rules:
     verbs:
       - update
   - apiGroups: ["prefect.io"]
+    resources: ["prefectautomations"]
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectautomations/status"]
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups: ["prefect.io"]
+    resources: ["prefectautomations/finalizers"]
+    verbs:
+      - update
+  - apiGroups: ["prefect.io"]
     resources: ["prefectworkqueues"]
     verbs:
       - get
