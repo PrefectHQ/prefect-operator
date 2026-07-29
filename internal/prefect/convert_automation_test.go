@@ -74,6 +74,25 @@ var _ = Describe("ConvertToAutomationSpec", func() {
 		Expect(spec.Actions[0]).To(HaveKeyWithValue("parameters", map[string]any{"x": float64(1)}))
 	})
 
+	It("omits source on action types the server models without one", func() {
+		a := newAutomation(prefectiov1.PrefectAutomationTrigger{
+			Event: &prefectiov1.PrefectEventTrigger{Posture: "Proactive"},
+		})
+		a.Spec.Actions = []prefectiov1.PrefectAutomationAction{{
+			Type:   "change-flow-run-state",
+			Source: ptr("inferred"),
+			State:  ptr("CRASHED"),
+		}}
+
+		spec, err := ConvertToAutomationSpec(a, nil)
+		Expect(err).NotTo(HaveOccurred())
+		// The server drops `source` for this action type, so sending it would
+		// make every up-to-date check fail.
+		Expect(spec.Actions[0]).To(HaveKeyWithValue("type", "change-flow-run-state"))
+		Expect(spec.Actions[0]).To(HaveKeyWithValue("state", "CRASHED"))
+		Expect(spec.Actions[0]).NotTo(HaveKey("source"))
+	})
+
 	It("renders a metric trigger with a fractional threshold", func() {
 		a := newAutomation(prefectiov1.PrefectAutomationTrigger{
 			Metric: &prefectiov1.PrefectMetricTrigger{

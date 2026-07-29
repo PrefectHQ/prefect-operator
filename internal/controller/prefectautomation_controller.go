@@ -182,7 +182,18 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 
 	var result *prefect.Automation
 	if automation.Status.Id != nil && *automation.Status.Id != "" {
-		result, err = prefectClient.UpdateAutomation(ctx, *automation.Status.Id, automationSpec)
+		// Skip the update when nothing changed: every update resets the trigger's
+		// server-assigned ID, which discards the trigger's proactive state.
+		remote, getErr := prefectClient.GetAutomation(ctx, *automation.Status.Id)
+		if getErr == nil && prefect.AutomationUpToDate(remote, automationSpec) {
+			log.Info("Prefect automation already up to date, skipping update", "automation", automation.Name)
+			result = remote
+		} else {
+			if getErr == nil {
+				prefect.PreserveTriggerIDs(automationSpec.Trigger, remote.Trigger)
+			}
+			result, err = prefectClient.UpdateAutomation(ctx, *automation.Status.Id, automationSpec)
+		}
 		// If the automation was deleted out-of-band, clear the stale ID and
 		// requeue so the next pass recreates it instead of looping on SyncError.
 		if errors.Is(err, prefect.ErrAutomationNotFound) {
