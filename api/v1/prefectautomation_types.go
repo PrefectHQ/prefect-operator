@@ -45,8 +45,10 @@ type PrefectAutomationSpec struct {
 	// +optional
 	Description *string `json:"description,omitempty"`
 
-	// Enabled activates or deactivates the automation
+	// Enabled activates or deactivates the automation. Defaults to true,
+	// matching the server's default for an omitted enabled field.
 	// +optional
+	// +kubebuilder:default=true
 	Enabled *bool `json:"enabled,omitempty"`
 
 	// Trigger is the criteria for which events this automation covers.

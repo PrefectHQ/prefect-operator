@@ -31,6 +31,21 @@ const (
 	keyType = "type"
 	// keyName is the "name" key used in payloads/filters.
 	keyName = "name"
+	// keyMatch/keyMatchRelated/keyTriggers are trigger payload keys shared by
+	// the convert and diff layers.
+	keyMatch        = "match"
+	keyMatchRelated = "match_related"
+	keyTriggers     = "triggers"
+	// keyMetric is the metric-trigger payload key (same spelling as the type
+	// discriminator value, different role).
+	keyMetric = "metric"
+	// actionTypeRunDeployment is the run-deployment action discriminator.
+	actionTypeRunDeployment = "run-deployment"
+
+	// Trigger type discriminator values.
+	triggerTypeEvent    = "event"
+	triggerTypeMetric   = "metric"
+	triggerTypeCompound = "compound"
 )
 
 // DeploymentNamesReferenced returns the distinct deployment names referenced by
@@ -122,10 +137,10 @@ func buildEventTrigger(e *prefectiov1.PrefectEventTrigger) (map[string]any, erro
 		return nil, fmt.Errorf("trigger.event.matchRelated: %w", err)
 	}
 	m := map[string]any{
-		keyType:         "event",
+		keyType:         triggerTypeEvent,
 		"posture":       e.Posture,
-		"match":         match,
-		"match_related": matchRelated,
+		keyMatch:        match,
+		keyMatchRelated: matchRelated,
 		"after":         nonNilStrings(e.After),
 		"expect":        nonNilStrings(e.Expect),
 		"for_each":      nonNilStrings(e.ForEach),
@@ -150,10 +165,10 @@ func buildMetricTrigger(mt *prefectiov1.PrefectMetricTrigger) (map[string]any, e
 	}
 	threshold := mt.Metric.Threshold.AsApproximateFloat64()
 	return map[string]any{
-		keyType:         "metric",
-		"match":         match,
-		"match_related": matchRelated,
-		"metric": map[string]any{
+		keyType:         triggerTypeMetric,
+		keyMatch:        match,
+		keyMatchRelated: matchRelated,
+		keyMetric: map[string]any{
 			keyName:      mt.Metric.Name,
 			"operator":   mt.Metric.Operator,
 			"threshold":  threshold,
@@ -169,9 +184,9 @@ func buildCompoundTrigger(c *prefectiov1.PrefectCompoundTrigger) (map[string]any
 		return nil, err
 	}
 	m := map[string]any{
-		keyType:    "compound",
-		"require":  parseRequire(c.Require),
-		"triggers": children,
+		keyType:     triggerTypeCompound,
+		"require":   parseRequire(c.Require),
+		keyTriggers: children,
 	}
 	if c.Within != nil {
 		m["within"] = *c.Within
@@ -185,8 +200,8 @@ func buildSequenceTrigger(s *prefectiov1.PrefectSequenceTrigger) (map[string]any
 		return nil, err
 	}
 	m := map[string]any{
-		keyType:    "sequence",
-		"triggers": children,
+		keyType:     "sequence",
+		keyTriggers: children,
 	}
 	if s.Within != nil {
 		m["within"] = *s.Within
@@ -243,6 +258,21 @@ func buildActions(actions []prefectiov1.PrefectAutomationAction, deploymentIDs m
 	return out, nil
 }
 
+// sourcedActionTypes are the action types whose server-side model has a
+// `source` field; the server drops the key for every other type, which would
+// make the stored action permanently differ from the desired payload.
+var sourcedActionTypes = map[string]bool{
+	actionTypeRunDeployment: true,
+	"pause-deployment":      true,
+	"resume-deployment":     true,
+	"pause-work-queue":      true,
+	"resume-work-queue":     true,
+	"pause-work-pool":       true,
+	"resume-work-pool":      true,
+	"pause-automation":      true,
+	"resume-automation":     true,
+}
+
 func buildAction(a prefectiov1.PrefectAutomationAction, deploymentIDs map[string]string) (map[string]any, error) {
 	m := map[string]any{keyType: a.Type}
 	putStr := func(key string, v *string) {
@@ -262,7 +292,9 @@ func buildAction(a prefectiov1.PrefectAutomationAction, deploymentIDs map[string
 		}
 		m["deployment_id"] = id
 	}
-	putStr("source", a.Source)
+	if sourcedActionTypes[a.Type] {
+		putStr("source", a.Source)
+	}
 	putStr("automation_id", a.AutomationID)
 	putStr("work_pool_id", a.WorkPoolID)
 	putStr("work_queue_id", a.WorkQueueID)

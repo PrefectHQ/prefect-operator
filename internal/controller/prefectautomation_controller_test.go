@@ -174,6 +174,29 @@ var _ = Describe("PrefectAutomation controller", func() {
 		})
 	})
 
+	Context("When the drift resync fires with no changes", func() {
+		It("Should skip the Prefect update entirely", func() {
+			fresh := syncedAutomation()
+
+			By("Aging LastSyncTime past the resync interval")
+			old := metav1.NewTime(time.Now().Add(-time.Hour))
+			fresh.Status.LastSyncTime = &old
+			Expect(k8sClient.Status().Update(ctx, fresh)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
+
+			// The remote already matches, so no update happened.
+			Expect(mockClient.UpdateAutomationCalls).To(BeZero())
+
+			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
+			Expect(fresh.Status.Ready).To(BeTrue())
+			// The skipped sync still counts as a sync: LastSyncTime is re-stamped.
+			Expect(fresh.Status.LastSyncTime.Time).To(BeTemporally("~", time.Now(), time.Minute))
+		})
+	})
+
 	Context("When spec.interval is set", func() {
 		It("Should requeue on the per-resource interval, not the default", func() {
 			automation.Spec.Interval = &metav1.Duration{Duration: 90 * time.Second}
@@ -203,6 +226,13 @@ var _ = Describe("PrefectAutomation controller", func() {
 			Expect(fresh.Status.Ready).To(BeTrue())
 			// Update path keeps the same ID.
 			Expect(*fresh.Status.Id).To(Equal(initialID))
+
+			// The update really ran and its payload arrived: if the up-to-date
+			// compare ever regresses to skipping real changes, this fails.
+			Expect(mockClient.UpdateAutomationCalls).To(Equal(1))
+			stored, getErr := mockClient.GetAutomation(ctx, initialID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(stored.Description).To(Equal("updated"))
 		})
 	})
 

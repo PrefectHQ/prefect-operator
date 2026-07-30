@@ -141,7 +141,10 @@ Exactly one of event, metric, compound, or sequence must be set.<br/>
         <td><b>enabled</b></td>
         <td>boolean</td>
         <td>
-          Enabled activates or deactivates the automation<br/>
+          Enabled activates or deactivates the automation. Defaults to true,
+matching the server's default for an omitted enabled field.<br/>
+          <br/>
+            <i>Default</i>: true<br/>
         </td>
         <td>false</td>
       </tr><tr>
