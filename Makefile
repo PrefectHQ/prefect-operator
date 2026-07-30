@@ -80,6 +80,7 @@ clean: ## Clean up the project directory.
 .PHONY: manifests
 manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=deploy/charts/prefect-operator/crds
+	$(CONTROLLER_GEN) rbac:roleName=prefect-operator paths="./..." output:rbac:artifacts:config=deploy/charts/prefect-operator/files
 
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -89,20 +90,16 @@ generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopy
 
 .PHONY: verify-generated
 verify-generated: manifests generate ## Verify generated files are current.
-	@git diff --exit-code -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds
-	@untracked="$$(git ls-files --others --exclude-standard -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds)"; \
+	@git diff --exit-code -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds deploy/charts/prefect-operator/files/role.yaml
+	@untracked="$$(git ls-files --others --exclude-standard -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds deploy/charts/prefect-operator/files/role.yaml)"; \
 		if [[ -n "$$untracked" ]]; then \
 			echo "Untracked generated files:"; \
 			echo "$$untracked"; \
 			exit 1; \
 		fi
 
-.PHONY: verify-rbac
-verify-rbac: tools ## Verify the Helm ClusterRole includes controller RBAC markers.
-	@./scripts/verify-rbac.sh
-
 .PHONY: verify
-verify: verify-generated verify-rbac ## Verify generated files and Helm RBAC.
+verify: verify-generated ## Verify generated files are current.
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

@@ -1,4 +1,6 @@
 {{ if .Values.rbac.operator.create -}}
+{{- $controllerRole := .Files.Get "files/role.yaml" | fromYaml }}
+{{- $controllerRules := required "files/role.yaml must contain controller RBAC rules" $controllerRole.rules }}
 kind: ClusterRole
 apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
 metadata:
@@ -81,86 +83,7 @@ rules:
       - get
       - patch
       - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectworkpools"]
-    verbs:
-      - create
-      - delete
-      - get
-      - list
-      - patch
-      - update
-      - watch
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectworkpools/finalizers"]
-    verbs:
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectworkpools/status"]
-    verbs:
-      - get
-      - patch
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectdeployments"]
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectdeployments/status"]
-    verbs:
-      - get
-      - patch
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectdeployments/finalizers"]
-    verbs:
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectautomations"]
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectautomations/status"]
-    verbs:
-      - get
-      - patch
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectautomations/finalizers"]
-    verbs:
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectworkqueues"]
-    verbs:
-      - get
-      - list
-      - watch
-      - create
-      - update
-      - patch
-      - delete
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectworkqueues/status"]
-    verbs:
-      - get
-      - patch
-      - update
-  - apiGroups: ["prefect.io"]
-    resources: ["prefectworkqueues/finalizers"]
-    verbs:
-      - update
+{{- $controllerRules | toYaml | nindent 2 }}
 
 ---
 kind: ClusterRoleBinding

@@ -1,0 +1,41 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prefect-operator
+rules:
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectautomations
+  - prefectdeployments
+  - prefectworkpools
+  - prefectworkqueues
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectautomations/finalizers
+  - prefectdeployments/finalizers
+  - prefectworkpools/finalizers
+  - prefectworkqueues/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - prefect.io
+  resources:
+  - prefectautomations/status
+  - prefectdeployments/status
+  - prefectworkpools/status
+  - prefectworkqueues/status
+  verbs:
+  - get
+  - patch
+  - update
