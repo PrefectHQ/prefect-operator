@@ -5,10 +5,62 @@ metadata:
   name: prefect-operator
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
   - prefect.io
   resources:
   - prefectautomations
   - prefectdeployments
+  - prefectservers
   - prefectworkpools
   - prefectworkqueues
   verbs:
@@ -24,6 +76,7 @@ rules:
   resources:
   - prefectautomations/finalizers
   - prefectdeployments/finalizers
+  - prefectservers/finalizers
   - prefectworkpools/finalizers
   - prefectworkqueues/finalizers
   verbs:
@@ -33,6 +86,7 @@ rules:
   resources:
   - prefectautomations/status
   - prefectdeployments/status
+  - prefectservers/status
   - prefectworkpools/status
   - prefectworkqueues/status
   verbs:
