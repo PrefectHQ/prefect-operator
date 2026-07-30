@@ -80,12 +80,26 @@ clean: ## Clean up the project directory.
 .PHONY: manifests
 manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=deploy/charts/prefect-operator/crds
+	$(CONTROLLER_GEN) rbac:roleName=prefect-operator paths="./..." output:rbac:artifacts:config=deploy/charts/prefect-operator/files
 
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	@echo "Adding coverage ignore directive to generated files..."
 	@sed -i '1a\\n//go:coverage ignore' api/v1/zz_generated.deepcopy.go
+
+.PHONY: verify-generated
+verify-generated: manifests generate ## Verify generated files are current.
+	@git diff --exit-code -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds deploy/charts/prefect-operator/files/role.yaml
+	@untracked="$$(git ls-files --others --exclude-standard -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds deploy/charts/prefect-operator/files/role.yaml)"; \
+		if [[ -n "$$untracked" ]]; then \
+			echo "Untracked generated files:"; \
+			echo "$$untracked"; \
+			exit 1; \
+		fi
+
+.PHONY: verify
+verify: verify-generated ## Verify generated files are current.
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
