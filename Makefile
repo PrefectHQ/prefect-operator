@@ -87,6 +87,23 @@ generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopy
 	@echo "Adding coverage ignore directive to generated files..."
 	@sed -i '1a\\n//go:coverage ignore' api/v1/zz_generated.deepcopy.go
 
+.PHONY: verify-generated
+verify-generated: manifests generate ## Verify generated files are current.
+	@git diff --exit-code -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds
+	@untracked="$$(git ls-files --others --exclude-standard -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds)"; \
+		if [[ -n "$$untracked" ]]; then \
+			echo "Untracked generated files:"; \
+			echo "$$untracked"; \
+			exit 1; \
+		fi
+
+.PHONY: verify-rbac
+verify-rbac: tools ## Verify the Helm ClusterRole includes controller RBAC markers.
+	@./scripts/verify-rbac.sh
+
+.PHONY: verify
+verify: verify-generated verify-rbac ## Verify generated files and Helm RBAC.
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
