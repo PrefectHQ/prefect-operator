@@ -356,7 +356,10 @@ spec:
                 description: Description is human-readable documentation for the automation
                 type: string
               enabled:
-                description: Enabled activates or deactivates the automation
+                default: true
+                description: |-
+                  Enabled activates or deactivates the automation. Defaults to true,
+                  matching the server's default for an omitted enabled field.
                 type: boolean
               interval:
                 description: |-

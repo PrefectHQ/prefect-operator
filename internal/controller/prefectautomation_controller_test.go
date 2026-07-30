@@ -226,6 +226,13 @@ var _ = Describe("PrefectAutomation controller", func() {
 			Expect(fresh.Status.Ready).To(BeTrue())
 			// Update path keeps the same ID.
 			Expect(*fresh.Status.Id).To(Equal(initialID))
+
+			// The update really ran and its payload arrived: if the up-to-date
+			// compare ever regresses to skipping real changes, this fails.
+			Expect(mockClient.UpdateAutomationCalls).To(Equal(1))
+			stored, getErr := mockClient.GetAutomation(ctx, initialID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(stored.Description).To(Equal("updated"))
 		})
 	})
 

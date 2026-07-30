@@ -189,9 +189,6 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 			log.Info("Prefect automation already up to date, skipping update", "automation", automation.Name)
 			result = remote
 		} else {
-			if getErr == nil {
-				prefect.PreserveTriggerIDs(automationSpec.Trigger, remote.Trigger)
-			}
 			result, err = prefectClient.UpdateAutomation(ctx, *automation.Status.Id, automationSpec)
 		}
 		// If the automation was deleted out-of-band, clear the stale ID and
