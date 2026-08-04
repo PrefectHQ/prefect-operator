@@ -4,5 +4,19 @@
     "github>PrefectHQ/renovate-config",
     "github>PrefectHQ/renovate-config:go",
     "github>PrefectHQ/renovate-config:helm"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track the default Prefect version constant against PrefectHQ/prefect releases",
+      "managerFilePatterns": [
+        "/^api/v1/versioning\\.go$/"
+      ],
+      "matchStrings": [
+        "const DEFAULT_PREFECT_VERSION = \"(?<currentValue>.+?)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "PrefectHQ/prefect"
+    }
   ]
 }
