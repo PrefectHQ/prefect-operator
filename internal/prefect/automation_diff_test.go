@@ -114,6 +114,32 @@ func TestAutomationUpToDate(t *testing.T) {
 		}
 	})
 
+	t.Run("matches when the server reorders set-typed trigger fields", func(t *testing.T) {
+		spec := zombieSpec()
+		spec.Trigger["expect"] = []string{
+			"prefect.flow-run.Pending", "prefect.flow-run.Running", "prefect.flow-run.Completed",
+		}
+		remote := remoteFromSpec(t, spec)
+		// The server stores expect/after/for_each as sets and returns them in
+		// arbitrary order (verified live on Prefect 3.6.28).
+		remote.Trigger["expect"] = []any{
+			"prefect.flow-run.Completed", "prefect.flow-run.Pending", "prefect.flow-run.Running",
+		}
+		if !AutomationUpToDate(remote, spec) {
+			t.Fatal("up to date = false for a reordered expect set; want true")
+		}
+	})
+
+	t.Run("detects a set-typed trigger field content change", func(t *testing.T) {
+		spec := zombieSpec()
+		spec.Trigger["expect"] = []string{"prefect.flow-run.Pending", "prefect.flow-run.Running"}
+		remote := remoteFromSpec(t, spec)
+		remote.Trigger["expect"] = []any{"prefect.flow-run.Pending", "prefect.flow-run.Crashed"}
+		if AutomationUpToDate(remote, spec) {
+			t.Fatal("up to date = true with different expect content; want false")
+		}
+	})
+
 	t.Run("nil desired action lists match empty remote lists", func(t *testing.T) {
 		spec := zombieSpec()
 		remote := remoteFromSpec(t, spec)

@@ -3,6 +3,7 @@ package prefect
 import (
 	"encoding/json"
 	"reflect"
+	"sort"
 )
 
 // AutomationUpToDate reports whether the remote automation already matches
@@ -41,9 +42,14 @@ func actionsMatch(desired, remote []map[string]any) bool {
 	return true
 }
 
+// setKeys are trigger fields the server models as sets: it stores and returns
+// their elements in arbitrary order, so element order must not count as drift.
+var setKeys = map[string]bool{keyExpect: true, keyAfter: true, keyForEach: true}
+
 // subsetMatches reports whether every field present in desired equals its
 // remote counterpart; remote-only keys don't count as drift. Maps recurse per
-// key and slices compare elementwise.
+// key and slices compare elementwise, except set-typed trigger fields which
+// compare as multisets.
 func subsetMatches(desired, remote any) bool {
 	switch d := desired.(type) {
 	case map[string]any:
@@ -52,6 +58,12 @@ func subsetMatches(desired, remote any) bool {
 			return false
 		}
 		for k, dv := range d {
+			if setKeys[k] {
+				if !unorderedMatches(dv, r[k]) {
+					return false
+				}
+				continue
+			}
 			if !subsetMatches(dv, r[k]) {
 				return false
 			}
@@ -71,6 +83,40 @@ func subsetMatches(desired, remote any) bool {
 	default:
 		return reflect.DeepEqual(desired, remote)
 	}
+}
+
+// unorderedMatches compares two slices as multisets of their JSON encodings;
+// non-slice values fall back to ordered matching.
+func unorderedMatches(desired, remote any) bool {
+	d, dok := desired.([]any)
+	r, rok := remote.([]any)
+	if !dok || !rok {
+		return subsetMatches(desired, remote)
+	}
+	if len(d) != len(r) {
+		return false
+	}
+	dk, rk := jsonSorted(d), jsonSorted(r)
+	for i := range dk {
+		if dk[i] != rk[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func jsonSorted(items []any) []string {
+	keys := make([]string, 0, len(items))
+	for _, it := range items {
+		b, err := json.Marshal(it)
+		if err != nil {
+			keys = append(keys, "")
+			continue
+		}
+		keys = append(keys, string(b))
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // normalizeJSON round-trips a value through JSON so Go-typed desired values
