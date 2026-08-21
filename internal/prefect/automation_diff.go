@@ -20,7 +20,7 @@ func AutomationUpToDate(remote *Automation, desired *AutomationSpec) bool {
 	if desired.Enabled != nil && *desired.Enabled != remote.Enabled {
 		return false
 	}
-	if !subsetMatches(normalizeJSON(desired.Trigger), normalizeJSON(remote.Trigger)) {
+	if !triggerMatches(normalizeJSON(desired.Trigger), normalizeJSON(remote.Trigger)) {
 		return false
 	}
 	return actionsMatch(desired.Actions, remote.Actions) &&
@@ -42,14 +42,57 @@ func actionsMatch(desired, remote []map[string]any) bool {
 	return true
 }
 
-// setKeys are trigger fields the server models as sets: it stores and returns
-// their elements in arbitrary order, so element order must not count as drift.
-var setKeys = map[string]bool{keyExpect: true, keyAfter: true, keyForEach: true}
+// unorderedTriggerKeys are event-trigger fields that the server stores as sets.
+var unorderedTriggerKeys = map[string]bool{keyExpect: true, keyAfter: true, keyForEach: true}
+
+// triggerMatches compares a trigger and recurses into its child triggers.
+// Event-trigger set fields compare as multisets.
+func triggerMatches(desired, remote any) bool {
+	d, ok := desired.(map[string]any)
+	if !ok {
+		return subsetMatches(desired, remote)
+	}
+	r, ok := remote.(map[string]any)
+	if !ok {
+		return false
+	}
+	isEventTrigger := d[keyType] == triggerTypeEvent
+	for k, dv := range d {
+		switch {
+		case isEventTrigger && unorderedTriggerKeys[k]:
+			if !unorderedMatches(dv, r[k]) {
+				return false
+			}
+		case k == keyTriggers:
+			if !triggerListMatches(dv, r[k]) {
+				return false
+			}
+		default:
+			if !subsetMatches(dv, r[k]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func triggerListMatches(desired, remote any) bool {
+	d, dok := desired.([]any)
+	r, rok := remote.([]any)
+	if !dok || !rok || len(d) != len(r) {
+		return false
+	}
+	for i := range d {
+		if !triggerMatches(d[i], r[i]) {
+			return false
+		}
+	}
+	return true
+}
 
 // subsetMatches reports whether every field present in desired equals its
-// remote counterpart; remote-only keys don't count as drift. Maps recurse per
-// key and slices compare elementwise, except set-typed trigger fields which
-// compare as multisets.
+// remote counterpart. Remote-only keys do not count as drift. Maps recurse per
+// key, and slices compare elementwise.
 func subsetMatches(desired, remote any) bool {
 	switch d := desired.(type) {
 	case map[string]any:
@@ -58,12 +101,6 @@ func subsetMatches(desired, remote any) bool {
 			return false
 		}
 		for k, dv := range d {
-			if setKeys[k] {
-				if !unorderedMatches(dv, r[k]) {
-					return false
-				}
-				continue
-			}
 			if !subsetMatches(dv, r[k]) {
 				return false
 			}
