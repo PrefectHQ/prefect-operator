@@ -114,6 +114,62 @@ func TestAutomationUpToDate(t *testing.T) {
 		}
 	})
 
+	t.Run("matches when the server reorders set-typed trigger fields", func(t *testing.T) {
+		for _, field := range []string{keyAfter, keyExpect, keyForEach} {
+			t.Run(field, func(t *testing.T) {
+				spec := zombieSpec()
+				spec.Trigger[field] = []string{"first", "second", "third"}
+				remote := remoteFromSpec(t, spec)
+				remote.Trigger[field] = []any{"third", "first", "second"}
+				if !AutomationUpToDate(remote, spec) {
+					t.Fatalf("up to date = false for reordered %s; want true", field)
+				}
+			})
+		}
+	})
+
+	t.Run("matches when the server reorders a child event trigger set", func(t *testing.T) {
+		spec := zombieSpec()
+		spec.Trigger = map[string]any{
+			keyType:   "compound",
+			"require": "all",
+			keyTriggers: []map[string]any{{
+				keyType:   "event",
+				keyExpect: []string{"first", "second"},
+			}},
+		}
+		remote := remoteFromSpec(t, spec)
+		children := remote.Trigger[keyTriggers].([]any)
+		child := children[0].(map[string]any)
+		child[keyExpect] = []any{"second", "first"}
+		if !AutomationUpToDate(remote, spec) {
+			t.Fatal("up to date = false for a reordered child event trigger set; want true")
+		}
+	})
+
+	t.Run("detects a set-typed trigger field content change", func(t *testing.T) {
+		spec := zombieSpec()
+		spec.Trigger["expect"] = []string{"prefect.flow-run.Pending", "prefect.flow-run.Running"}
+		remote := remoteFromSpec(t, spec)
+		remote.Trigger["expect"] = []any{"prefect.flow-run.Pending", "prefect.flow-run.Crashed"}
+		if AutomationUpToDate(remote, spec) {
+			t.Fatal("up to date = true with different expect content; want false")
+		}
+	})
+
+	t.Run("detects reordered slices in action parameters", func(t *testing.T) {
+		spec := zombieSpec()
+		spec.Actions[0]["parameters"] = map[string]any{
+			keyExpect: []string{"first", "second"},
+		}
+		remote := remoteFromSpec(t, spec)
+		parameters := remote.Actions[0]["parameters"].(map[string]any)
+		parameters[keyExpect] = []any{"second", "first"}
+		if AutomationUpToDate(remote, spec) {
+			t.Fatal("up to date = true for reordered action parameters; want false")
+		}
+	})
+
 	t.Run("nil desired action lists match empty remote lists", func(t *testing.T) {
 		spec := zombieSpec()
 		remote := remoteFromSpec(t, spec)

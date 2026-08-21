@@ -36,6 +36,11 @@ const (
 	keyMatch        = "match"
 	keyMatchRelated = "match_related"
 	keyTriggers     = "triggers"
+	// keyAfter/keyExpect/keyForEach are the set-typed event-trigger keys: the
+	// server stores them as sets, so the diff layer compares them unordered.
+	keyAfter   = "after"
+	keyExpect  = "expect"
+	keyForEach = "for_each"
 	// keyMetric is the metric-trigger payload key (same spelling as the type
 	// discriminator value, different role).
 	keyMetric = "metric"
@@ -141,9 +146,9 @@ func buildEventTrigger(e *prefectiov1.PrefectEventTrigger) (map[string]any, erro
 		"posture":       e.Posture,
 		keyMatch:        match,
 		keyMatchRelated: matchRelated,
-		"after":         nonNilStrings(e.After),
-		"expect":        nonNilStrings(e.Expect),
-		"for_each":      nonNilStrings(e.ForEach),
+		keyAfter:        nonNilStrings(e.After),
+		keyExpect:       nonNilStrings(e.Expect),
+		keyForEach:      nonNilStrings(e.ForEach),
 	}
 	if e.Threshold != nil {
 		m["threshold"] = *e.Threshold

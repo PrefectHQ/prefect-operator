@@ -3,6 +3,7 @@ package prefect
 import (
 	"encoding/json"
 	"reflect"
+	"sort"
 )
 
 // AutomationUpToDate reports whether the remote automation already matches
@@ -19,7 +20,7 @@ func AutomationUpToDate(remote *Automation, desired *AutomationSpec) bool {
 	if desired.Enabled != nil && *desired.Enabled != remote.Enabled {
 		return false
 	}
-	if !subsetMatches(normalizeJSON(desired.Trigger), normalizeJSON(remote.Trigger)) {
+	if !triggerMatches(normalizeJSON(desired.Trigger), normalizeJSON(remote.Trigger)) {
 		return false
 	}
 	return actionsMatch(desired.Actions, remote.Actions) &&
@@ -41,9 +42,57 @@ func actionsMatch(desired, remote []map[string]any) bool {
 	return true
 }
 
+// unorderedTriggerKeys are event-trigger fields that the server stores as sets.
+var unorderedTriggerKeys = map[string]bool{keyExpect: true, keyAfter: true, keyForEach: true}
+
+// triggerMatches compares a trigger and recurses into its child triggers.
+// Event-trigger set fields compare as multisets.
+func triggerMatches(desired, remote any) bool {
+	d, ok := desired.(map[string]any)
+	if !ok {
+		return subsetMatches(desired, remote)
+	}
+	r, ok := remote.(map[string]any)
+	if !ok {
+		return false
+	}
+	isEventTrigger := d[keyType] == triggerTypeEvent
+	for k, dv := range d {
+		switch {
+		case isEventTrigger && unorderedTriggerKeys[k]:
+			if !unorderedMatches(dv, r[k]) {
+				return false
+			}
+		case k == keyTriggers:
+			if !triggerListMatches(dv, r[k]) {
+				return false
+			}
+		default:
+			if !subsetMatches(dv, r[k]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func triggerListMatches(desired, remote any) bool {
+	d, dok := desired.([]any)
+	r, rok := remote.([]any)
+	if !dok || !rok || len(d) != len(r) {
+		return false
+	}
+	for i := range d {
+		if !triggerMatches(d[i], r[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // subsetMatches reports whether every field present in desired equals its
-// remote counterpart; remote-only keys don't count as drift. Maps recurse per
-// key and slices compare elementwise.
+// remote counterpart. Remote-only keys do not count as drift. Maps recurse per
+// key, and slices compare elementwise.
 func subsetMatches(desired, remote any) bool {
 	switch d := desired.(type) {
 	case map[string]any:
@@ -71,6 +120,40 @@ func subsetMatches(desired, remote any) bool {
 	default:
 		return reflect.DeepEqual(desired, remote)
 	}
+}
+
+// unorderedMatches compares two slices as multisets of their JSON encodings;
+// non-slice values fall back to ordered matching.
+func unorderedMatches(desired, remote any) bool {
+	d, dok := desired.([]any)
+	r, rok := remote.([]any)
+	if !dok || !rok {
+		return subsetMatches(desired, remote)
+	}
+	if len(d) != len(r) {
+		return false
+	}
+	dk, rk := jsonSorted(d), jsonSorted(r)
+	for i := range dk {
+		if dk[i] != rk[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func jsonSorted(items []any) []string {
+	keys := make([]string, 0, len(items))
+	for _, it := range items {
+		b, err := json.Marshal(it)
+		if err != nil {
+			keys = append(keys, "")
+			continue
+		}
+		keys = append(keys, string(b))
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // normalizeJSON round-trips a value through JSON so Go-typed desired values
