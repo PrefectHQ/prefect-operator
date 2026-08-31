@@ -1,6 +1,6 @@
 # Build the manager binary on the runner's native architecture. Go cross-compiles
 # the binary for each target without running the compiler through QEMU.
-FROM --platform=$BUILDPLATFORM golang:1.26 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
