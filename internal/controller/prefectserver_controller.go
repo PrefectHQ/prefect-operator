@@ -225,7 +225,7 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 		)
 
 		// We'll requeue after 20 seconds to check on the migration Job's status
-		return &ctrl.Result{Requeue: true, RequeueAfter: 20 * time.Second}, nil
+		return &ctrl.Result{RequeueAfter: 20 * time.Second}, nil
 
 	default:
 		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
