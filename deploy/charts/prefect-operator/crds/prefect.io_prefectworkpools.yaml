@@ -984,7 +984,9 @@ spec:
                       This field is mutually exclusive with `value`, and is effectively required if `value` is not defined.
                     properties:
                       key:
-                        description: The key to select.
+                        description: |-
+                          The key to select from the ConfigMap's Data field.
+                          Keys in the BinaryData field are not currently propagated to container env vars.
                         type: string
                       name:
                         default: ""
@@ -1107,7 +1109,9 @@ spec:
                                 description: Selects a key of a ConfigMap.
                                 properties:
                                   key:
-                                    description: The key to select.
+                                    description: |-
+                                      The key to select from the ConfigMap's Data field.
+                                      Keys in the BinaryData field are not currently propagated to container env vars.
                                     type: string
                                   name:
                                     default: ""
@@ -1377,6 +1381,11 @@ spec:
                                     Number must be in the range 1 to 65535.
                                     Name must be an IANA_SVC_NAME.
                                   x-kubernetes-int-or-string: true
+                                protocol:
+                                  description: |-
+                                    Protocol selects the wire protocol for the probe connection.
+                                    Nil defaults to HTTP/1.1.
+                                  type: string
                                 scheme:
                                   description: |-
                                     Scheme to use for connecting to the host.
@@ -1490,6 +1499,11 @@ spec:
                                     Number must be in the range 1 to 65535.
                                     Name must be an IANA_SVC_NAME.
                                   x-kubernetes-int-or-string: true
+                                protocol:
+                                  description: |-
+                                    Protocol selects the wire protocol for the probe connection.
+                                    Nil defaults to HTTP/1.1.
+                                  type: string
                                 scheme:
                                   description: |-
                                     Scheme to use for connecting to the host.
@@ -1572,6 +1586,13 @@ spec:
                         grpc:
                           description: GRPC specifies a GRPC HealthCheckRequest.
                           properties:
+                            mode:
+                              description: |-
+                                mode specifies the connection mode for the gRPC health probe.
+                                Set to "TLS" to use TLS without certificate verification.
+                                Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+                                If not specified, the probe uses a plaintext (insecure) connection.
+                              type: string
                             port:
                               description: Port number of the gRPC service. Number
                                 must be in the range 1 to 65535.
@@ -1629,6 +1650,11 @@ spec:
                                 Number must be in the range 1 to 65535.
                                 Name must be an IANA_SVC_NAME.
                               x-kubernetes-int-or-string: true
+                            protocol:
+                              description: |-
+                                Protocol selects the wire protocol for the probe connection.
+                                Nil defaults to HTTP/1.1.
+                              type: string
                             scheme:
                               description: |-
                                 Scheme to use for connecting to the host.
@@ -1784,6 +1810,13 @@ spec:
                         grpc:
                           description: GRPC specifies a GRPC HealthCheckRequest.
                           properties:
+                            mode:
+                              description: |-
+                                mode specifies the connection mode for the gRPC health probe.
+                                Set to "TLS" to use TLS without certificate verification.
+                                Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+                                If not specified, the probe uses a plaintext (insecure) connection.
+                              type: string
                             port:
                               description: Port number of the gRPC service. Number
                                 must be in the range 1 to 65535.
@@ -1841,6 +1874,11 @@ spec:
                                 Number must be in the range 1 to 65535.
                                 Name must be an IANA_SVC_NAME.
                               x-kubernetes-int-or-string: true
+                            protocol:
+                              description: |-
+                                Protocol selects the wire protocol for the probe connection.
+                                Nil defaults to HTTP/1.1.
+                              type: string
                             scheme:
                               description: |-
                                 Scheme to use for connecting to the host.
@@ -2294,6 +2332,13 @@ spec:
                         grpc:
                           description: GRPC specifies a GRPC HealthCheckRequest.
                           properties:
+                            mode:
+                              description: |-
+                                mode specifies the connection mode for the gRPC health probe.
+                                Set to "TLS" to use TLS without certificate verification.
+                                Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+                                If not specified, the probe uses a plaintext (insecure) connection.
+                              type: string
                             port:
                               description: Port number of the gRPC service. Number
                                 must be in the range 1 to 65535.
@@ -2351,6 +2396,11 @@ spec:
                                 Number must be in the range 1 to 65535.
                                 Name must be an IANA_SVC_NAME.
                               x-kubernetes-int-or-string: true
+                            protocol:
+                              description: |-
+                                Protocol selects the wire protocol for the probe connection.
+                                Nil defaults to HTTP/1.1.
+                              type: string
                             scheme:
                               description: |-
                                 Scheme to use for connecting to the host.
@@ -2490,10 +2540,21 @@ spec:
                         description: VolumeMount describes a mounting of a Volume
                           within a container.
                         properties:
-                          mountPath:
+                          bindMountOptions:
                             description: |-
-                              Path within the container at which the volume should be mounted.  Must
-                              not contain ':'.
+                              bindMountOptions is the list of additional bind mount options to apply when
+                              mounting this volume into the container. Allowed values are noexec,
+                              nodev, and nosuid. These are Linux mount options and have no effect on
+                              Windows nodes.
+                              This field is not supported with image volumes.
+                              This is an alpha field and requires enabling the VolumeBindMountOptions feature gate.
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: set
+                          mountPath:
+                            description: Path within the container at which the volume
+                              should be mounted.
                             type: string
                           mountPropagation:
                             description: |-
@@ -2655,7 +2716,9 @@ spec:
                             description: Selects a key of a ConfigMap.
                             properties:
                               key:
-                                description: The key to select.
+                                description: |-
+                                  The key to select from the ConfigMap's Data field.
+                                  Keys in the BinaryData field are not currently propagated to container env vars.
                                 type: string
                               name:
                                 default: ""
@@ -2833,7 +2896,9 @@ spec:
                           description: Selects a key of a ConfigMap.
                           properties:
                             key:
-                              description: The key to select.
+                              description: |-
+                                The key to select from the ConfigMap's Data field.
+                                Keys in the BinaryData field are not currently propagated to container env vars.
                               type: string
                             name:
                               default: ""
