@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 
@@ -336,6 +337,9 @@ func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 		return true
 	}
 	if desired.MaxScheduledRuns != nil && (current.MaxScheduledRuns == nil || *current.MaxScheduledRuns != *desired.MaxScheduledRuns) {
+		return true
+	}
+	if desired.Parameters != nil && (current.Parameters == nil || !reflect.DeepEqual(desired.Parameters, current.Parameters)) {
 		return true
 	}
 	return false

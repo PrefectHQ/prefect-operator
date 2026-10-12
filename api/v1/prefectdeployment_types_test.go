@@ -178,6 +178,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						Timezone:         new("UTC"),
 						Active:           new(true),
 						MaxScheduledRuns: new(10),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 					{
 						Slug:       "hourly-schedule",
@@ -185,6 +188,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						AnchorDate: new("2024-01-01T00:00:00Z"),
 						Timezone:   new("UTC"),
 						Active:     new(false),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 				},
 			}
@@ -207,6 +213,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						Timezone:         new("UTC"),
 						Active:           new(true),
 						MaxScheduledRuns: new(10),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 					{
 						Slug:       "hourly-interval",
@@ -214,6 +223,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						AnchorDate: new("2024-01-01T00:00:00Z"),
 						Timezone:   new("UTC"),
 						Active:     new(false),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 				},
 			}
@@ -241,6 +253,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						DayOr:    new(true),
 						Timezone: new("America/New_York"),
 						Active:   new(true),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 					{
 						Slug:             "every-5-minutes",
@@ -248,6 +263,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						Timezone:         new("UTC"),
 						Active:           new(true),
 						MaxScheduledRuns: new(100),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 				},
 			}
@@ -274,6 +292,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO"),
 						Timezone: new("UTC"),
 						Active:   new(true),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 					{
 						Slug:             "monthly-first-friday",
@@ -281,6 +302,9 @@ var _ = Describe("PrefectDeployment type", func() {
 						Timezone:         new("America/Los_Angeles"),
 						Active:           new(true),
 						MaxScheduledRuns: new(12),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 				},
 			}
@@ -307,18 +331,27 @@ var _ = Describe("PrefectDeployment type", func() {
 						AnchorDate: new("2024-01-01T00:00:00Z"),
 						Timezone:   new("UTC"),
 						Active:     new(true),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 					{
 						Slug:     "daily-cron",
 						Cron:     new("0 9 * * *"),
 						Timezone: new("America/New_York"),
 						Active:   new(true),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 					{
 						Slug:     "weekly-rrule",
 						RRule:    new("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"),
 						Timezone: new("Europe/London"),
 						Active:   new(true),
+						Parameters: &runtime.RawExtension{
+							Raw: []byte(`{"foo": "bar", "replicas": 3}`),
+						},
 					},
 				},
 			}
