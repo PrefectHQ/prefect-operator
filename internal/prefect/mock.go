@@ -403,6 +403,9 @@ func (m *MockClient) UpdateDeploymentSchedule(ctx context.Context, deploymentID,
 			if update.MaxScheduledRuns != nil {
 				d.Schedules[i].MaxScheduledRuns = update.MaxScheduledRuns
 			}
+			if update.Parameters != nil {
+				d.Schedules[i].Parameters = update.Parameters
+			}
 			return nil
 		}
 	}

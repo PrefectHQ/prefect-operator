@@ -200,6 +200,11 @@ type PrefectSchedule struct {
 	// Maps to: DeploymentScheduleCreate.max_scheduled_runs (integer > 0)
 	// +optional
 	MaxScheduledRuns *int `json:"max_scheduled_runs,omitempty"`
+
+	// Parameters defines parameter overrides for this schedule.
+	// Maps to: DeploymentScheduleCreate.parameters (object)
+	// +optional
+	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
 }
 
 // PrefectGlobalConcurrencyLimit defines global concurrency limit configuration

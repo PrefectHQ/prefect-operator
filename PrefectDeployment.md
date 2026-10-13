@@ -387,6 +387,14 @@ Maps to: DeploymentScheduleCreate.max_scheduled_runs (integer > 0)<br/>
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>parameters</b></td>
+        <td>object</td>
+        <td>
+          Parameters defines parameter overrides for this schedule.
+Maps to: DeploymentScheduleCreate.parameters (object)<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>rrule</b></td>
         <td>string</td>
         <td>

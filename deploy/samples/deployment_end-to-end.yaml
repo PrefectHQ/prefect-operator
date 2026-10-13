@@ -62,3 +62,11 @@ spec:
         rrule: "RRULE:FREQ=MINUTELY;INTERVAL=1"
         timezone: "UTC"
         active: true
+
+      # Schedule with parameter overrides
+      - slug: "with-param-overrides"
+        cron: "* * * * *"
+        timezone: "UTC"
+        active: true
+        parameters:
+          foo: "bar"

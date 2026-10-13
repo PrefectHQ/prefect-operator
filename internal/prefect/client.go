@@ -533,9 +533,10 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 }
 
 type DeploymentScheduleUpdate struct {
-	Schedule         *Schedule `json:"schedule,omitempty"`
-	Active           *bool     `json:"active,omitempty"`
-	MaxScheduledRuns *int      `json:"max_scheduled_runs,omitempty"`
+	Schedule         *Schedule      `json:"schedule,omitempty"`
+	Active           *bool          `json:"active,omitempty"`
+	MaxScheduledRuns *int           `json:"max_scheduled_runs,omitempty"`
+	Parameters       map[string]any `json:"parameters,omitempty"`
 }
 
 func (c *Client) scheduleSubResource(ctx context.Context, method, url string, jsonData []byte) error {

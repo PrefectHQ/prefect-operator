@@ -157,6 +157,14 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 				MaxScheduledRuns: k8sSchedule.MaxScheduledRuns,
 			}
 
+			if k8sSchedule.Parameters != nil {
+				var parameters map[string]any
+				if err := json.Unmarshal(k8sSchedule.Parameters.Raw, &parameters); err != nil {
+					return nil, fmt.Errorf("failed to unmarshal schedule parameter overrides: %w", err)
+				}
+				deploymentSchedule.Parameters = parameters
+			}
+
 			schedules[i] = deploymentSchedule
 		}
 		spec.Schedules = schedules
