@@ -289,6 +289,7 @@ func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, cl
 				Schedule:         &d.Schedule,
 				Active:           d.Active,
 				MaxScheduledRuns: d.MaxScheduledRuns,
+				Parameters:       d.Parameters,
 			}); err != nil {
 				return fmt.Errorf("update schedule: %w", err)
 			}
@@ -339,7 +340,7 @@ func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 	if desired.MaxScheduledRuns != nil && (current.MaxScheduledRuns == nil || *current.MaxScheduledRuns != *desired.MaxScheduledRuns) {
 		return true
 	}
-	if desired.Parameters != nil && (current.Parameters == nil || !reflect.DeepEqual(desired.Parameters, current.Parameters)) {
+	if desired.Parameters != nil && !reflect.DeepEqual(desired.Parameters, current.Parameters) {
 		return true
 	}
 	return false

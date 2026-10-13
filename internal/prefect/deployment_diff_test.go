@@ -7,22 +7,6 @@ func intPtr(i int) *int       { return &i }
 func boolPtr(b bool) *bool    { return &b }
 
 func matchingRemoteAndDesired() (*Deployment, *DeploymentSpec) {
-	schedules := []DeploymentSchedule{
-		{
-			ID:   "foo",
-			Slug: new(string("foobar")),
-			Schedule: Schedule{
-				ID:       "bar",
-				Cron:     new(string("* * * * *")),
-				Timezone: new(string("Europe/Kyiv")),
-				Active:   new(bool(true)),
-			},
-			Active: new(bool(true)),
-			Parameters: map[string]any{
-				"param1": "value1",
-			},
-		},
-	}
 	remote := &Deployment{
 		ID:                     "dep-1",
 		Name:                   "etl",
@@ -35,7 +19,6 @@ func matchingRemoteAndDesired() (*Deployment, *DeploymentSpec) {
 		WorkQueueName:          strPtr("default"),
 		Entrypoint:             strPtr("app/main.py:main"),
 		GlobalConcurrencyLimit: &GlobalConcurrencyLimit{Limit: 3},
-		Schedules:              schedules,
 	}
 	desired := &DeploymentSpec{
 		Name:             "etl",
@@ -48,7 +31,6 @@ func matchingRemoteAndDesired() (*Deployment, *DeploymentSpec) {
 		WorkQueueName:    strPtr("default"),
 		Entrypoint:       strPtr("app/main.py:main"),
 		ConcurrencyLimit: intPtr(3),
-		Schedules:        schedules,
 	}
 	return remote, desired
 }
@@ -114,24 +96,6 @@ func TestDeploymentUpToDate(t *testing.T) {
 		},
 		"pull steps": func(_ *Deployment, d *DeploymentSpec) {
 			d.PullSteps = []map[string]any{{"prefect.deployments.steps.git_clone": map[string]any{}}}
-		},
-		"schedules": func(_ *Deployment, d *DeploymentSpec) {
-			d.Schedules = []DeploymentSchedule{
-				{
-					ID:   "bar",
-					Slug: new(string("quoxfizz")),
-					Schedule: Schedule{
-						ID:       "buzz",
-						Cron:     new(string("0 0 * * *")),
-						Timezone: new(string("Europe/Tallinn")),
-						Active:   new(bool(true)),
-					},
-					Active: new(bool(true)),
-					Parameters: map[string]any{
-						"param1": "value2",
-					},
-				},
-			}
 		},
 	}
 	for name, mutate := range mutations {

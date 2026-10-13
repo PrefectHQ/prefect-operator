@@ -121,6 +121,33 @@ var _ = Describe("PrefectDeployment schedule reconciliation", func() {
 		Expect(*got.Schedules[0].MaxScheduledRuns).To(Equal(5))
 	})
 
+	It("applies a parameters-only change in place", func() {
+		desired := []prefect.DeploymentSchedule{{
+			Slug:       newString("default"),
+			Active:     newBool(true),
+			Parameters: map[string]any{"foo": "bar"},
+			Schedule:   prefect.Schedule{Cron: newString("* * * * *")},
+		}}
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		got, err := mock.GetDeployment(ctx, depID)
+		Expect(err).NotTo(HaveOccurred())
+		schedID := got.Schedules[0].ID
+
+		By("not updating when the parameters are unchanged")
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+		Expect(mock.UpdateScheduleCalls).To(BeZero())
+
+		By("updating in place when the parameters change")
+		desired[0].Parameters = map[string]any{"foo": "baz"}
+		Expect(r.reconcileSchedules(ctx, mock, depID, desired)).To(Succeed())
+
+		got, err = mock.GetDeployment(ctx, depID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Schedules).To(HaveLen(1))
+		Expect(got.Schedules[0].ID).To(Equal(schedID))
+		Expect(got.Schedules[0].Parameters).To(Equal(map[string]any{"foo": "baz"}))
+	})
+
 	It("applies an anchorDate-only change to an interval schedule in place", func() {
 		anchor := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		desired := []prefect.DeploymentSchedule{{

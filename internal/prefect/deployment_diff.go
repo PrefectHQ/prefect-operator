@@ -55,9 +55,6 @@ func DeploymentUpToDate(remote *Deployment, desired *DeploymentSpec) bool {
 	if desired.PullSteps != nil && !reflect.DeepEqual(desired.PullSteps, remote.PullSteps) {
 		return false
 	}
-	if !reflect.DeepEqual(desired.Schedules, remote.Schedules) {
-		return false
-	}
 	return true
 }
 
