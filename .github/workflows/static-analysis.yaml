@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Install tool dependencies
-        uses: jdx/mise-action@v5.2.1
+        uses: jdx/mise-action@v5.2.3
         with:
           experimental: true
 
