@@ -60,6 +60,8 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             # for releases: 1.2.3
             type=semver,pattern={{version}}
+            # for releases: v1.2.3, which the Helm chart and release manifest reference
+            type=semver,pattern={{raw}}
           labels: |
             org.opencontainers.image.title=prefect-operator
             org.opencontainers.image.description=Prefect Operator image
