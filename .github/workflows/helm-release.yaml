@@ -43,11 +43,13 @@ jobs:
             # get the short sha of the latest commit for the operator image
             short_sha="$(git rev-parse --short=7 HEAD)"
             echo "OPERATOR_VERSION=$short_sha" >> "$GITHUB_ENV"
+            echo "OPERATOR_REPOSITORY=prefecthq/prefect-operator-dev" >> "$GITHUB_ENV"
 
           elif [[ "${{ inputs.mode }}" == "release" ]]; then
             echo "RELEASE_VERSION=$(date +'%Y.%-m.%-d%H%M%S')" >> $GITHUB_ENV
 
             echo "OPERATOR_VERSION=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+            echo "OPERATOR_REPOSITORY=prefecthq/prefect-operator" >> "$GITHUB_ENV"
           else
             echo "Invalid mode: ${{ inputs.mode }}"
             exit 1
@@ -91,7 +93,8 @@ jobs:
         run: |
           mkdir -p /tmp/chart
           cd deploy/charts
-          # Update the operator version tag in values.yaml
+          # Update the operator image repository and version tag in values.yaml
+          sed -i "s|repository:.*$|repository: $OPERATOR_REPOSITORY|g" prefect-operator/values.yaml
           sed -i "s/tag:.*$/tag: $OPERATOR_VERSION/g" prefect-operator/values.yaml
           helm package prefect-operator \
             --destination /tmp/chart \
