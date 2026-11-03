@@ -5,6 +5,9 @@
     "github>PrefectHQ/renovate-config:go",
     "github>PrefectHQ/renovate-config:helm"
   ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "customManagers": [
     {
       "customType": "regex",
