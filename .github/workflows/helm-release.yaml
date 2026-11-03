@@ -106,7 +106,6 @@ jobs:
             --passphrase-file $SIGN_PASSPHRASE_FILE
 
       - name: Verify the chart's default operator image exists
-        if: ${{ inputs.mode == 'release' }}
         run: |
           image="$(helm show values "/tmp/chart/prefect-operator-${RELEASE_VERSION}.tgz" \
             | yq '.operator.image.repository + ":" + .operator.image.tag')"
