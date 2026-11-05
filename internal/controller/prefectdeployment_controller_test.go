@@ -45,6 +45,7 @@ import (
 const (
 	createFlowRoute       = "POST /flows/"
 	createDeploymentRoute = "POST /deployments/"
+	readWorkPoolRoute     = "GET /work_pools/{name}"
 )
 
 var _ = Describe("PrefectDeployment controller", func() {
@@ -557,6 +558,51 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 	})
 
+	Context("When the work pool does not exist yet", func() {
+		BeforeEach(func() {
+			prefectDeployment.Spec.WorkPool.Name = "missing-pool"
+			prefectDeployment.Spec.WorkPool.WorkQueue = nil
+			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+
+			By("Finalizer pass")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should requeue with WorkPoolNotFound until the pool appears", func() {
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(5 * time.Second))
+			Expect(prefectAPI.Calls(createDeploymentRoute)).To(BeZero())
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.Ready).To(BeFalse())
+			cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("WorkPoolNotFound"))
+
+			By("Seeding the pool into Prefect")
+			_, err = prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "missing-pool", Type: "kubernetes"})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Now it syncs")
+			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.Ready).To(BeTrue())
+		})
+
+		It("Should return the error when the work pool lookup fails", func() {
+			prefectAPI.Fail(readWorkPoolRoute, http.StatusInternalServerError)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError(ContainSubstring("status 500")))
+			Expect(prefectAPI.Calls(createDeploymentRoute)).To(BeZero())
+		})
+	})
+
 	Context("When testing error scenarios", func() {
 		It("Should handle flow creation errors", func() {
 			prefectAPI.Fail(createFlowRoute, http.StatusInternalServerError)
@@ -595,7 +641,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
-						Name: "test-pool",
+						Name: "kubernetes-work-pool",
 					},
 					Deployment: prefectiov1.PrefectDeploymentConfiguration{
 						Entrypoint: "flows.py:my_flow",
@@ -707,7 +753,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
-						Name: "test-pool",
+						Name: "kubernetes-work-pool",
 					},
 					Deployment: prefectiov1.PrefectDeploymentConfiguration{
 						Entrypoint: "flows.py:my_flow",
@@ -763,7 +809,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
-						Name: "test-pool",
+						Name: "kubernetes-work-pool",
 					},
 					Deployment: prefectiov1.PrefectDeploymentConfiguration{
 						Entrypoint: "flows.py:my_flow",
@@ -820,7 +866,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 						},
 					},
 					WorkPool: prefectiov1.PrefectWorkPoolReference{
-						Name: "test-pool",
+						Name: "kubernetes-work-pool",
 					},
 					Deployment: prefectiov1.PrefectDeploymentConfiguration{
 						Entrypoint:             "flows.py:my_flow",

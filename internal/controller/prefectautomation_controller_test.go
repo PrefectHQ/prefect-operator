@@ -41,6 +41,8 @@ import (
 const (
 	createAutomationRoute = "POST /automations/"
 	updateAutomationRoute = "PUT /automations/{id}"
+
+	filterDeploymentsRoute = "POST /deployments/filter"
 )
 
 var _ = Describe("PrefectAutomation controller", func() {
@@ -329,6 +331,50 @@ var _ = Describe("PrefectAutomation controller", func() {
 			Expect(k8sClient.Get(ctx, name, automation)).To(Succeed())
 			Expect(automation.Status.Id).NotTo(BeNil())
 			Expect(automation.Status.Ready).To(BeTrue())
+		})
+	})
+
+	Context("When resolving a referenced deployment fails", func() {
+		BeforeEach(func() {
+			automation.Spec.Actions = []prefectiov1.PrefectAutomationAction{
+				{Type: "run-deployment", Source: new("selected"), DeploymentName: new("daily-etl")},
+			}
+		})
+
+		// reconcileTwice runs the finalizer pass and the first sync, and returns
+		// the sync's result and the automation's Synced condition.
+		reconcileTwice := func() (reconcile.Result, *metav1.Condition) {
+			Expect(k8sClient.Create(ctx, automation)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, name, automation)).To(Succeed())
+			return result, meta.FindStatusCondition(automation.Status.Conditions, PrefectAutomationConditionSynced)
+		}
+
+		It("Should report a failed lookup as a sync error", func() {
+			prefectAPI.Fail(filterDeploymentsRoute, http.StatusInternalServerError)
+
+			result, cond := reconcileTwice()
+			Expect(result.RequeueAfter).To(Equal(RequeueIntervalError))
+			Expect(cond).To(HaveField("Reason", "SyncError"))
+			Expect(cond.Message).To(ContainSubstring("status 500"))
+			Expect(prefectAPI.Calls(createAutomationRoute)).To(BeZero())
+		})
+
+		It("Should report a name that matches more than one deployment as a sync error", func() {
+			for _, flowName := range []string{"etl", "backfill"} {
+				flow, err := prefectClient.CreateOrGetFlow(ctx, &prefect.FlowSpec{Name: flowName})
+				Expect(err).NotTo(HaveOccurred())
+				_, err = prefectClient.CreateOrUpdateDeployment(ctx, &prefect.DeploymentSpec{Name: "daily-etl", FlowID: flow.ID})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			result, cond := reconcileTwice()
+			Expect(result.RequeueAfter).To(Equal(RequeueIntervalError))
+			Expect(cond).To(HaveField("Reason", "SyncError"))
+			Expect(cond.Message).To(ContainSubstring("ambiguous"))
 		})
 	})
 

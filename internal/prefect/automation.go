@@ -85,8 +85,9 @@ func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *Au
 // FindDeploymentByName resolves a deployment by name (tenant-wide) via
 // POST /deployments/filter. Deployment names are only unique per flow (the
 // canonical reference is "{flow}/{deployment}"), so a bare name can match more
-// than one deployment. Errors if no deployment matches, and errors if the name
-// is ambiguous (>1 match) rather than silently resolving to an arbitrary one.
+// than one deployment. When no deployment matches, the error matches
+// ErrNotFound. When more than one matches, it returns a different error
+// rather than resolving to an arbitrary one.
 func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deployment, error) {
 	filter := map[string]any{
 		"deployments": map[string]any{
@@ -99,7 +100,7 @@ func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deploy
 		return nil, err
 	}
 	if len(results) == 0 {
-		return nil, fmt.Errorf("no deployment found with name %q", name)
+		return nil, fmt.Errorf("no deployment found with name %q: %w", name, ErrNotFound)
 	}
 	if len(results) > 1 {
 		return nil, fmt.Errorf("deployment name %q is ambiguous: it matches multiple deployments (names are only unique per flow); use a flow-qualified reference", name)
