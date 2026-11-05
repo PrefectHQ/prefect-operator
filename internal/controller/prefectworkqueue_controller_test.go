@@ -462,6 +462,76 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		})
 	})
 
+	Context("When the queue is deleted between the read and the update", func() {
+		It("Should report Recreating and retry shortly", func() {
+			workQueue = syncedWorkQueue()
+
+			workQueue.Spec.ConcurrencyLimit = new(int32(2))
+			Expect(k8sClient.Update(ctx, workQueue)).To(Succeed())
+			prefectAPI.Fail(updateWorkQueueRoute, http.StatusNotFound)
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Second))
+
+			Expect(k8sClient.Get(ctx, name, workQueue)).To(Succeed())
+			Expect(workQueue.Status.Ready).To(BeFalse())
+			cond := meta.FindStatusCondition(workQueue.Status.Conditions, PrefectWorkQueueConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("Recreating"))
+
+			By("The retry syncs once Prefect answers again")
+			prefectAPI.ClearFailures()
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, name, workQueue)).To(Succeed())
+			Expect(workQueue.Status.Ready).To(BeTrue())
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(2))))
+		})
+	})
+
+	It("lists every optional field the spec declares", func() {
+		Expect(declaredWorkQueueFields(prefectiov1.PrefectWorkQueueSpec{})).To(BeEmpty())
+		Expect(declaredWorkQueueFields(prefectiov1.PrefectWorkQueueSpec{
+			ConcurrencyLimit: new(int32(1)),
+			Priority:         new(int32(2)),
+			Description:      new("nightly"),
+			IsPaused:         new(true),
+		})).To(ConsistOf(
+			prefect.WorkQueueFieldConcurrencyLimit,
+			prefect.WorkQueueFieldPriority,
+			prefect.WorkQueueFieldDescription,
+			prefect.WorkQueueFieldIsPaused,
+		))
+	})
+
+	remoteQueue := prefect.WorkQueue{
+		ConcurrencyLimit: new(int32(1)),
+		Priority:         new(int32(2)),
+		Description:      new("nightly"),
+		IsPaused:         new(false),
+	}
+
+	DescribeTable("workQueueMatches",
+		func(desired prefectiov1.PrefectWorkQueueSpec, remote prefect.WorkQueue, want bool) {
+			Expect(workQueueMatches(desired, &remote)).To(Equal(want))
+		},
+		Entry("a spec that declares nothing", prefectiov1.PrefectWorkQueueSpec{}, remoteQueue, true),
+		Entry("a spec that matches every field", prefectiov1.PrefectWorkQueueSpec{
+			ConcurrencyLimit: new(int32(1)), Priority: new(int32(2)), Description: new("nightly"), IsPaused: new(false),
+		}, remoteQueue, true),
+		Entry("a different concurrency limit", prefectiov1.PrefectWorkQueueSpec{ConcurrencyLimit: new(int32(5))}, remoteQueue, false),
+		Entry("a concurrency limit Prefect lacks", prefectiov1.PrefectWorkQueueSpec{ConcurrencyLimit: new(int32(1))}, prefect.WorkQueue{}, false),
+		Entry("a different priority", prefectiov1.PrefectWorkQueueSpec{Priority: new(int32(3))}, remoteQueue, false),
+		Entry("a priority Prefect lacks", prefectiov1.PrefectWorkQueueSpec{Priority: new(int32(2))}, prefect.WorkQueue{}, false),
+		Entry("a different description", prefectiov1.PrefectWorkQueueSpec{Description: new("hourly")}, remoteQueue, false),
+		Entry("a description Prefect lacks", prefectiov1.PrefectWorkQueueSpec{Description: new("nightly")}, prefect.WorkQueue{}, false),
+		Entry("a different isPaused", prefectiov1.PrefectWorkQueueSpec{IsPaused: new(true)}, remoteQueue, false),
+		Entry("an isPaused Prefect lacks", prefectiov1.PrefectWorkQueueSpec{IsPaused: new(false)}, prefect.WorkQueue{}, false),
+	)
+
 	Context("When a PrefectWorkQueue that created its queue is deleted", func() {
 		It("Should delete the queue in Prefect and remove the finalizer", func() {
 			fresh := syncedWorkQueue()
