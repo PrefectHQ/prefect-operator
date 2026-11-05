@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -1401,10 +1402,18 @@ var _ = Describe("PrefectServer controller", func() {
 					Scheme: k8sClient.Scheme(),
 				}
 
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+
+				By("waiting for the migration Job before creating the Deployment")
+				Expect(result.RequeueAfter).To(Equal(migrationJobPollInterval))
+				err = k8sClient.Get(ctx, types.NamespacedName{Namespace: namespaceName, Name: "prefect-on-postgres"}, &appsv1.Deployment{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "the Deployment should not exist yet, got %v", err)
+
+				migrateAndReconcile(ctx, prefectserver)
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
 				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
@@ -1415,9 +1424,6 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      desiredMigrationJob.Name,
 					}, migrateJob)
 				}).Should(Succeed())
-
-				migrateJob.Status.Succeeded = 1
-				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
 
 				deployment = &appsv1.Deployment{}
 				Eventually(func() error {
@@ -1469,11 +1475,9 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(condition.Message).To(Equal("MigrationJob was created"))
 				})
 
-				DescribeTable("on a later reconcile, should wait for the migration Job only while it runs",
-					func(succeeded, failed int32, waiting bool) {
-						migrateJob.Status.Succeeded = succeeded
-						migrateJob.Status.Failed = failed
-						Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
+				DescribeTable("on a later reconcile, should go on only once the migration Job completes",
+					func(status batchv1.JobStatus, done bool, reason string) {
+						setMigrationJobStatus(ctx, prefectserver, status)
 
 						reconciler := &PrefectServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
 						result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
@@ -1482,18 +1486,19 @@ var _ = Describe("PrefectServer controller", func() {
 						Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 						condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
 						Expect(condition).NotTo(BeNil())
-						if waiting {
-							Expect(result.RequeueAfter).To(Equal(20 * time.Second))
-							Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-							Expect(condition.Reason).To(Equal("MigrationJobAlreadyExists"))
-						} else {
+						Expect(condition.Reason).To(Equal(reason))
+						if done {
 							Expect(result.RequeueAfter).To(BeZero())
 							Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+						} else {
+							Expect(result.RequeueAfter).To(Equal(migrationJobPollInterval))
+							Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 						}
 					},
-					Entry("while it is still running", int32(0), int32(0), true),
-					Entry("not once it has succeeded", int32(1), int32(0), false),
-					Entry("not once it has failed", int32(0), int32(1), false),
+					Entry("waits while it runs", migrationRunning, false, "MigrationJobAlreadyExists"),
+					Entry("waits while it retries a failed pod", migrationRetrying, false, "MigrationJobAlreadyExists"),
+					Entry("goes on once it completes", migrationComplete, true, "MigrationJobCreated"),
+					Entry("stops once it fails", migrationFailed, false, "MigrationJobFailed"),
 				)
 			})
 
@@ -1636,6 +1641,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				migrateAndReconcile(ctx, prefectserver)
 
 				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
@@ -1717,6 +1723,7 @@ var _ = Describe("PrefectServer controller", func() {
 
 		Context("When updating a server backed by PostgreSQL", func() {
 			var controllerReconciler *PrefectServerReconciler
+			newSetting := corev1.EnvVar{Name: "PREFECT_SOME_SETTING", Value: "some-value"}
 			BeforeEach(func() {
 				prefectserver = &prefectiov1.PrefectServer{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1740,65 +1747,29 @@ var _ = Describe("PrefectServer controller", func() {
 					Scheme: k8sClient.Scheme(),
 				}
 
-				// Reconcile once to create the server
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
+				// Create the server, then change a setting. The new setting
+				// needs a new migration Job before the Deployment can change.
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				migrateAndReconcile(ctx, prefectserver)
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
-				// Set the first migration Job to be complete
-				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
-				migrateJob := &batchv1.Job{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: namespaceName,
-						Name:      desiredMigrationJob.Name,
-					}, migrateJob)
-				}).Should(Succeed())
-				migrateJob.Status.Succeeded = 1
-				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
-
-				prefectserver.Spec.Settings = []corev1.EnvVar{
-					{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
-				}
+				prefectserver.Spec.Settings = []corev1.EnvVar{newSetting}
 				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
 
-				// Reconcile again to update the server
-				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 				Expect(err).NotTo(HaveOccurred())
-
-				// Set the second migration Job to be complete
-				_, _, desiredMigrationJob, _ = controllerReconciler.prefectServerDeployment(prefectserver)
-				migrateJob = &batchv1.Job{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: namespaceName,
-						Name:      desiredMigrationJob.Name,
-					}, migrateJob)
-				}).Should(Succeed())
-				migrateJob.Status.Succeeded = 1
-				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
+				Expect(result.RequeueAfter).To(Equal(migrationJobPollInterval))
 			})
 
-			It("should update the Deployment with the new setting", func() {
+			deploymentEnv := func() []corev1.EnvVar {
+				GinkgoHelper()
 				deployment := &appsv1.Deployment{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: namespaceName,
-						Name:      "prefect-on-postgres",
-					}, deployment)
-				}).Should(Succeed())
-
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespaceName, Name: "prefect-on-postgres"}, deployment)).To(Succeed())
 				Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-				container := deployment.Spec.Template.Spec.Containers[0]
-				Expect(container.Env).To(ContainElement(corev1.EnvVar{
-					Name:  "PREFECT_SOME_SETTING",
-					Value: "some-value",
-				}))
-			})
+				return deployment.Spec.Template.Spec.Containers[0].Env
+			}
 
 			It("should create new migration Job with the new setting", func() {
 				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
@@ -1811,39 +1782,41 @@ var _ = Describe("PrefectServer controller", func() {
 				}).Should(Succeed())
 				Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 				container := job.Spec.Template.Spec.Containers[0]
-				Expect(container.Env).To(ContainElement(corev1.EnvVar{
-					Name:  "PREFECT_SOME_SETTING",
-					Value: "some-value",
-				}))
+				Expect(container.Env).To(ContainElement(newSetting))
+			})
+
+			It("should keep the Deployment as it was while the new migration Job runs", func() {
+				Expect(deploymentEnv()).NotTo(ContainElement(newSetting))
+			})
+
+			It("should update the Deployment once the new migration Job completes", func() {
+				migrateAndReconcile(ctx, prefectserver)
+				Expect(deploymentEnv()).To(ContainElement(newSetting))
+			})
+
+			It("should keep the Deployment as it was when the new migration Job fails", func() {
+				setMigrationJobStatus(ctx, prefectserver, migrationFailed)
+				result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(migrationJobPollInterval))
+				Expect(deploymentEnv()).NotTo(ContainElement(newSetting))
+
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+				Expect(condition).NotTo(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(condition.Reason).To(Equal("MigrationJobFailed"))
+				Expect(condition.Message).To(ContainSubstring("Job has reached the specified backoff limit"))
 			})
 
 			It("should do nothing if an active migration Job already exists", func() {
-				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
-				migrateJob := &batchv1.Job{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: namespaceName,
-						Name:      desiredMigrationJob.Name,
-					}, migrateJob)
-				}).Should(Succeed())
-
-				migrateJob.Status.Succeeded = 0
-				migrateJob.Status.Failed = 0
-				Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: name,
-				})
+				migrateJob := setMigrationJobStatus(ctx, prefectserver, migrationRunning)
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 				Expect(err).NotTo(HaveOccurred())
 
-				migrateJob2 := &batchv1.Job{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: namespaceName,
-						Name:      desiredMigrationJob.Name,
-					}, migrateJob2)
-				}).Should(Succeed())
-
-				Expect(migrateJob2.Generation).To(Equal(migrateJob.Generation))
+				after := &batchv1.Job{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(migrateJob), after)).To(Succeed())
+				Expect(after.Generation).To(Equal(migrateJob.Generation))
 			})
 		})
 
@@ -1881,6 +1854,7 @@ var _ = Describe("PrefectServer controller", func() {
 					NamespacedName: name,
 				})
 				Expect(err).NotTo(HaveOccurred())
+				migrateAndReconcile(ctx, prefectserver)
 			})
 
 			It("should not change a deployment if nothing has changed", func() {
@@ -2138,3 +2112,49 @@ var _ = Describe("PrefectServer controller", func() {
 		})
 	})
 })
+
+// Migration Job statuses as the Job controller sets them. A failed pod alone
+// leaves the Job running; only the Complete or Failed condition ends it.
+var (
+	migrationRunning  = batchv1.JobStatus{Active: 1}
+	migrationRetrying = batchv1.JobStatus{Active: 1, Failed: 1}
+	migrationComplete = batchv1.JobStatus{
+		Succeeded:  1,
+		Conditions: []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue}},
+	}
+	migrationFailed = batchv1.JobStatus{
+		Failed: 7,
+		Conditions: []batchv1.JobCondition{{
+			Type:    batchv1.JobFailed,
+			Status:  corev1.ConditionTrue,
+			Reason:  "BackoffLimitExceeded",
+			Message: "Job has reached the specified backoff limit",
+		}},
+	}
+)
+
+// setMigrationJobStatus sets the status of the server's current migration Job
+// and returns the Job. Envtest runs no Job controller to do it.
+func setMigrationJobStatus(ctx context.Context, server *prefectiov1.PrefectServer, status batchv1.JobStatus) *batchv1.Job {
+	GinkgoHelper()
+	job := &batchv1.Job{}
+	key := types.NamespacedName{
+		Namespace: server.Namespace,
+		Name:      (&PrefectServerReconciler{}).postgresMigrationJob(server).Name,
+	}
+	Expect(k8sClient.Get(ctx, key, job)).To(Succeed())
+	job.Status = *status.DeepCopy()
+	Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+	return job
+}
+
+// migrateAndReconcile completes the server's current migration Job and
+// reconciles, which rolls out the server.
+func migrateAndReconcile(ctx context.Context, server *prefectiov1.PrefectServer) {
+	GinkgoHelper()
+	setMigrationJobStatus(ctx, server, migrationComplete)
+	reconciler := &PrefectServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+	result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(server)})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(result.RequeueAfter).To(BeZero(), "the server should not be waiting on its migration")
+}

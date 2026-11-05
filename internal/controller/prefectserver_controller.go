@@ -190,6 +190,13 @@ func (r *PrefectServerReconciler) reconcilePVC(ctx context.Context, server *pref
 	return nil, nil
 }
 
+// migrationJobPollInterval is how often the reconciler checks on a migration
+// Job. It doesn't watch Jobs, so it requeues until the Job is done.
+const migrationJobPollInterval = 20 * time.Second
+
+// reconcileMigrationJob creates the server's migration Job and holds the
+// server's rollout until the Job completes, so a new server never starts on a
+// database that has not been migrated for it.
 func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, server *prefectiov1.PrefectServer, desiredMigrationJob *batchv1.Job, log logr.Logger) (*ctrl.Result, error) {
 	objName := constants.MigrationJob
 
@@ -209,12 +216,25 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 			return &ctrl.Result{}, err
 		}
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.Created(objName))
+		return &ctrl.Result{RequeueAfter: migrationJobPollInterval}, nil
 
 	case err != nil:
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnknownError(objName, err))
 		return &ctrl.Result{}, err
+	}
 
-	case !isMigrationJobFinished(foundMigrationJob):
+	if failed := jobCondition(foundMigrationJob, batchv1.JobFailed); failed != nil {
+		// Kubernetes deletes the failed Job when its TTL runs out, and the
+		// next reconcile creates it again.
+		log.Info("Migration Job failed, not rolling out the server", "name", foundMigrationJob.Name, "reason", failed.Reason)
+		meta.SetStatusCondition(
+			&server.Status.Conditions,
+			conditions.Failed(objName, fmt.Sprintf("migration Job %s failed: %s", foundMigrationJob.Name, failed.Message)),
+		)
+		return &ctrl.Result{RequeueAfter: migrationJobPollInterval}, nil
+	}
+
+	if jobCondition(foundMigrationJob, batchv1.JobComplete) == nil {
 		log.Info("Waiting on active migration Job to complete", "name", foundMigrationJob.Name)
 		meta.SetStatusCondition(
 			&server.Status.Conditions,
@@ -223,17 +243,13 @@ func (r *PrefectServerReconciler) reconcileMigrationJob(ctx context.Context, ser
 				fmt.Sprintf("migration Job %s is still active", foundMigrationJob.Name),
 			),
 		)
-
-		// We'll requeue after 20 seconds to check on the migration Job's status
-		return &ctrl.Result{RequeueAfter: 20 * time.Second}, nil
-
-	default:
-		if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
-			meta.SetStatusCondition(&server.Status.Conditions, conditions.Updated(objName))
-		}
+		return &ctrl.Result{RequeueAfter: migrationJobPollInterval}, nil
 	}
 
-	return nil, err
+	if !meta.IsStatusConditionTrue(server.Status.Conditions, "MigrationJobReconciled") {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.Updated(objName))
+	}
+	return nil, nil
 }
 
 func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, server *prefectiov1.PrefectServer, desiredDeployment appsv1.Deployment, log logr.Logger) (*ctrl.Result, error) {
@@ -327,15 +343,17 @@ func (r *PrefectServerReconciler) reconcileService(ctx context.Context, server *
 	return nil, nil
 }
 
-func isMigrationJobFinished(foundMigrationJob *batchv1.Job) bool {
-	switch {
-	case foundMigrationJob.Status.Succeeded > 0:
-		return true
-	case foundMigrationJob.Status.Failed > 0:
-		return true
-	default:
-		return false
+// jobCondition returns the Job's condition of the given type if it is true,
+// or nil. The Job controller sets Complete or Failed only once the Job is
+// done. A failed pod alone does not fail the Job, which retries the pod
+// until it reaches its backoff limit.
+func jobCondition(job *batchv1.Job, conditionType batchv1.JobConditionType) *batchv1.JobCondition {
+	for i := range job.Status.Conditions {
+		if c := &job.Status.Conditions[i]; c.Type == conditionType && c.Status == corev1.ConditionTrue {
+			return c
+		}
 	}
+	return nil
 }
 
 func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job, error) {
