@@ -1,8 +1,6 @@
 package v1
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -31,12 +29,4 @@ type JsonPatch struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
 	Value *runtime.RawExtension `json:"value,omitempty"`
-}
-
-// TODO - no admission webhook yet
-func (spec *RawValueSource) Validate() error {
-	if spec.Value != nil && spec.ConfigMap != nil {
-		return fmt.Errorf("value and configMap are mutually exclusive")
-	}
-	return nil
 }
