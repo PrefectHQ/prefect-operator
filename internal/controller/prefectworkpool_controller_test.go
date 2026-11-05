@@ -1208,6 +1208,58 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		})
 	})
 
+	Context("When a job template ConfigMap changes", func() {
+		var configMap *corev1.ConfigMap
+
+		// createPool creates a PrefectWorkPool with the given job template.
+		createPool := func(namespace, name string, template *prefectiov1.RawValueSource) {
+			Expect(k8sClient.Create(ctx, &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+				Spec:       prefectiov1.PrefectWorkPoolSpec{BaseJobTemplate: template},
+			})).To(Succeed())
+		}
+		fromConfigMap := func(name string) *prefectiov1.RawValueSource {
+			return &prefectiov1.RawValueSource{ConfigMap: &corev1.ConfigMapKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  "baseJobTemplate.json",
+			}}
+		}
+
+		BeforeEach(func() {
+			configMap = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "job-template", Namespace: namespaceName}}
+		})
+
+		It("should enqueue only the work pools in its namespace that use it", func() {
+			otherNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName + "-other"}}
+			Expect(k8sClient.Create(ctx, otherNamespace)).To(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, otherNamespace)
+
+			createPool(namespaceName, "uses-it", fromConfigMap("job-template"))
+			createPool(namespaceName, "uses-another", fromConfigMap("other-template"))
+			createPool(namespaceName, "inline", &prefectiov1.RawValueSource{
+				Value: &runtime.RawExtension{Raw: baseJobTemplateJson},
+			})
+			createPool(namespaceName, "no-template", nil)
+			createPool(otherNamespace.Name, "uses-a-namesake", fromConfigMap("job-template"))
+
+			Expect(reconciler.mapConfigMapToWorkPools(ctx, configMap)).To(ConsistOf(
+				reconcile.Request{NamespacedName: types.NamespacedName{Namespace: namespaceName, Name: "uses-it"}},
+			))
+		})
+
+		It("should enqueue nothing when no work pool uses it", func() {
+			createPool(namespaceName, "no-template", nil)
+			Expect(reconciler.mapConfigMapToWorkPools(ctx, configMap)).To(BeEmpty())
+		})
+
+		It("should ignore an object that isn't a ConfigMap", func() {
+			createPool(namespaceName, "uses-it", fromConfigMap("job-template"))
+			Expect(reconciler.mapConfigMapToWorkPools(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "job-template", Namespace: namespaceName},
+			})).To(BeEmpty())
+		})
+	})
+
 	Context("When testing error scenarios", func() {
 		BeforeEach(func() {
 			prefectWorkPool = &prefectiov1.PrefectWorkPool{
