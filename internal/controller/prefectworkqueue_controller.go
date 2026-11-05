@@ -169,11 +169,7 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 			// requeue until it exists, mirroring how the automation controller
 			// waits for a referenced deployment.
 			log.V(1).Info("Work pool not found, requeuing", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
-			r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", workQueue.Spec.WorkPoolName))
-			workQueue.Status.Ready = false
-			if updateErr := r.Status().Update(ctx, workQueue); updateErr != nil {
-				log.Error(updateErr, "Failed to update work queue status", "workQueue", workQueue.Name)
-			}
+			r.notSynced(ctx, workQueue, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", workQueue.Spec.WorkPoolName))
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		if err == nil {
@@ -204,11 +200,7 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 		err = prefectClient.UpdateWorkQueue(ctx, workQueue.Spec.WorkPoolName, workQueue.Spec.Name, spec, clears)
 		if errors.Is(err, prefect.ErrNotFound) {
 			// Deleted between the GET and the PATCH; the next pass recreates it.
-			r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "Recreating", "Work queue was deleted in Prefect; recreating")
-			workQueue.Status.Ready = false
-			if updateErr := r.Status().Update(ctx, workQueue); updateErr != nil {
-				log.Error(updateErr, "Failed to update work queue status", "workQueue", workQueue.Name)
-			}
+			r.notSynced(ctx, workQueue, "Recreating", "Work queue was deleted in Prefect; recreating")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		if err == nil {
@@ -218,11 +210,7 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 
 	if err != nil {
 		log.Error(err, "Failed to sync work queue with Prefect", "workQueue", workQueue.Name)
-		r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-		workQueue.Status.Ready = false
-		if updateErr := r.Status().Update(ctx, workQueue); updateErr != nil {
-			log.Error(updateErr, "Failed to update work queue status", "workQueue", workQueue.Name)
-		}
+		r.notSynced(ctx, workQueue, "SyncError", err.Error())
 		return ctrl.Result{RequeueAfter: RequeueIntervalError}, nil
 	}
 
@@ -299,6 +287,16 @@ func workQueueMatches(desired prefectiov1.PrefectWorkQueueSpec, remote *prefect.
 		return false
 	}
 	return true
+}
+
+// notSynced records why the work queue is not synced in the Synced condition,
+// marks it not ready, and saves the status so both show on the resource.
+func (r *PrefectWorkQueueReconciler) notSynced(ctx context.Context, workQueue *prefectiov1.PrefectWorkQueue, reason, message string) {
+	r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, reason, message)
+	workQueue.Status.Ready = false
+	if err := r.Status().Update(ctx, workQueue); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to update work queue status", "workQueue", workQueue.Name)
+	}
 }
 
 func (r *PrefectWorkQueueReconciler) setCondition(workQueue *prefectiov1.PrefectWorkQueue, conditionType string, status metav1.ConditionStatus, reason, message string) {
