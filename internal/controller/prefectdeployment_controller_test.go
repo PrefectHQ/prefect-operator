@@ -348,6 +348,22 @@ var _ = Describe("PrefectDeployment controller", func() {
 			}
 		})
 
+		It("Should mark the deployment not ready when a later sync fails", func() {
+			Expect(prefectDeployment.Status.Ready).To(BeTrue())
+			prefectAPI.Fail(updateDeploymentRoute, http.StatusInternalServerError)
+
+			prefectDeployment.Spec.Deployment.Description = new("changed")
+			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError(ContainSubstring("status 500")))
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("SyncError"))
+			Expect(prefectDeployment.Status.Ready).To(BeFalse())
+		})
+
 		Context("once the resync interval has passed", func() {
 			BeforeEach(func() {
 				prefectDeployment.Status.LastSyncTime = &metav1.Time{Time: time.Now().Add(-2 * testResyncInterval)}

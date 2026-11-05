@@ -170,11 +170,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	}
 	if workPool == nil {
 		log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
-		deployment.Status.Ready = false
-		if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
-			log.Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
-		}
+		r.notSynced(ctx, deployment, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -379,15 +375,21 @@ func equalParameters(a, b map[string]any) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// syncFailed records why a sync failed in the Synced condition and saves it,
-// so the reason shows on the resource, then returns err so the request is
+// syncFailed records why a sync failed and returns err so the request is
 // retried with backoff.
 func (r *PrefectDeploymentReconciler) syncFailed(ctx context.Context, deployment *prefectiov1.PrefectDeployment, reason string, err error) (ctrl.Result, error) {
-	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, reason, err.Error())
-	if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
-		log.FromContext(ctx).Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
-	}
+	r.notSynced(ctx, deployment, reason, err.Error())
 	return ctrl.Result{}, err
+}
+
+// notSynced records why the deployment is not synced in the Synced condition,
+// marks it not ready, and saves the status so both show on the resource.
+func (r *PrefectDeploymentReconciler) notSynced(ctx context.Context, deployment *prefectiov1.PrefectDeployment, reason, message string) {
+	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, reason, message)
+	deployment.Status.Ready = false
+	if err := r.Status().Update(ctx, deployment); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to update deployment status", "deployment", deployment.Name)
+	}
 }
 
 // setCondition sets a condition on the deployment status
