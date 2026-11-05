@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,6 +35,12 @@ import (
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
+	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
+)
+
+const (
+	createWorkQueueRoute = "POST /work_pools/{work_pool_name}/queues"
+	updateWorkQueueRoute = "PATCH /work_pools/{work_pool_name}/queues/{name}"
 )
 
 var _ = Describe("PrefectWorkQueue controller", func() {
@@ -43,7 +51,8 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		name          types.NamespacedName
 		workQueue     *prefectiov1.PrefectWorkQueue
 		reconciler    *PrefectWorkQueueReconciler
-		mockClient    *prefect.MockClient
+		prefectAPI    *prefecttest.Server
+		prefectClient *prefect.Client
 	)
 
 	// syncedWorkQueue drives the reconciler through finalizer + first sync and
@@ -98,15 +107,17 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			},
 		}
 
-		mockClient = prefect.NewMockClient()
+		prefectAPI = prefecttest.NewServer()
+		DeferCleanup(prefectAPI.Close)
+		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
 		// The pool-scoped queue routes 404 without the pool, so seed it.
-		_, err := mockClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "example-pool", Type: "kubernetes"})
+		_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "example-pool", Type: "kubernetes"})
 		Expect(err).NotTo(HaveOccurred())
 
 		reconciler = &PrefectWorkQueueReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         mockClient,
+			PrefectClient:         prefectClient,
 			DefaultResyncInterval: testResyncInterval,
 		}
 	})
@@ -158,7 +169,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(syncedCondition.Status).To(Equal(metav1.ConditionTrue))
 
 			By("The queue exists in Prefect with the declared fields")
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote).NotTo(BeNil())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(1))))
@@ -168,7 +179,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 	Context("When the queue already exists in Prefect", func() {
 		It("Should adopt it and patch only the drifting fields", func() {
 			By("Seeding an implicitly-created queue (no concurrency limit)")
-			existing, err := mockClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{
+			existing, err := prefectClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{
 				Name:        "ingest",
 				Description: new("created by a deployment"),
 			})
@@ -182,8 +193,8 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(fresh.Status.Adopted).To(HaveValue(BeTrue()))
 
 			By("The declared concurrency limit was applied")
-			Expect(mockClient.UpdateWorkQueueCalls).To(Equal(1))
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			Expect(prefectAPI.Calls(updateWorkQueueRoute)).To(Equal(1))
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(1))))
 
@@ -213,7 +224,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(cond.Reason).To(Equal("WorkPoolNotFound"))
 
 			By("Seeding the pool into Prefect")
-			_, err = mockClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "missing-pool", Type: "kubernetes"})
+			_, err = prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "missing-pool", Type: "kubernetes"})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Now it syncs")
@@ -229,7 +240,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 	Context("When the remote queue already matches", func() {
 		It("Should not PATCH on drift-detection resyncs", func() {
 			fresh := syncedWorkQueue()
-			Expect(mockClient.UpdateWorkQueueCalls).To(Equal(0))
+			Expect(prefectAPI.Calls(updateWorkQueueRoute)).To(Equal(0))
 
 			By("Aging LastSyncTime past the resync interval")
 			aged := metav1.NewTime(time.Now().Add(-2 * testResyncInterval))
@@ -241,7 +252,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			By("The resync re-checked Prefect but did not PATCH")
-			Expect(mockClient.UpdateWorkQueueCalls).To(Equal(0))
+			Expect(prefectAPI.Calls(updateWorkQueueRoute)).To(Equal(0))
 		})
 	})
 
@@ -261,7 +272,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(fresh.Status.Ready).To(BeTrue())
 			Expect(*fresh.Status.Id).To(Equal(initialID))
 
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(4))))
 		})
@@ -273,7 +284,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			fresh := syncedWorkQueue()
 			Expect(fresh.Status.AppliedFields).To(ConsistOf("concurrencyLimit", "isPaused"))
 
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(1))))
 			Expect(remote.IsPaused).To(HaveValue(BeTrue()))
@@ -288,7 +299,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			By("The limit is cleared and the queue unpaused in Prefect")
-			remote, err = mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err = prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.ConcurrencyLimit).To(BeNil())
 			Expect(remote.IsPaused).To(HaveValue(BeFalse()))
@@ -304,7 +315,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			originalID := *fresh.Status.Id
 
 			By("Deleting the queue directly in Prefect")
-			Expect(mockClient.DeleteWorkQueue(ctx, "example-pool", "ingest")).To(Succeed())
+			Expect(prefectClient.DeleteWorkQueue(ctx, "example-pool", "ingest")).To(Succeed())
 
 			By("Changing the spec to force a sync")
 			fresh.Spec.ConcurrencyLimit = new(int32(2))
@@ -320,7 +331,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(*fresh.Status.Id).NotTo(Equal(originalID))
 			Expect(fresh.Status.Ready).To(BeTrue())
 
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(2))))
 		})
@@ -340,13 +351,13 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			By("A queue exists under the new name")
-			renamed, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			renamed, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(renamed).NotTo(BeNil())
 			Expect(renamed.ConcurrencyLimit).To(HaveValue(Equal(int32(1))))
 
 			By("The old queue was not renamed, deleted, or modified")
-			old, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			old, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(old).NotTo(BeNil())
 			Expect(old.ID).To(Equal(originalID))
@@ -363,7 +374,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(fresh.Status.AppliedFields).To(ConsistOf("concurrencyLimit"))
 
 			By("Seeding an existing queue under the target name")
-			existing, err := mockClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{
+			existing, err := prefectClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{
 				Name:             "ingest-v2",
 				ConcurrencyLimit: new(int32(9)),
 			})
@@ -383,7 +394,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(fresh.Status.AppliedFields).To(BeEmpty())
 
 			By("The pending clear was not applied to a queue that never had our limit")
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(9))))
 
@@ -391,7 +402,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(k8sClient.Delete(ctx, fresh)).To(Succeed())
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			remote, err = mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			remote, err = prefectClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote).NotTo(BeNil())
 			Expect(remote.ID).To(Equal(existing.ID))
@@ -399,7 +410,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 
 		It("Should mark created when renaming an adopted queue onto a new name", func() {
 			By("Seeding an existing queue so the CR adopts it")
-			_, err := mockClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{Name: "ingest"})
+			_, err := prefectClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{Name: "ingest"})
 			Expect(err).NotTo(HaveOccurred())
 
 			fresh := syncedWorkQueue()
@@ -418,12 +429,12 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(k8sClient.Delete(ctx, fresh)).To(Succeed())
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest-v2")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote).To(BeNil())
 
 			By("The originally adopted queue is untouched")
-			old, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			old, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(old).NotTo(BeNil())
 		})
@@ -431,8 +442,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 
 	Context("When Prefect returns a sync error", func() {
 		It("Should set SyncError and requeue on the error interval", func() {
-			mockClient.ShouldFailCreate = true
-			mockClient.FailureMessage = "simulated Prefect API error"
+			prefectAPI.Fail(createWorkQueueRoute, http.StatusInternalServerError)
 
 			Expect(k8sClient.Create(ctx, workQueue)).To(Succeed())
 
@@ -468,7 +478,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(err).To(HaveOccurred())
 
 			By("The queue is gone from Prefect")
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote).To(BeNil())
 		})
@@ -477,7 +487,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 	Context("When a PrefectWorkQueue that adopted its queue is deleted", func() {
 		It("Should leave the queue in place in Prefect", func() {
 			By("Seeding an existing queue so the CR adopts it")
-			_, err := mockClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{Name: "ingest"})
+			_, err := prefectClient.CreateWorkQueue(ctx, "example-pool", &prefect.WorkQueueSpec{Name: "ingest"})
 			Expect(err).NotTo(HaveOccurred())
 
 			fresh := syncedWorkQueue()
@@ -493,7 +503,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			Expect(err).To(HaveOccurred())
 
 			By("The adopted queue survives in Prefect, limit intact")
-			remote, err := mockClient.GetWorkQueue(ctx, "example-pool", "ingest")
+			remote, err := prefectClient.GetWorkQueue(ctx, "example-pool", "ingest")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote).NotTo(BeNil())
 			Expect(remote.ConcurrencyLimit).To(HaveValue(Equal(int32(1))))

@@ -19,8 +19,11 @@ package prefect
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -701,13 +704,16 @@ var _ = Describe("UpdateDeploymentStatus", func() {
 var _ = Describe("GetFlowIDFromDeployment", func() {
 	var (
 		ctx           context.Context
-		mockClient    *MockClient
+		prefectAPI    *prefecttest.Server
+		client        *Client
 		k8sDeployment *prefectiov1.PrefectDeployment
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		mockClient = NewMockClient()
+		prefectAPI = prefecttest.NewServer()
+		DeferCleanup(prefectAPI.Close)
+		client = NewClient(prefectAPI.URL, "", logr.Discard())
 		k8sDeployment = &prefectiov1.PrefectDeployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      testDeploymentName,
@@ -724,7 +730,7 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 	})
 
 	It("Should get flow ID successfully", func() {
-		flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+		flowID, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(flowID).NotTo(BeEmpty())
@@ -732,7 +738,7 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 
 	It("Should name flows correctly", func() {
 		By("creating a deployment")
-		flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+		flowID, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(flowID).NotTo(BeEmpty())
@@ -742,7 +748,7 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 			Name: "test_flow",
 		}
 
-		flow, err := mockClient.CreateOrGetFlow(ctx, flowSpec)
+		flow, err := client.CreateOrGetFlow(ctx, flowSpec)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(flow).NotTo(BeNil())
 
@@ -751,20 +757,19 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 	})
 
 	It("Should handle flow creation error", func() {
-		mockClient.ShouldFailFlowCreate = true
-		mockClient.FailureMessage = "mock flow error"
+		prefectAPI.Fail("POST /flows/", http.StatusInternalServerError)
 
-		flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+		flowID, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to create or get flow"))
-		Expect(err.Error()).To(ContainSubstring("mock flow error"))
+		Expect(err.Error()).To(ContainSubstring("status 500"))
 		Expect(flowID).To(BeEmpty())
 	})
 
 	It("should handle invalid entrypoint names", func() {
 		k8sDeployment.Spec.Deployment.Entrypoint = "foo_test.py"
-		flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+		flowID, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 
 		Expect(err).To(HaveOccurred())
 		Expect(flowID).To(BeEmpty())
@@ -774,10 +779,10 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		It("Should use entrypoint suffix as flow name when FlowName is nil", func() {
 			k8sDeployment.Spec.Deployment.FlowName = nil
 
-			_, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+			_, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 			Expect(err).NotTo(HaveOccurred())
 
-			flow, err := mockClient.CreateOrGetFlow(ctx, &FlowSpec{Name: "test_flow"})
+			flow, err := client.CreateOrGetFlow(ctx, &FlowSpec{Name: "test_flow"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(flow).NotTo(BeNil())
 		})
@@ -785,16 +790,16 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		It("Should use FlowName when set, ignoring entrypoint suffix", func() {
 			k8sDeployment.Spec.Deployment.FlowName = new("my-custom-flow")
 
-			flowID, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+			flowID, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(flowID).NotTo(BeEmpty())
 
-			flow, err := mockClient.CreateOrGetFlow(ctx, &FlowSpec{Name: "my-custom-flow"})
+			flow, err := client.CreateOrGetFlow(ctx, &FlowSpec{Name: "my-custom-flow"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(flow.ID).To(Equal(flowID))
 
 			// The entrypoint suffix ("test_flow") should not have been registered
-			noFlow, err := mockClient.GetFlowByName(ctx, "test_flow")
+			noFlow, err := client.GetFlowByName(ctx, "test_flow")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(noFlow).To(BeNil())
 		})
@@ -803,10 +808,10 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 			empty := ""
 			k8sDeployment.Spec.Deployment.FlowName = &empty
 
-			_, err := GetFlowIDFromDeployment(ctx, mockClient, k8sDeployment)
+			_, err := GetFlowIDFromDeployment(ctx, client, k8sDeployment)
 			Expect(err).NotTo(HaveOccurred())
 
-			flow, err := mockClient.CreateOrGetFlow(ctx, &FlowSpec{Name: "test_flow"})
+			flow, err := client.CreateOrGetFlow(ctx, &FlowSpec{Name: "test_flow"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(flow).NotTo(BeNil())
 		})
