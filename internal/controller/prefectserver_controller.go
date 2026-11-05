@@ -347,6 +347,7 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 	}
 
 	deploymentSpec.Template.Spec.Affinity = server.Spec.Affinity
+	deploymentSpec.Template.Spec.Tolerations = server.Spec.Tolerations
 
 	// Append any extra containers into the Deployment if configured.
 	if server.Spec.ExtraContainers != nil {
@@ -586,6 +587,8 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 			},
 			Spec: corev1.PodSpec{
 				NodeSelector: server.Spec.NodeSelector,
+				Tolerations:  server.Spec.Tolerations,
+				Affinity:     server.Spec.Affinity,
 				InitContainers: []corev1.Container{
 					r.initContainerWaitForPostgres(server),
 				},

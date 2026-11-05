@@ -40,6 +40,10 @@ import (
 )
 
 var _ = Describe("PrefectServer controller", func() {
+	tolerations := []corev1.Toleration{
+		{Key: "dedicated", Operator: corev1.TolerationOpEqual, Value: "prefect", Effect: corev1.TaintEffectNoSchedule},
+	}
+
 	var (
 		ctx           context.Context
 		namespace     *corev1.Namespace
@@ -233,6 +237,7 @@ var _ = Describe("PrefectServer controller", func() {
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
+						Tolerations: tolerations,
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -423,6 +428,10 @@ var _ = Describe("PrefectServer controller", func() {
 
 				It("should have the correct nodeSelector value", func() {
 					Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("some", "node-selector"))
+				})
+
+				It("should have the correct tolerations", func() {
+					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 				})
 			})
 
@@ -1035,6 +1044,7 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-sqlite",
 					},
 					Spec: prefectiov1.PrefectServerSpec{
+						Tolerations: tolerations,
 						SQLite: &prefectiov1.SQLiteConfiguration{
 							StorageClassName: "standard",
 							Size:             resource.MustParse("512Mi"),
@@ -1114,6 +1124,10 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			Describe("the Deployment", func() {
+				It("should have the correct tolerations", func() {
+					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
 				It("should use persistent storage", func() {
 					Expect(deployment.Spec.Template.Spec.Volumes).To(ContainElement(
 						corev1.Volume{
@@ -1316,6 +1330,18 @@ var _ = Describe("PrefectServer controller", func() {
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
+						Tolerations: tolerations,
+						Affinity: &corev1.Affinity{
+							NodeAffinity: &corev1.NodeAffinity{
+								RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+									NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{Key: "dedicated", Operator: corev1.NodeSelectorOpIn, Values: []string{"prefect"}},
+										},
+									}},
+								},
+							},
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -1395,6 +1421,10 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			Describe("the Deployment", func() {
+				It("should have the correct tolerations", func() {
+					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
 				It("should not use persistent storage", func() {
 					Expect(deployment.Spec.Template.Spec.Volumes).To(BeEmpty())
 
@@ -1458,6 +1488,14 @@ var _ = Describe("PrefectServer controller", func() {
 
 				It("should have the correct nodeSelector value", func() {
 					Expect(migrateJob.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("some", "node-selector"))
+				})
+
+				It("should have the correct tolerations", func() {
+					Expect(migrateJob.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
+				It("should have the correct affinity", func() {
+					Expect(migrateJob.Spec.Template.Spec.Affinity).To(Equal(prefectserver.Spec.Affinity))
 				})
 			})
 		})
