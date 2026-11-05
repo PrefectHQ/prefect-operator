@@ -1260,6 +1260,29 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				seedPool()
 				prefectAPI.Fail(workerMetadataRoute, http.StatusInternalServerError)
 			}, "ConversionError", "failed to retrieve worker metadata"),
+			Entry("when the work pool lookup fails", func() {
+				prefectAPI.Fail(readWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the job template ConfigMap doesn't exist", func() {
+				prefectWorkPool.Spec.BaseJobTemplate = &prefectiov1.RawValueSource{
+					ConfigMap: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "job-template"},
+						Key:                  "baseJobTemplate.json",
+					},
+				}
+			}, "BaseJobTemplateError", `configmaps "job-template" not found`),
+			Entry("when the job template ConfigMap lacks the key", func() {
+				Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "job-template", Namespace: namespaceName},
+					Data:       map[string]string{"other.json": "{}"},
+				})).To(Succeed())
+				prefectWorkPool.Spec.BaseJobTemplate = &prefectiov1.RawValueSource{
+					ConfigMap: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "job-template"},
+						Key:                  "baseJobTemplate.json",
+					},
+				}
+			}, "BaseJobTemplateError", "can't find key baseJobTemplate.json in ConfigMap job-template"),
 		)
 	})
 })
