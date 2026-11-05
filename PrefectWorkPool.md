@@ -129,6 +129,13 @@ below 10s are clamped.<br/>
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>nodeSelector</b></td>
+        <td>map[string]string</td>
+        <td>
+          NodeSelector defines the node labels the worker pods must match in order to be scheduled.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectworkpoolspecresources">resources</a></b></td>
         <td>object</td>
         <td>
@@ -155,6 +162,13 @@ If not specified, the default ServiceAccount for the namespace will be used.<br/
         <td>[]object</td>
         <td>
           A list of environment variables to set on the Prefect Worker<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectworkpoolspectolerationsindex">tolerations</a></b></td>
+        <td>[]object</td>
+        <td>
+          Tolerations allow the worker pods to be scheduled onto nodes with matching taints.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -1869,7 +1883,8 @@ This field is mutually exclusive with `value`, and is effectively required if `v
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -2363,7 +2378,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -2883,6 +2899,14 @@ Name must be an IANA_SVC_NAME.<br/>
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>scheme</b></td>
         <td>string</td>
         <td>
@@ -3130,6 +3154,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -3423,6 +3455,16 @@ GRPC specifies a GRPC HealthCheckRequest.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>mode</b></td>
+        <td>string</td>
+        <td>
+          mode specifies the connection mode for the gRPC health probe.
+Set to "TLS" to use TLS without certificate verification.
+Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+If not specified, the probe uses a plaintext (insecure) connection.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>service</b></td>
         <td>string</td>
         <td>
@@ -3483,6 +3525,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -3813,6 +3863,16 @@ GRPC specifies a GRPC HealthCheckRequest.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>mode</b></td>
+        <td>string</td>
+        <td>
+          mode specifies the connection mode for the gRPC health probe.
+Set to "TLS" to use TLS without certificate verification.
+Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+If not specified, the probe uses a plaintext (insecure) connection.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>service</b></td>
         <td>string</td>
         <td>
@@ -3873,6 +3933,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -4727,6 +4795,16 @@ GRPC specifies a GRPC HealthCheckRequest.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>mode</b></td>
+        <td>string</td>
+        <td>
+          mode specifies the connection mode for the gRPC health probe.
+Set to "TLS" to use TLS without certificate verification.
+Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+If not specified, the probe uses a plaintext (insecure) connection.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>service</b></td>
         <td>string</td>
         <td>
@@ -4787,6 +4865,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -4926,8 +5012,7 @@ VolumeMount describes a mounting of a Volume within a container.
         <td><b>mountPath</b></td>
         <td>string</td>
         <td>
-          Path within the container at which the volume should be mounted.  Must
-not contain ':'.<br/>
+          Path within the container at which the volume should be mounted.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -4937,6 +5022,18 @@ not contain ':'.<br/>
           This must match the Name of a Volume.<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>bindMountOptions</b></td>
+        <td>[]string</td>
+        <td>
+          bindMountOptions is the list of additional bind mount options to apply when
+mounting this volume into the container. Allowed values are noexec,
+nodev, and nosuid. These are Linux mount options and have no effect on
+Windows nodes.
+This field is not supported with image volumes.
+This is an alpha field and requires enabling the VolumeBindMountOptions feature gate.<br/>
+        </td>
+        <td>false</td>
       </tr><tr>
         <td><b>mountPropagation</b></td>
         <td>string</td>
@@ -5264,7 +5361,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -5603,7 +5701,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -5808,6 +5907,74 @@ More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/nam
         <td>boolean</td>
         <td>
           Specify whether the Secret or its key must be defined<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectWorkPool.spec.tolerations[index]
+<sup><sup>[↩ Parent](#prefectworkpoolspec)</sup></sup>
+
+
+
+The pod this Toleration is attached to tolerates any taint that matches
+the triple <key,value,effect> using the matching operator <operator>.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>effect</b></td>
+        <td>string</td>
+        <td>
+          Effect indicates the taint effect to match. Empty means match all taint effects.
+When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          Key is the taint key that the toleration applies to. Empty means match all taint keys.
+If the key is empty, operator must be Exists; this combination means to match all values and all keys.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>operator</b></td>
+        <td>string</td>
+        <td>
+          Operator represents a key's relationship to the value.
+Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+Exists is equivalent to wildcard for value, so that a pod can
+tolerate all taints of a particular category.
+Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>tolerationSeconds</b></td>
+        <td>integer</td>
+        <td>
+          TolerationSeconds represents the period of time the toleration (which must be
+of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+it is not set, which means tolerate the taint forever (do not evict). Zero and
+negative values will be treated as 0 (evict immediately) by the system.<br/>
+          <br/>
+            <i>Format</i>: int64<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>value</b></td>
+        <td>string</td>
+        <td>
+          Value is the taint value the toleration matches to.
+If the operator is Exists, the value should be empty, otherwise just a regular string.<br/>
         </td>
         <td>false</td>
       </tr></tbody>

@@ -51,6 +51,12 @@ type PrefectWorkPoolSpec struct {
 	// Affinity defines the scheduling affinity/anti-affinity for the worker pods.
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
+	// Tolerations allow the worker pods to be scheduled onto nodes with matching taints.
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// NodeSelector defines the node labels the worker pods must match in order to be scheduled.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
 	// Resources defines the CPU and memory resources for each worker in the Work Pool
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 

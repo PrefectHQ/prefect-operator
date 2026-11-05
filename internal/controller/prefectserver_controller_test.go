@@ -40,6 +40,10 @@ import (
 )
 
 var _ = Describe("PrefectServer controller", func() {
+	tolerations := []corev1.Toleration{
+		{Key: "dedicated", Operator: corev1.TolerationOpEqual, Value: "prefect", Effect: corev1.TaintEffectNoSchedule},
+	}
+
 	var (
 		ctx           context.Context
 		namespace     *corev1.Namespace
@@ -233,6 +237,7 @@ var _ = Describe("PrefectServer controller", func() {
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
+						Tolerations: tolerations,
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -424,6 +429,10 @@ var _ = Describe("PrefectServer controller", func() {
 				It("should have the correct nodeSelector value", func() {
 					Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("some", "node-selector"))
 				})
+
+				It("should have the correct tolerations", func() {
+					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
 			})
 
 			Describe("the Service", func() {
@@ -532,6 +541,50 @@ var _ = Describe("PrefectServer controller", func() {
 					Name:  "PREFECT_SOME_SETTING",
 					Value: "some-value",
 				}))
+			})
+
+			It("should remove scheduling constraints cleared from the server", func() {
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				prefectserver.Spec.Tolerations = tolerations
+				prefectserver.Spec.NodeSelector = map[string]string{"keep": "this", "remove": "this"}
+				prefectserver.Spec.Affinity = &corev1.Affinity{
+					PodAntiAffinity: &corev1.PodAntiAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{
+							Weight: 1,
+							PodAffinityTerm: corev1.PodAffinityTerm{
+								TopologyKey:   "kubernetes.io/hostname",
+								LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "prefect-server"}},
+							},
+						}},
+					},
+				}
+				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				deployment := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, name, deployment)).To(Succeed())
+				Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKey("remove"))
+				Expect(deployment.Spec.Template.Spec.Affinity).NotTo(BeNil())
+
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				prefectserver.Spec.Tolerations = nil
+				prefectserver.Spec.NodeSelector = map[string]string{"keep": "this"}
+				prefectserver.Spec.Affinity = nil
+				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(k8sClient.Get(ctx, name, deployment)).To(Succeed())
+				Expect(deployment.Spec.Template.Spec.Tolerations).To(BeEmpty())
+				Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"keep": "this"}))
+				Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
 			})
 
 			It("should update the Deployment with new resource requirements", func() {
@@ -1035,6 +1088,7 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-sqlite",
 					},
 					Spec: prefectiov1.PrefectServerSpec{
+						Tolerations: tolerations,
 						SQLite: &prefectiov1.SQLiteConfiguration{
 							StorageClassName: "standard",
 							Size:             resource.MustParse("512Mi"),
@@ -1114,6 +1168,10 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			Describe("the Deployment", func() {
+				It("should have the correct tolerations", func() {
+					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
 				It("should use persistent storage", func() {
 					Expect(deployment.Spec.Template.Spec.Volumes).To(ContainElement(
 						corev1.Volume{
@@ -1316,6 +1374,24 @@ var _ = Describe("PrefectServer controller", func() {
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
+						Tolerations: tolerations,
+						Affinity: &corev1.Affinity{
+							NodeAffinity: &corev1.NodeAffinity{
+								RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+									NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{Key: "dedicated", Operator: corev1.NodeSelectorOpIn, Values: []string{"prefect"}},
+										},
+									}},
+								},
+							},
+							PodAffinity: &corev1.PodAffinity{
+								RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{{
+									TopologyKey:   "kubernetes.io/hostname",
+									LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "prefect-server"}},
+								}},
+							},
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -1395,6 +1471,10 @@ var _ = Describe("PrefectServer controller", func() {
 			})
 
 			Describe("the Deployment", func() {
+				It("should have the correct tolerations", func() {
+					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
 				It("should not use persistent storage", func() {
 					Expect(deployment.Spec.Template.Spec.Volumes).To(BeEmpty())
 
@@ -1458,6 +1538,16 @@ var _ = Describe("PrefectServer controller", func() {
 
 				It("should have the correct nodeSelector value", func() {
 					Expect(migrateJob.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("some", "node-selector"))
+				})
+
+				It("should have the correct tolerations", func() {
+					Expect(migrateJob.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
+				It("should only have the node affinity", func() {
+					Expect(migrateJob.Spec.Template.Spec.Affinity).To(Equal(&corev1.Affinity{
+						NodeAffinity: prefectserver.Spec.Affinity.NodeAffinity,
+					}))
 				})
 			})
 		})
