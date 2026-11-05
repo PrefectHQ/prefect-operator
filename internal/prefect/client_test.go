@@ -297,7 +297,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 				// Verify request method and path
 				Expect(r.Method).To(Equal("GET"))
 				Expect(r.URL.Path).To(Equal("/flows/name/test-flow"))
-				Expect(r.Header.Get("Content-Type")).To(Equal("application/json"))
+				// A GET has no body, so it has no Content-Type.
+				Expect(r.Header.Get("Content-Type")).To(BeEmpty())
 
 				// Return mock flow response
 				w.Header().Set("Content-Type", "application/json")

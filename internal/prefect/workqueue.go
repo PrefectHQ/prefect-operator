@@ -17,14 +17,10 @@ limitations under the License.
 package prefect
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 )
 
 // ErrWorkQueueNotFound is returned when a work queue no longer exists in
@@ -81,52 +77,18 @@ type WorkQueue struct {
 	WorkPoolName     string  `json:"work_pool_name,omitempty"`
 }
 
-// workQueueURL builds a pool-scoped work queue URL, path-escaping each
-// user-chosen segment: Prefect names allow spaces, '#' and '?'
-// (types/names.py bans only / % & > <), which would otherwise be parsed as
-// fragment or query markers.
-func (c *Client) workQueueURL(workPoolName string, segments ...string) string {
-	u := fmt.Sprintf("%s/work_pools/%s/queues", c.BaseURL, url.PathEscape(workPoolName))
-	for _, s := range segments {
-		u += "/" + url.PathEscape(s)
-	}
-	return u
-}
-
 // GetWorkQueue retrieves a work queue within a pool by name via
 // GET /work_pools/{pool}/queues/{name}. Returns (nil, nil) when the queue does
 // not exist, matching GetWorkPool's contract. A missing pool also 404s, so
 // (nil, nil) only means "nothing to adopt" — creation disambiguates the two.
 func (c *Client) GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error) {
-	url := c.workQueueURL(workPoolName, name)
-	c.log.V(1).Info("Getting work queue", "url", url, "workPool", workPoolName, "name", name)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, false)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if resp.StatusCode == http.StatusNotFound {
+	var result WorkQueue
+	err := c.do(ctx, http.MethodGet, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), nil, &result)
+	if isNotFound(err) {
 		return nil, nil
 	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result WorkQueue
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err != nil {
+		return nil, err
 	}
 	return &result, nil
 }
@@ -135,42 +97,14 @@ func (c *Client) GetWorkQueue(ctx context.Context, workPoolName, name string) (*
 // A 404 can only mean the pool itself is missing and is returned as
 // ErrWorkPoolNotFound so callers can wait for the pool instead of erroring.
 func (c *Client) CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error) {
-	url := c.workQueueURL(workPoolName)
-	c.log.V(1).Info("Creating work queue", "url", url, "workPool", workPoolName, "name", queue.Name)
-
-	jsonData, err := json.Marshal(queue)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal work queue: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, true)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if resp.StatusCode == http.StatusNotFound {
+	var result WorkQueue
+	err := c.do(ctx, http.MethodPost, c.endpoint("/work_pools/%s/queues", workPoolName), queue, &result)
+	if isNotFound(err) {
 		return nil, fmt.Errorf("work pool %q: %w", workPoolName, ErrWorkPoolNotFound)
 	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	if err != nil {
+		return nil, err
 	}
-
-	var result WorkQueue
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-	c.log.V(1).Info("Work queue created successfully", "workQueueId", result.ID)
 	return &result, nil
 }
 
@@ -185,9 +119,6 @@ func (c *Client) CreateWorkQueue(ctx context.Context, workPoolName string, queue
 // cannot be cleared. The queue name is the route key and is never sent in the
 // payload, so this can never rename.
 func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec, clearFields []string) error {
-	url := c.workQueueURL(workPoolName, name)
-	c.log.V(1).Info("Updating work queue", "url", url, "workPool", workPoolName, "name", name, "clearFields", clearFields)
-
 	payload := map[string]any{}
 	if queue.Description != nil {
 		payload["description"] = *queue.Description
@@ -212,35 +143,12 @@ func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string,
 		}
 	}
 
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal work queue updates: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, true)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+	err := c.do(ctx, http.MethodPatch, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), payload, nil)
 	// A 404 means the queue was deleted out-of-band; signal recreate.
-	if resp.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return fmt.Errorf("work queue %q in pool %q: %w", name, workPoolName, ErrWorkQueueNotFound)
 	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-	return nil
+	return err
 }
 
 // DeleteWorkQueue deletes a work queue via DELETE /work_pools/{pool}/queues/{name},
@@ -248,31 +156,10 @@ func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string,
 // ValueError isn't mapped to a 4xx) and renormalizes the remaining queue
 // priorities; the legacy /work_queues/{id} route does neither.
 func (c *Client) DeleteWorkQueue(ctx context.Context, workPoolName, name string) error {
-	url := c.workQueueURL(workPoolName, name)
-	c.log.V(1).Info("Deleting work queue", "url", url, "workPool", workPoolName, "name", name)
-
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, false)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+	err := c.do(ctx, http.MethodDelete, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), nil, nil)
 	// Treat 404 as already-deleted (idempotent cleanup).
-	if resp.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return nil
 	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-	return nil
+	return err
 }

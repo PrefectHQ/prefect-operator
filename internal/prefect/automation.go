@@ -17,12 +17,9 @@ limitations under the License.
 package prefect
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
@@ -60,81 +57,20 @@ type Automation struct {
 	ActionsOnResolve []map[string]any `json:"actions_on_resolve"`
 }
 
-func (c *Client) setHeaders(req *http.Request, withContentType bool) {
-	if withContentType {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-}
-
 // CreateAutomation creates a new automation via POST /automations/.
 func (c *Client) CreateAutomation(ctx context.Context, automation *AutomationSpec) (*Automation, error) {
-	url := fmt.Sprintf("%s/automations/", c.BaseURL)
-	c.log.V(1).Info("Creating automation", "url", url, "automation", automation.Name)
-
-	jsonData, err := json.Marshal(automation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal automation: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, true)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result Automation
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.do(ctx, http.MethodPost, c.endpoint("/automations/"), automation, &result); err != nil {
+		return nil, err
 	}
-	c.log.V(1).Info("Automation created successfully", "automationId", result.ID)
 	return &result, nil
 }
 
 // GetAutomation retrieves an automation by ID via GET /automations/{id}.
 func (c *Client) GetAutomation(ctx context.Context, id string) (*Automation, error) {
-	url := fmt.Sprintf("%s/automations/%s", c.BaseURL, id)
-	c.log.V(1).Info("Getting automation", "url", url, "automationId", id)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, false)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result Automation
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.do(ctx, http.MethodGet, c.endpoint("/automations/%s", id), nil, &result); err != nil {
+		return nil, err
 	}
 	return &result, nil
 }
@@ -142,38 +78,14 @@ func (c *Client) GetAutomation(ctx context.Context, id string) (*Automation, err
 // UpdateAutomation updates an automation via PUT /automations/{id} (full replace,
 // matching the declarative desired state). Returns the freshly-read automation.
 func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *AutomationSpec) (*Automation, error) {
-	url := fmt.Sprintf("%s/automations/%s", c.BaseURL, id)
-	c.log.V(1).Info("Updating automation", "url", url, "automationId", id)
-
-	jsonData, err := json.Marshal(automation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal automation updates: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, true)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
+	err := c.do(ctx, http.MethodPut, c.endpoint("/automations/%s", id), automation, nil)
 	// A 404 means the automation was deleted out-of-band; signal recreate.
-	if resp.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return nil, ErrAutomationNotFound
 	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	if err != nil {
+		return nil, err
 	}
-
 	// PUT /automations/{id} returns 204 with no body; re-read to return current state.
 	return c.GetAutomation(ctx, id)
 }
@@ -184,43 +96,15 @@ func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *Au
 // than one deployment. Errors if no deployment matches, and errors if the name
 // is ambiguous (>1 match) rather than silently resolving to an arbitrary one.
 func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deployment, error) {
-	url := fmt.Sprintf("%s/deployments/filter", c.BaseURL)
-	c.log.V(1).Info("Finding deployment by name", "url", url, "name", name)
-
 	filter := map[string]any{
 		"deployments": map[string]any{
 			keyName: map[string]any{"any_": []string{name}},
 		},
 		"limit": 2,
 	}
-	jsonData, err := json.Marshal(filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal deployment filter: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, true)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var results []Deployment
-	if err := json.Unmarshal(body, &results); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.do(ctx, http.MethodPost, c.endpoint("/deployments/filter"), filter, &results); err != nil {
+		return nil, err
 	}
 	if len(results) == 0 {
 		return nil, fmt.Errorf("no deployment found with name %q", name)
@@ -233,31 +117,10 @@ func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deploy
 
 // DeleteAutomation deletes an automation via DELETE /automations/{id}.
 func (c *Client) DeleteAutomation(ctx context.Context, id string) error {
-	url := fmt.Sprintf("%s/automations/%s", c.BaseURL, id)
-	c.log.V(1).Info("Deleting automation", "url", url, "automationId", id)
-
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setHeaders(req, false)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+	err := c.do(ctx, http.MethodDelete, c.endpoint("/automations/%s", id), nil, nil)
 	// Treat 404 as already-deleted (idempotent cleanup).
-	if resp.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return nil
 	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-	return nil
+	return err
 }
