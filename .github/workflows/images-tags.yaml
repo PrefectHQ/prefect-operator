@@ -39,7 +39,7 @@ jobs:
           make helmbuild
           # template the helm chart including the CRDs
           helm template prefect-operator deploy/charts/prefect-operator \
-          --include-crds --set operator.image.tag=${{ github.ref_name }} \
+          --include-crds --set "operator.image.tag=${GITHUB_REF_NAME}" \
           > prefect-operator.yaml
           # Remove labels relevant only for Helm installs
           yq -i 'del(.metadata.labels."app.kubernetes.io/managed-by")' prefect-operator.yaml
@@ -47,10 +47,10 @@ jobs:
           yq -i 'del(.spec.template.metadata.labels."app.kubernetes.io/managed-by")' prefect-operator.yaml
           yq -i 'del(.spec.template.metadata.labels."helm.sh/chart")' prefect-operator.yaml
           # Ensure all references to app version match the released version tag
-          yq -i '(.. | select(tag == "!!str" and . == "v0.0.0")) |= "${{ github.ref_name }}"' prefect-operator.yaml
+          yq -i '(.. | select(tag == "!!str" and . == "v0.0.0")) |= strenv(GITHUB_REF_NAME)' prefect-operator.yaml
 
       - name: Upload release assets
-        run: gh release upload ${{ github.ref_name }} prefect-crds.yaml prefect-operator.yaml
+        run: gh release upload "$GITHUB_REF_NAME" prefect-crds.yaml prefect-operator.yaml
         env:
           GH_TOKEN: ${{ github.token }}
 
