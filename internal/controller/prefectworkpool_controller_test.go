@@ -47,6 +47,7 @@ import (
 const (
 	createWorkPoolRoute = "POST /work_pools/"
 	updateWorkPoolRoute = "PATCH /work_pools/{name}"
+	workerMetadataRoute = "GET /collections/views/aggregate-worker-metadata"
 )
 
 var _ = Describe("PrefectWorkPool Controller", func() {
@@ -1218,22 +1219,47 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			}
 		})
 
-		It("should return the error when Prefect fails the create", func() {
-			prefectAPI.Fail(createWorkPoolRoute, http.StatusInternalServerError)
-
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
-
-			By("First reconcile - adding finalizer")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+		// seedPool creates the work pool in Prefect so the sync takes the
+		// update path.
+		seedPool := func() {
+			_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: name.Name, Type: "kubernetes"})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
+		}
 
-			By("Second reconcile should handle the error")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("status 500"))
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-		})
+		DescribeTable("Should save why a sync failed",
+			func(breakSync func(), reason, errSubstring string) {
+				breakSync()
+				Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+				By("Finalizer pass")
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).To(MatchError(ContainSubstring(errSubstring)))
+				Expect(result.RequeueAfter).To(BeZero())
+
+				Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+				cond := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, PrefectWorkPoolConditionSynced)
+				Expect(cond).NotTo(BeNil())
+				Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(cond.Reason).To(Equal(reason))
+				Expect(cond.Message).To(Equal(err.Error()))
+			},
+			Entry("when the create fails", func() {
+				prefectAPI.Fail(createWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the update fails", func() {
+				seedPool()
+				prefectAPI.Fail(updateWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the default job template can't be read for a create", func() {
+				prefectAPI.Fail(workerMetadataRoute, http.StatusInternalServerError)
+			}, "ConversionError", "failed to retrieve worker metadata"),
+			Entry("when the default job template can't be read for an update", func() {
+				seedPool()
+				prefectAPI.Fail(workerMetadataRoute, http.StatusInternalServerError)
+			}, "ConversionError", "failed to retrieve worker metadata"),
+		)
 	})
 })
