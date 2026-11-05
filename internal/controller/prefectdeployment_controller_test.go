@@ -47,6 +47,7 @@ const (
 	createDeploymentRoute = "POST /deployments/"
 	readWorkPoolRoute     = "GET /work_pools/{name}"
 	createSchedulesRoute  = "POST /deployments/{id}/schedules"
+	updateDeploymentRoute = "PATCH /deployments/{id}"
 )
 
 var _ = Describe("PrefectDeployment controller", func() {
@@ -345,6 +346,52 @@ var _ = Describe("PrefectDeployment controller", func() {
 			if initialSyncTime != nil {
 				Expect(prefectDeployment.Status.LastSyncTime.Time).To(BeTemporally("~", initialSyncTime.Time, time.Second))
 			}
+		})
+
+		Context("once the resync interval has passed", func() {
+			BeforeEach(func() {
+				prefectDeployment.Status.LastSyncTime = &metav1.Time{Time: time.Now().Add(-2 * testResyncInterval)}
+				Expect(k8sClient.Status().Update(ctx, prefectDeployment)).To(Succeed())
+			})
+
+			It("Should not update a deployment that already matches the spec", func() {
+				// Every deployment update deletes its future scheduled runs.
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(prefectAPI.Calls(updateDeploymentRoute)).To(BeZero())
+
+				Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+				Expect(prefectDeployment.Status.LastSyncTime.Time).To(BeTemporally("~", time.Now(), 5*time.Second))
+			})
+
+			It("Should restore a deployment edited in Prefect", func() {
+				id := *prefectDeployment.Status.Id
+				_, err := prefectClient.UpdateDeployment(ctx, id, &prefect.DeploymentSpec{Description: new("edited in Prefect")}, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				remote, err := prefectClient.GetDeployment(ctx, id)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(remote.Description).To(HaveValue(Equal("Test deployment")))
+			})
+
+			It("Should recreate a deployment deleted in Prefect", func() {
+				oldID := *prefectDeployment.Status.Id
+				Expect(prefectClient.DeleteDeployment(ctx, oldID)).To(Succeed())
+
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+				Expect(prefectDeployment.Status.Id).NotTo(HaveValue(Equal(oldID)))
+				Expect(prefectDeployment.Status.Ready).To(BeTrue())
+				remote, err := prefectClient.GetDeployment(ctx, *prefectDeployment.Status.Id)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(remote).NotTo(BeNil())
+				Expect(remote.Description).To(HaveValue(Equal("Test deployment")))
+			})
 		})
 	})
 
