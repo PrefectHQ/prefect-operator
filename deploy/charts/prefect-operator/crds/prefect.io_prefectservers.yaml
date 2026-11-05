@@ -51,8 +51,9 @@ spec:
             description: PrefectServerSpec defines the desired state of a PrefectServer
             properties:
               affinity:
-                description: Affinity defines the scheduling affinity/anti-affinity
-                  for the Prefect Server Deployment and migration Job
+                description: |-
+                  Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
+                  Only node affinity is applied to the migration Job.
                 properties:
                   nodeAffinity:
                     description: Describes node affinity scheduling rules for the

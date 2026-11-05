@@ -89,7 +89,8 @@ PrefectServerSpec defines the desired state of a PrefectServer
         <td><b><a href="#prefectserverspecaffinity">affinity</a></b></td>
         <td>object</td>
         <td>
-          Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment and migration Job<br/>
+          Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
+Only node affinity is applied to the migration Job.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -234,7 +235,8 @@ sqlite/ephemeral must run a single replica). Defaults to 1.<br/>
 
 
 
-Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment and migration Job
+Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
+Only node affinity is applied to the migration Job.
 
 <table>
     <thead>

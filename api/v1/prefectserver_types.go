@@ -89,7 +89,8 @@ type PrefectServerSpec struct {
 	// sqlite/ephemeral must run a single replica). Defaults to 1.
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment and migration Job
+	// Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
+	// Only node affinity is applied to the migration Job.
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
 	// Tolerations allow the server pods to be scheduled onto nodes with matching taints.

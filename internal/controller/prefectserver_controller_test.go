@@ -543,6 +543,50 @@ var _ = Describe("PrefectServer controller", func() {
 				}))
 			})
 
+			It("should remove scheduling constraints cleared from the server", func() {
+				controllerReconciler := &PrefectServerReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+				}
+
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				prefectserver.Spec.Tolerations = tolerations
+				prefectserver.Spec.NodeSelector = map[string]string{"keep": "this", "remove": "this"}
+				prefectserver.Spec.Affinity = &corev1.Affinity{
+					PodAntiAffinity: &corev1.PodAntiAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{
+							Weight: 1,
+							PodAffinityTerm: corev1.PodAffinityTerm{
+								TopologyKey:   "kubernetes.io/hostname",
+								LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "prefect-server"}},
+							},
+						}},
+					},
+				}
+				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				deployment := &appsv1.Deployment{}
+				Expect(k8sClient.Get(ctx, name, deployment)).To(Succeed())
+				Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKey("remove"))
+				Expect(deployment.Spec.Template.Spec.Affinity).NotTo(BeNil())
+
+				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+				prefectserver.Spec.Tolerations = nil
+				prefectserver.Spec.NodeSelector = map[string]string{"keep": "this"}
+				prefectserver.Spec.Affinity = nil
+				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(k8sClient.Get(ctx, name, deployment)).To(Succeed())
+				Expect(deployment.Spec.Template.Spec.Tolerations).To(BeEmpty())
+				Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"keep": "this"}))
+				Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+			})
+
 			It("should update the Deployment with new resource requirements", func() {
 				// Update the PrefectServer with new resource requirements
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
@@ -1341,6 +1385,12 @@ var _ = Describe("PrefectServer controller", func() {
 									}},
 								},
 							},
+							PodAffinity: &corev1.PodAffinity{
+								RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{{
+									TopologyKey:   "kubernetes.io/hostname",
+									LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "prefect-server"}},
+								}},
+							},
 						},
 					},
 				}
@@ -1494,8 +1544,10 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(migrateJob.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 				})
 
-				It("should have the correct affinity", func() {
-					Expect(migrateJob.Spec.Template.Spec.Affinity).To(Equal(prefectserver.Spec.Affinity))
+				It("should only have the node affinity", func() {
+					Expect(migrateJob.Spec.Template.Spec.Affinity).To(Equal(&corev1.Affinity{
+						NodeAffinity: prefectserver.Spec.Affinity.NodeAffinity,
+					}))
 				})
 			})
 		})
