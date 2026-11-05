@@ -177,6 +177,28 @@ var _ = Describe("Fake Prefect API", func() {
 			})
 			Expect(err).To(MatchError(ContainSubstring("status 409")))
 		})
+
+		It("leaves a schedule field unchanged when an update sets it to null", func() {
+			deployment := createDeployment(&prefect.DeploymentSpec{Name: "daily", FlowID: flow.ID})
+			Expect(client.CreateDeploymentSchedules(ctx, deployment.ID, []prefect.DeploymentSchedule{
+				{Slug: new("cron"), Schedule: prefect.Schedule{Cron: new("0 0 * * *")}, MaxScheduledRuns: new(3)},
+			})).To(Succeed())
+			read, err := client.GetDeployment(ctx, deployment.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, err := http.NewRequest(http.MethodPatch,
+				server.APIURL+"/deployments/"+deployment.ID+"/schedules/"+read.Schedules[0].ID,
+				bytes.NewReader([]byte(`{"max_scheduled_runs": null, "active": false}`)))
+			Expect(err).NotTo(HaveOccurred())
+			resp, err := http.DefaultClient.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+			read, err = client.GetDeployment(ctx, deployment.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(read.Schedules[0].MaxScheduledRuns).To(HaveValue(Equal(3)))
+			Expect(read.Schedules[0].Active).To(HaveValue(BeFalse()))
+		})
 	})
 
 	Describe("work pools and queues", func() {

@@ -368,6 +368,9 @@ func (s *Server) updateSchedule(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
+	// Prefect leaves a schedule field unchanged when an update sets it to
+	// null, so a null can't clear max_scheduled_runs.
+	maps.DeleteFunc(body, func(_ string, v any) bool { return v == nil })
 	if spec, ok := body["schedule"].(map[string]any); ok {
 		body["schedule"] = normalizeSchedule(spec)
 	}
