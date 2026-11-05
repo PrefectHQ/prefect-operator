@@ -1468,6 +1468,33 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(condition.Reason).To(Equal("MigrationJobCreated"))
 					Expect(condition.Message).To(Equal("MigrationJob was created"))
 				})
+
+				DescribeTable("on a later reconcile, should wait for the migration Job only while it runs",
+					func(succeeded, failed int32, waiting bool) {
+						migrateJob.Status.Succeeded = succeeded
+						migrateJob.Status.Failed = failed
+						Expect(k8sClient.Status().Update(ctx, migrateJob)).To(Succeed())
+
+						reconciler := &PrefectServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+						result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+						Expect(err).NotTo(HaveOccurred())
+
+						Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+						condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+						Expect(condition).NotTo(BeNil())
+						if waiting {
+							Expect(result.RequeueAfter).To(Equal(20 * time.Second))
+							Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+							Expect(condition.Reason).To(Equal("MigrationJobAlreadyExists"))
+						} else {
+							Expect(result.RequeueAfter).To(BeZero())
+							Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+						}
+					},
+					Entry("while it is still running", int32(0), int32(0), true),
+					Entry("not once it has succeeded", int32(1), int32(0), false),
+					Entry("not once it has failed", int32(0), int32(1), false),
+				)
 			})
 
 			Describe("the Deployment", func() {
