@@ -193,7 +193,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 		}
 		// If the automation was deleted out-of-band, clear the stale ID and
 		// requeue so the next pass recreates it instead of looping on SyncError.
-		if errors.Is(err, prefect.ErrAutomationNotFound) {
+		if errors.Is(err, prefect.ErrNotFound) {
 			log.Info("Automation no longer exists in Prefect, recreating", "automation", automation.Name, "prefectId", *automation.Status.Id)
 			automation.Status.Id = nil
 			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "Recreating", "Automation was deleted in Prefect; recreating")

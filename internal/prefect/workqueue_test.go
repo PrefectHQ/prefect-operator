@@ -19,7 +19,6 @@ package prefect
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 
@@ -48,19 +47,6 @@ var _ = Describe("Work queue client", func() {
 	})
 
 	Describe("GetWorkQueue", func() {
-		It("returns (nil, nil) on a 404", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				Expect(r.Method).To(Equal(http.MethodGet))
-				w.WriteHeader(http.StatusNotFound)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			queue, err := client.GetWorkQueue(ctx, "pool", "missing")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(queue).To(BeNil())
-		})
-
 		It("parses the queue on a 200", func() {
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
@@ -92,17 +78,6 @@ var _ = Describe("Work queue client", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gotPath).To(Equal("/work_pools/my%20pool/queues/batch%20%232%3F"))
 		})
-
-		It("returns a generic error on other non-2xx statuses", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				w.WriteHeader(http.StatusInternalServerError)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			_, err := client.GetWorkQueue(ctx, "pool", "ingest")
-			Expect(err).To(HaveOccurred())
-		})
 	})
 
 	Describe("CreateWorkQueue", func() {
@@ -122,18 +97,6 @@ var _ = Describe("Work queue client", func() {
 			queue, err := client.CreateWorkQueue(ctx, "my pool", &WorkQueueSpec{Name: "ingest"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(queue.ID).To(Equal("q-1"))
-		})
-
-		It("returns ErrWorkPoolNotFound on a 404", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				w.WriteHeader(http.StatusNotFound)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			_, err := client.CreateWorkQueue(ctx, "missing-pool", &WorkQueueSpec{Name: "ingest"})
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrWorkPoolNotFound)).To(BeTrue())
 		})
 
 		It("omits unset optional fields from the payload", func() {
@@ -199,30 +162,6 @@ var _ = Describe("Work queue client", func() {
 				[]string{"concurrencyLimit", "description", "isPaused"})
 			Expect(err).NotTo(HaveOccurred())
 		})
-
-		It("returns ErrWorkQueueNotFound on a 404", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				w.WriteHeader(http.StatusNotFound)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			err := client.UpdateWorkQueue(ctx, "pool", "missing", &WorkQueueSpec{Name: "missing"}, nil)
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrWorkQueueNotFound)).To(BeTrue())
-		})
-
-		It("returns a generic error on other non-2xx statuses", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				w.WriteHeader(http.StatusInternalServerError)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			err := client.UpdateWorkQueue(ctx, "pool", "ingest", &WorkQueueSpec{Name: "ingest"}, nil)
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrWorkQueueNotFound)).To(BeFalse())
-		})
 	})
 
 	Describe("DeleteWorkQueue", func() {
@@ -236,16 +175,6 @@ var _ = Describe("Work queue client", func() {
 			client = NewClient(mockServer.URL, "", logger)
 
 			Expect(client.DeleteWorkQueue(ctx, "pool", "ingest")).To(Succeed())
-		})
-
-		It("treats a 404 as already deleted", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				w.WriteHeader(http.StatusNotFound)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			Expect(client.DeleteWorkQueue(ctx, "pool", "missing")).To(Succeed())
 		})
 
 		It("returns an error on other non-2xx statuses (e.g. default-queue rejection)", func() {

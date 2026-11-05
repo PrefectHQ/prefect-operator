@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -164,12 +165,13 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 	adopted := false
 	if err == nil && remote == nil {
 		remote, err = prefectClient.CreateWorkQueue(ctx, workQueue.Spec.WorkPoolName, spec)
-		if errors.Is(err, prefect.ErrWorkPoolNotFound) {
-			// The pool hasn't been created yet (e.g. its PrefectWorkPool hasn't
-			// reconciled); requeue until it exists, mirroring how the automation
-			// controller waits for a referenced deployment.
+		if errors.Is(err, prefect.ErrNotFound) {
+			// A create can only 404 when the pool is missing. The pool hasn't
+			// been created yet (e.g. its PrefectWorkPool hasn't reconciled);
+			// requeue until it exists, mirroring how the automation controller
+			// waits for a referenced deployment.
 			log.V(1).Info("Work pool not found, requeuing", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
-			r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", err.Error())
+			r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", workQueue.Spec.WorkPoolName))
 			workQueue.Status.Ready = false
 			if updateErr := r.Status().Update(ctx, workQueue); updateErr != nil {
 				log.Error(updateErr, "Failed to update work queue status", "workQueue", workQueue.Name)
@@ -202,7 +204,7 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 
 	if err == nil && (len(clears) > 0 || !workQueueMatches(workQueue.Spec, remote)) {
 		err = prefectClient.UpdateWorkQueue(ctx, workQueue.Spec.WorkPoolName, workQueue.Spec.Name, spec, clears)
-		if errors.Is(err, prefect.ErrWorkQueueNotFound) {
+		if errors.Is(err, prefect.ErrNotFound) {
 			// Deleted between the GET and the PATCH; the next pass recreates it.
 			r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, "Recreating", "Work queue was deleted in Prefect; recreating")
 			workQueue.Status.Ready = false

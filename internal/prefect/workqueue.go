@@ -18,20 +18,8 @@ package prefect
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net/http"
 )
-
-// ErrWorkQueueNotFound is returned when a work queue no longer exists in
-// Prefect (e.g. it was deleted out-of-band). Callers can use errors.Is to
-// distinguish this from other API errors and recreate rather than loop.
-var ErrWorkQueueNotFound = errors.New("work queue not found")
-
-// ErrWorkPoolNotFound is returned when the pool a work queue belongs to does
-// not exist in Prefect. Callers can use errors.Is to requeue until the pool is
-// created rather than loop on a generic error.
-var ErrWorkPoolNotFound = errors.New("work pool not found")
 
 // Clearable work queue fields, by their CRD JSON names. Used as the vocabulary
 // of UpdateWorkQueue's clearFields.
@@ -82,27 +70,15 @@ type WorkQueue struct {
 // not exist, matching GetWorkPool's contract. A missing pool also 404s, so
 // (nil, nil) only means "nothing to adopt" — creation disambiguates the two.
 func (c *Client) GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error) {
-	var result WorkQueue
-	err := c.do(ctx, http.MethodGet, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), nil, &result)
-	if isNotFound(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return getObject[WorkQueue](ctx, c, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name))
 }
 
 // CreateWorkQueue creates a work queue via POST /work_pools/{pool}/queues.
-// A 404 can only mean the pool itself is missing and is returned as
-// ErrWorkPoolNotFound so callers can wait for the pool instead of erroring.
+// A 404 can only mean the pool is missing, so callers that see ErrNotFound can
+// wait for the pool instead of failing.
 func (c *Client) CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error) {
 	var result WorkQueue
-	err := c.do(ctx, http.MethodPost, c.endpoint("/work_pools/%s/queues", workPoolName), queue, &result)
-	if isNotFound(err) {
-		return nil, fmt.Errorf("work pool %q: %w", workPoolName, ErrWorkPoolNotFound)
-	}
-	if err != nil {
+	if err := c.do(ctx, http.MethodPost, c.endpoint("/work_pools/%s/queues", workPoolName), queue, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -143,12 +119,7 @@ func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string,
 		}
 	}
 
-	err := c.do(ctx, http.MethodPatch, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), payload, nil)
-	// A 404 means the queue was deleted out-of-band; signal recreate.
-	if isNotFound(err) {
-		return fmt.Errorf("work queue %q in pool %q: %w", name, workPoolName, ErrWorkQueueNotFound)
-	}
-	return err
+	return c.do(ctx, http.MethodPatch, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), payload, nil)
 }
 
 // DeleteWorkQueue deletes a work queue via DELETE /work_pools/{pool}/queues/{name},
@@ -156,10 +127,5 @@ func (c *Client) UpdateWorkQueue(ctx context.Context, workPoolName, name string,
 // ValueError isn't mapped to a 4xx) and renormalizes the remaining queue
 // priorities; the legacy /work_queues/{id} route does neither.
 func (c *Client) DeleteWorkQueue(ctx context.Context, workPoolName, name string) error {
-	err := c.do(ctx, http.MethodDelete, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name), nil, nil)
-	// Treat 404 as already-deleted (idempotent cleanup).
-	if isNotFound(err) {
-		return nil
-	}
-	return err
+	return c.deleteObject(ctx, c.endpoint("/work_pools/%s/queues/%s", workPoolName, name))
 }

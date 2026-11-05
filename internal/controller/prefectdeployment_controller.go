@@ -213,7 +213,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 			prefectDeployment = remote
 		} else {
 			prefectDeployment, err = prefectClient.UpdateDeployment(ctx, *deployment.Status.Id, deploymentSpec, clears)
-			if errors.Is(err, prefect.ErrDeploymentNotFound) {
+			if errors.Is(err, prefect.ErrNotFound) {
 				prefectDeployment, err = prefectClient.CreateOrUpdateDeployment(ctx, deploymentSpec)
 			}
 		}
@@ -263,6 +263,9 @@ func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, cl
 	current, err := client.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return fmt.Errorf("get current schedules: %w", err)
+	}
+	if current == nil {
+		return fmt.Errorf("get current schedules: deployment %s: %w", deploymentID, prefect.ErrNotFound)
 	}
 
 	desiredBySlug := make(map[string]prefect.DeploymentSchedule, len(desired))

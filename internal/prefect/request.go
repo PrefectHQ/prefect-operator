@@ -27,6 +27,16 @@ import (
 	"net/url"
 )
 
+// ErrNotFound matches the error for a Prefect API response with status 404.
+//
+// Client methods answer a 404 in one of three ways, by operation:
+//   - Get methods return (nil, nil).
+//   - Delete methods return nil, because the object is already gone.
+//   - Every other method returns an error that matches ErrNotFound with
+//     errors.Is. For an update, the object does not exist. For a create, the
+//     object it belongs to does not exist, such as the pool of a work queue.
+var ErrNotFound = errors.New("not found")
+
 // apiError is the error for a Prefect API response with a non-2xx status.
 type apiError struct {
 	statusCode int
@@ -37,10 +47,33 @@ func (e *apiError) Error() string {
 	return fmt.Sprintf("API request failed with status %d: %s", e.statusCode, e.body)
 }
 
-// isNotFound reports whether err is a Prefect API response with status 404.
-func isNotFound(err error) bool {
-	var apiErr *apiError
-	return errors.As(err, &apiErr) && apiErr.statusCode == http.StatusNotFound
+// Is reports whether a 404 response is matched against ErrNotFound.
+func (e *apiError) Is(target error) bool {
+	return target == ErrNotFound && e.statusCode == http.StatusNotFound
+}
+
+// getObject sends a GET to reqURL and decodes the response into a new T. It
+// returns (nil, nil) when Prefect answers 404.
+func getObject[T any](ctx context.Context, c *Client, reqURL string) (*T, error) {
+	var result T
+	err := c.do(ctx, http.MethodGet, reqURL, nil, &result)
+	if errors.Is(err, ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// deleteObject sends a DELETE to reqURL. A 404 means the object is already
+// gone, so deleteObject returns nil for it.
+func (c *Client) deleteObject(ctx context.Context, reqURL string) error {
+	err := c.do(ctx, http.MethodDelete, reqURL, nil, nil)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	return err
 }
 
 // isSuccessStatusCode returns true if the HTTP status code indicates success (2xx range)
