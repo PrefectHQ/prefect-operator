@@ -180,6 +180,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				Spec: corev1.PodSpec{
 					ServiceAccountName: workPool.ServiceAccount(),
 					Affinity:           workPool.Spec.Affinity,
+					Tolerations:        workPool.Spec.Tolerations,
+					NodeSelector:       workPool.Spec.NodeSelector,
 					Volumes: []corev1.Volume{
 						{
 							Name: constants.PrefectDataVolumeName,

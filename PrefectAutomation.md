@@ -335,7 +335,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>

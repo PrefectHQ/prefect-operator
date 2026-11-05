@@ -89,7 +89,8 @@ PrefectServerSpec defines the desired state of a PrefectServer
         <td><b><a href="#prefectserverspecaffinity">affinity</a></b></td>
         <td>object</td>
         <td>
-          Affinity defines the scheduling affinity/anti-affinity for the Prefect Server pods.<br/>
+          Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
+Only node affinity is applied to the migration Job.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -212,6 +213,14 @@ sqlite/ephemeral must run a single replica). Defaults to 1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#prefectserverspectolerationsindex">tolerations</a></b></td>
+        <td>[]object</td>
+        <td>
+          Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
+nodes with matching taints.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>version</b></td>
         <td>string</td>
         <td>
@@ -227,7 +236,8 @@ sqlite/ephemeral must run a single replica). Defaults to 1.<br/>
 
 
 
-Affinity defines the scheduling affinity/anti-affinity for the Prefect Server pods.
+Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
+Only node affinity is applied to the migration Job.
 
 <table>
     <thead>
@@ -2268,7 +2278,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -2788,6 +2799,14 @@ Name must be an IANA_SVC_NAME.<br/>
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>scheme</b></td>
         <td>string</td>
         <td>
@@ -3035,6 +3054,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -3328,6 +3355,16 @@ GRPC specifies a GRPC HealthCheckRequest.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>mode</b></td>
+        <td>string</td>
+        <td>
+          mode specifies the connection mode for the gRPC health probe.
+Set to "TLS" to use TLS without certificate verification.
+Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+If not specified, the probe uses a plaintext (insecure) connection.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>service</b></td>
         <td>string</td>
         <td>
@@ -3388,6 +3425,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -3718,6 +3763,16 @@ GRPC specifies a GRPC HealthCheckRequest.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>mode</b></td>
+        <td>string</td>
+        <td>
+          mode specifies the connection mode for the gRPC health probe.
+Set to "TLS" to use TLS without certificate verification.
+Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+If not specified, the probe uses a plaintext (insecure) connection.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>service</b></td>
         <td>string</td>
         <td>
@@ -3778,6 +3833,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -4632,6 +4695,16 @@ GRPC specifies a GRPC HealthCheckRequest.
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>mode</b></td>
+        <td>string</td>
+        <td>
+          mode specifies the connection mode for the gRPC health probe.
+Set to "TLS" to use TLS without certificate verification.
+Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
+If not specified, the probe uses a plaintext (insecure) connection.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>service</b></td>
         <td>string</td>
         <td>
@@ -4692,6 +4765,14 @@ Name must be an IANA_SVC_NAME.<br/>
         <td>string</td>
         <td>
           Path to access on the HTTP server.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>protocol</b></td>
+        <td>string</td>
+        <td>
+          Protocol selects the wire protocol for the probe connection.
+Nil defaults to HTTP/1.1.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -4831,8 +4912,7 @@ VolumeMount describes a mounting of a Volume within a container.
         <td><b>mountPath</b></td>
         <td>string</td>
         <td>
-          Path within the container at which the volume should be mounted.  Must
-not contain ':'.<br/>
+          Path within the container at which the volume should be mounted.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -4842,6 +4922,18 @@ not contain ':'.<br/>
           This must match the Name of a Volume.<br/>
         </td>
         <td>true</td>
+      </tr><tr>
+        <td><b>bindMountOptions</b></td>
+        <td>[]string</td>
+        <td>
+          bindMountOptions is the list of additional bind mount options to apply when
+mounting this volume into the container. Allowed values are noexec,
+nodev, and nosuid. These are Linux mount options and have no effect on
+Windows nodes.
+This field is not supported with image volumes.
+This is an alpha field and requires enabling the VolumeBindMountOptions feature gate.<br/>
+        </td>
+        <td>false</td>
       </tr><tr>
         <td><b>mountPropagation</b></td>
         <td>string</td>
@@ -5185,7 +5277,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -5474,7 +5567,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -5763,7 +5857,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -6052,7 +6147,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -6341,7 +6437,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -6732,7 +6829,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -7021,7 +7119,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -7310,7 +7409,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -7599,7 +7699,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -7888,7 +7989,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -8316,7 +8418,8 @@ Selects a key of a ConfigMap.
         <td><b>key</b></td>
         <td>string</td>
         <td>
-          The key to select.<br/>
+          The key to select from the ConfigMap's Data field.
+Keys in the BinaryData field are not currently propagated to container env vars.<br/>
         </td>
         <td>true</td>
       </tr><tr>
@@ -8555,6 +8658,74 @@ SQLite defines whether the server will be deployed with a SQLite backend with pe
         <td>string</td>
         <td>
           StorageClassName is the name of the StorageClass of the PersistentVolumeClaim storing the SQLite database<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectServer.spec.tolerations[index]
+<sup><sup>[↩ Parent](#prefectserverspec)</sup></sup>
+
+
+
+The pod this Toleration is attached to tolerates any taint that matches
+the triple <key,value,effect> using the matching operator <operator>.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>effect</b></td>
+        <td>string</td>
+        <td>
+          Effect indicates the taint effect to match. Empty means match all taint effects.
+When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          Key is the taint key that the toleration applies to. Empty means match all taint keys.
+If the key is empty, operator must be Exists; this combination means to match all values and all keys.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>operator</b></td>
+        <td>string</td>
+        <td>
+          Operator represents a key's relationship to the value.
+Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+Exists is equivalent to wildcard for value, so that a pod can
+tolerate all taints of a particular category.
+Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>tolerationSeconds</b></td>
+        <td>integer</td>
+        <td>
+          TolerationSeconds represents the period of time the toleration (which must be
+of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+it is not set, which means tolerate the taint forever (do not evict). Zero and
+negative values will be treated as 0 (evict immediately) by the system.<br/>
+          <br/>
+            <i>Format</i>: int64<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>value</b></td>
+        <td>string</td>
+        <td>
+          Value is the taint value the toleration matches to.
+If the operator is Exists, the value should be empty, otherwise just a regular string.<br/>
         </td>
         <td>false</td>
       </tr></tbody>

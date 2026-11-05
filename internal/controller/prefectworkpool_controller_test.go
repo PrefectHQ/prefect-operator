@@ -202,6 +202,12 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 						"another": "extra-label",
 					},
 					BaseJobTemplate: &prefectiov1.RawValueSource{},
+					Tolerations: []corev1.Toleration{
+						{Key: "dedicated", Operator: corev1.TolerationOpEqual, Value: "prefect", Effect: corev1.TaintEffectNoSchedule},
+					},
+					NodeSelector: map[string]string{
+						"some": "node-selector",
+					},
 				},
 			}
 		})
@@ -347,6 +353,11 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		})
 
 		Describe("the Deployment", func() {
+			It("should have the correct scheduling constraints", func() {
+				Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(prefectWorkPool.Spec.NodeSelector))
+				Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(prefectWorkPool.Spec.Tolerations))
+			})
+
 			It("should be owned by the PrefectWorkPool", func() {
 				Expect(deployment.OwnerReferences).To(ContainElement(
 					metav1.OwnerReference{
