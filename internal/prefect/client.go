@@ -344,10 +344,12 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 }
 
 type DeploymentScheduleUpdate struct {
-	Schedule         *Schedule      `json:"schedule,omitempty"`
-	Active           *bool          `json:"active,omitempty"`
-	MaxScheduledRuns *int           `json:"max_scheduled_runs,omitempty"`
-	Parameters       map[string]any `json:"parameters,omitempty"`
+	Schedule         *Schedule `json:"schedule,omitempty"`
+	Active           *bool     `json:"active,omitempty"`
+	MaxScheduledRuns *int      `json:"max_scheduled_runs,omitempty"`
+	// An empty, non-nil Parameters is sent as {} to clear the schedule's
+	// parameters; a nil one is left out.
+	Parameters map[string]any `json:"parameters,omitzero"`
 }
 
 // CreateDeploymentSchedules adds schedules to a deployment

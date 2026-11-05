@@ -97,6 +97,14 @@ var _ = Describe("Deployment schedule client", func() {
 		))
 	})
 
+	It("UpdateDeploymentSchedule sends empty parameters to clear them", func() {
+		Expect(client.UpdateDeploymentSchedule(ctx, "dep-1", "sched-1", DeploymentScheduleUpdate{
+			Parameters: map[string]any{},
+		})).To(Succeed())
+
+		Expect(decoded()).To(HaveKeyWithValue("parameters", BeEmpty()))
+	})
+
 	It("DeleteDeploymentSchedule sends no body and no Content-Type", func() {
 		Expect(client.DeleteDeploymentSchedule(ctx, "dep-1", "sched-1")).To(Succeed())
 

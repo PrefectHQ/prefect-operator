@@ -285,6 +285,16 @@ func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, cl
 			continue
 		}
 		delete(desiredBySlug, *e.Slug)
+		d = withScheduleDefaults(d)
+		if e.MaxScheduledRuns != nil && d.MaxScheduledRuns == nil {
+			// Prefect ignores a null in a schedule update, so clearing the
+			// limit means replacing the schedule.
+			if err := client.DeleteDeploymentSchedule(ctx, deploymentID, e.ID); err != nil {
+				return fmt.Errorf("delete schedule: %w", err)
+			}
+			toCreate = append(toCreate, d)
+			continue
+		}
 		if scheduleNeedsUpdate(e, d) {
 			if err := client.UpdateDeploymentSchedule(ctx, deploymentID, e.ID, prefect.DeploymentScheduleUpdate{
 				Schedule:         &d.Schedule,
@@ -315,36 +325,58 @@ func slugValue(s *string) string {
 	return *s
 }
 
+// withScheduleDefaults fills in the values Prefect gives the schedule fields
+// that the spec leaves unset, so that removing a field from the spec resets it
+// in Prefect. An interval schedule's anchor date stays unset: Prefect defaults
+// it to the time the schedule was created, which the spec can't know.
+func withScheduleDefaults(s prefect.DeploymentSchedule) prefect.DeploymentSchedule {
+	if s.Active == nil {
+		s.Active = new(true)
+	}
+	if s.Parameters == nil {
+		s.Parameters = map[string]any{}
+	}
+	if s.Schedule.Cron != nil && s.Schedule.DayOr == nil {
+		s.Schedule.DayOr = new(true)
+	}
+	// A cron schedule has no timezone by default. Interval and rrule
+	// schedules default to UTC.
+	if s.Schedule.Timezone == nil && (s.Schedule.Interval != nil || s.Schedule.RRule != nil) {
+		s.Schedule.Timezone = new("UTC")
+	}
+	return s
+}
+
+// scheduleNeedsUpdate reports whether a schedule in Prefect differs from the
+// desired one, which withScheduleDefaults has filled in.
 func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 	c, d := current.Schedule, desired.Schedule
-	if d.Cron != nil && (c.Cron == nil || *c.Cron != *d.Cron) {
-		return true
-	}
-	if d.RRule != nil && (c.RRule == nil || *c.RRule != *d.RRule) {
-		return true
-	}
-	if d.Interval != nil && (c.Interval == nil || *c.Interval != *d.Interval) {
-		return true
-	}
 	if d.AnchorDate != nil && (c.AnchorDate == nil || !c.AnchorDate.Equal(*d.AnchorDate)) {
 		return true
 	}
-	if d.Timezone != nil && (c.Timezone == nil || *c.Timezone != *d.Timezone) {
+	return !equalPtr(c.Cron, d.Cron) ||
+		!equalPtr(c.RRule, d.RRule) ||
+		!equalPtr(c.Interval, d.Interval) ||
+		!equalPtr(c.Timezone, d.Timezone) ||
+		!equalPtr(c.DayOr, d.DayOr) ||
+		!equalPtr(current.Active, desired.Active) ||
+		!equalPtr(current.MaxScheduledRuns, desired.MaxScheduledRuns) ||
+		!equalParameters(current.Parameters, desired.Parameters)
+}
+
+func equalPtr[T comparable](a, b *T) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// equalParameters treats no parameters and an empty set as the same.
+func equalParameters(a, b map[string]any) bool {
+	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	if d.DayOr != nil && (c.DayOr == nil || *c.DayOr != *d.DayOr) {
-		return true
-	}
-	if desired.Active != nil && (current.Active == nil || *current.Active != *desired.Active) {
-		return true
-	}
-	if desired.MaxScheduledRuns != nil && (current.MaxScheduledRuns == nil || *current.MaxScheduledRuns != *desired.MaxScheduledRuns) {
-		return true
-	}
-	if desired.Parameters != nil && !reflect.DeepEqual(desired.Parameters, current.Parameters) {
-		return true
-	}
-	return false
+	return reflect.DeepEqual(a, b)
 }
 
 // syncFailed records why a sync failed in the Synced condition and saves it,

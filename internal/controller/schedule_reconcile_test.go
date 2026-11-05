@@ -28,7 +28,10 @@ import (
 	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
 )
 
-const updateScheduleRoute = "PATCH /deployments/{id}/schedules/{schedule_id}"
+const (
+	updateScheduleRoute = "PATCH /deployments/{id}/schedules/{schedule_id}"
+	deleteScheduleRoute = "DELETE /deployments/{id}/schedules/{schedule_id}"
+)
 
 var _ = Describe("PrefectDeployment schedule reconciliation", func() {
 	var (
@@ -208,6 +211,105 @@ var _ = Describe("PrefectDeployment schedule reconciliation", func() {
 		Expect(r.reconcileSchedules(ctx, client, depID, desired)).To(Succeed())
 		Expect(prefectAPI.Calls(updateScheduleRoute)).To(BeZero())
 	})
+
+	anchor := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	DescribeTable("resets a field removed from the spec to Prefect's default",
+		func(with, without prefect.DeploymentSchedule, check func(prefect.DeploymentSchedule)) {
+			with.Slug, without.Slug = newString("default"), newString("default")
+			Expect(r.reconcileSchedules(ctx, client, depID, []prefect.DeploymentSchedule{with})).To(Succeed())
+			Expect(r.reconcileSchedules(ctx, client, depID, []prefect.DeploymentSchedule{without})).To(Succeed())
+
+			got, err := client.GetDeployment(ctx, depID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Schedules).To(HaveLen(1))
+			check(got.Schedules[0])
+
+			By("making no calls once Prefect matches the spec")
+			calls := func() int {
+				return prefectAPI.Calls(createSchedulesRoute) + prefectAPI.Calls(updateScheduleRoute) + prefectAPI.Calls(deleteScheduleRoute)
+			}
+			before := calls()
+			Expect(r.reconcileSchedules(ctx, client, depID, []prefect.DeploymentSchedule{without})).To(Succeed())
+			Expect(calls()).To(Equal(before))
+		},
+		Entry("active",
+			prefect.DeploymentSchedule{Active: newBool(false), Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			func(s prefect.DeploymentSchedule) { Expect(s.Active).To(HaveValue(BeTrue())) }),
+		Entry("parameters",
+			prefect.DeploymentSchedule{Parameters: map[string]any{"foo": "bar"}, Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			func(s prefect.DeploymentSchedule) { Expect(s.Parameters).To(BeEmpty()) }),
+		Entry("maxScheduledRuns",
+			prefect.DeploymentSchedule{MaxScheduledRuns: newInt(3), Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			func(s prefect.DeploymentSchedule) { Expect(s.MaxScheduledRuns).To(BeNil()) }),
+		Entry("dayOr",
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *"), DayOr: newBool(false)}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			func(s prefect.DeploymentSchedule) { Expect(s.Schedule.DayOr).To(HaveValue(BeTrue())) }),
+		Entry("a cron schedule's timezone",
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *"), Timezone: newString("America/Chicago")}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 9 * * *")}},
+			func(s prefect.DeploymentSchedule) { Expect(s.Schedule.Timezone).To(BeNil()) }),
+		Entry("an interval schedule's timezone",
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Interval: newFloat(3600), AnchorDate: newTime(anchor), Timezone: newString("America/Chicago")}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Interval: newFloat(3600), AnchorDate: newTime(anchor)}},
+			func(s prefect.DeploymentSchedule) { Expect(s.Schedule.Timezone).To(HaveValue(Equal("UTC"))) }),
+		Entry("an rrule schedule's timezone",
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{RRule: newString("FREQ=DAILY"), Timezone: newString("America/Chicago")}},
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{RRule: newString("FREQ=DAILY")}},
+			func(s prefect.DeploymentSchedule) { Expect(s.Schedule.Timezone).To(HaveValue(Equal("UTC"))) }),
+	)
+
+	// Schedules as Prefect stores them when the spec sets only the schedule
+	// itself.
+	storedCron := prefect.DeploymentSchedule{
+		Active: newBool(true), Parameters: map[string]any{},
+		Schedule: prefect.Schedule{Cron: newString("0 9 * * *"), DayOr: newBool(true)},
+	}
+	storedInterval := prefect.DeploymentSchedule{
+		Active: newBool(true), Parameters: map[string]any{},
+		Schedule: prefect.Schedule{Interval: newFloat(3600), AnchorDate: newTime(anchor), Timezone: newString("UTC")},
+	}
+	storedRRule := prefect.DeploymentSchedule{
+		Active: newBool(true), Parameters: map[string]any{},
+		Schedule: prefect.Schedule{RRule: newString("FREQ=DAILY"), Timezone: newString("UTC")},
+	}
+	cron := prefect.Schedule{Cron: newString("0 9 * * *")}
+
+	DescribeTable("scheduleNeedsUpdate",
+		func(current, desired prefect.DeploymentSchedule, want bool) {
+			Expect(scheduleNeedsUpdate(current, withScheduleDefaults(desired))).To(Equal(want))
+		},
+		Entry("an unchanged cron schedule", storedCron, prefect.DeploymentSchedule{Schedule: cron}, false),
+		Entry("a cron schedule with no parameters in Prefect",
+			prefect.DeploymentSchedule{Active: newBool(true), Schedule: storedCron.Schedule},
+			prefect.DeploymentSchedule{Schedule: cron}, false),
+		Entry("a changed cron expression", storedCron,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: newString("0 10 * * *")}}, true),
+		Entry("a changed timezone", storedCron,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: cron.Cron, Timezone: newString("America/Chicago")}}, true),
+		Entry("a changed dayOr", storedCron,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Cron: cron.Cron, DayOr: newBool(false)}}, true),
+		Entry("a changed active", storedCron, prefect.DeploymentSchedule{Active: newBool(false), Schedule: cron}, true),
+		Entry("a changed maxScheduledRuns", storedCron, prefect.DeploymentSchedule{MaxScheduledRuns: newInt(3), Schedule: cron}, true),
+		Entry("changed parameters", storedCron,
+			prefect.DeploymentSchedule{Parameters: map[string]any{"foo": "bar"}, Schedule: cron}, true),
+		Entry("a changed schedule type", storedCron,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Interval: newFloat(3600)}}, true),
+		Entry("an unchanged interval schedule with no anchor date in the spec", storedInterval,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Interval: newFloat(3600)}}, false),
+		Entry("a changed interval", storedInterval,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Interval: newFloat(60)}}, true),
+		Entry("a changed anchor date", storedInterval,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{Interval: newFloat(3600), AnchorDate: newTime(anchor.Add(time.Hour))}}, true),
+		Entry("an unchanged rrule schedule", storedRRule,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{RRule: newString("FREQ=DAILY")}}, false),
+		Entry("a changed rrule", storedRRule,
+			prefect.DeploymentSchedule{Schedule: prefect.Schedule{RRule: newString("FREQ=WEEKLY")}}, true),
+	)
 
 	It("prunes a schedule with no slug that isn't part of the desired set", func() {
 		By("seeding a slugless schedule directly on the deployment")
