@@ -9,6 +9,33 @@
   "postUpdateOptions": [
     "gomodTidy"
   ],
+  "packageRules": [
+    {
+      "description": "Update the go directive in go.mod. By default, Renovate does not propose updates to it.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepNames": [
+        "go"
+      ],
+      "matchDepTypes": [
+        "golang"
+      ],
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Update the golang version in .mise.toml and the go directive in go.mod in the same PR. CI installs Go from .mise.toml, so go.mod must not require a newer Go than .mise.toml.",
+      "matchManagers": [
+        "gomod",
+        "mise"
+      ],
+      "matchDepNames": [
+        "go",
+        "golang"
+      ],
+      "groupName": "golang"
+    }
+  ],
   "customManagers": [
     {
       "customType": "regex",
