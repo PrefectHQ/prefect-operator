@@ -216,7 +216,8 @@ sqlite/ephemeral must run a single replica). Defaults to 1.<br/>
         <td><b><a href="#prefectserverspectolerationsindex">tolerations</a></b></td>
         <td>[]object</td>
         <td>
-          Tolerations allow the server pods to be scheduled onto nodes with matching taints.<br/>
+          Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
+nodes with matching taints.<br/>
         </td>
         <td>false</td>
       </tr><tr>

@@ -93,7 +93,8 @@ type PrefectServerSpec struct {
 	// Only node affinity is applied to the migration Job.
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
-	// Tolerations allow the server pods to be scheduled onto nodes with matching taints.
+	// Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
+	// nodes with matching taints.
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 

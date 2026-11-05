@@ -4273,7 +4273,8 @@ spec:
                     type: string
                 type: object
               tolerations:
-                description: Tolerations allow the server pods to be scheduled onto
+                description: |-
+                  Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
                   nodes with matching taints.
                 items:
                   description: |-
