@@ -46,6 +46,7 @@ const (
 	createFlowRoute       = "POST /flows/"
 	createDeploymentRoute = "POST /deployments/"
 	readWorkPoolRoute     = "GET /work_pools/{name}"
+	createSchedulesRoute  = "POST /deployments/{id}/schedules"
 )
 
 var _ = Describe("PrefectDeployment controller", func() {
@@ -604,27 +605,47 @@ var _ = Describe("PrefectDeployment controller", func() {
 	})
 
 	Context("When testing error scenarios", func() {
-		It("Should handle flow creation errors", func() {
-			prefectAPI.Fail(createFlowRoute, http.StatusInternalServerError)
+		DescribeTable("Should save why a sync failed",
+			func(breakSync func(), reason, errSubstring string) {
+				breakSync()
+				Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+				By("Finalizer pass")
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
 
-			By("First reconcile - adding finalizer")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
+				result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).To(MatchError(ContainSubstring(errSubstring)))
+				Expect(result.RequeueAfter).To(BeZero())
 
-			By("Second reconcile should handle the flow creation error")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to create or get flow"))
-			Expect(err.Error()).To(ContainSubstring("status 500"))
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-
-			By("Checking that error condition is set")
-			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
-		})
+				Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+				cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
+				Expect(cond).NotTo(BeNil())
+				Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(cond.Reason).To(Equal(reason))
+				Expect(cond.Message).To(Equal(err.Error()))
+			},
+			Entry("when the work pool lookup fails", func() {
+				prefectAPI.Fail(readWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the flow can't be created", func() {
+				prefectAPI.Fail(createFlowRoute, http.StatusInternalServerError)
+			}, "FlowIDError", "failed to create or get flow"),
+			Entry("when the spec can't be converted", func() {
+				prefectDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{Slug: "hourly", Interval: new(3600), AnchorDate: new("invalid-date-format")},
+				}
+			}, "ConversionError", "failed to parse anchor_date for interval schedule"),
+			Entry("when the deployment can't be created", func() {
+				prefectAPI.Fail(createDeploymentRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the schedules can't be created", func() {
+				prefectDeployment.Spec.Deployment.Schedules = []prefectiov1.PrefectSchedule{
+					{Slug: "daily", Cron: new("0 9 * * *")},
+				}
+				prefectAPI.Fail(createSchedulesRoute, http.StatusInternalServerError)
+			}, "ScheduleSyncError", "status 500"),
+		)
 
 		It("Should handle errors when retrieving deployment", func() {
 			By("Creating a deployment that will trigger errors")
@@ -667,27 +688,6 @@ var _ = Describe("PrefectDeployment controller", func() {
 				Namespace: namespaceName,
 				Name:      "broken-deployment",
 			}, brokenDeployment)).To(Succeed())
-		})
-
-		It("Should handle CreateOrUpdateDeployment errors", func() {
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
-
-			prefectAPI.Fail(createDeploymentRoute, http.StatusInternalServerError)
-
-			By("First reconcile - adding finalizer")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
-
-			By("Second reconcile should handle the CreateOrUpdateDeployment error")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("status 500"))
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-
-			By("Checking that error condition is set")
-			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
 		})
 
 		It("Should handle status update errors", func() {
@@ -792,60 +792,6 @@ var _ = Describe("PrefectDeployment controller", func() {
 			// Should succeed with valid JSON
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-		})
-
-		It("Should handle invalid anchor date in schedule", func() {
-			By("Creating deployment with invalid anchor date")
-			deployment := &prefectiov1.PrefectDeployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-schedule-deployment",
-					Namespace: namespaceName,
-				},
-				Spec: prefectiov1.PrefectDeploymentSpec{
-					Server: prefectiov1.PrefectServerReference{
-						RemoteAPIURL: new("https://api.prefect.cloud/api/accounts/abc/workspaces/def"),
-						APIKey: &prefectiov1.APIKeySpec{
-							Value: new("test-key"),
-						},
-					},
-					WorkPool: prefectiov1.PrefectWorkPoolReference{
-						Name: "kubernetes-work-pool",
-					},
-					Deployment: prefectiov1.PrefectDeploymentConfiguration{
-						Entrypoint: "flows.py:my_flow",
-						Schedules: []prefectiov1.PrefectSchedule{
-							{
-								Slug:       "invalid-schedule",
-								Interval:   new(3600),
-								AnchorDate: new("invalid-date-format"),
-							},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
-
-			By("First reconcile - adding finalizer")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "invalid-schedule-deployment",
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
-
-			By("Second reconcile should handle anchor date parsing error")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: namespaceName,
-					Name:      "invalid-schedule-deployment",
-				},
-			})
-			// Should fail due to invalid anchor date format
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to parse anchor_date for interval schedule"))
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 		})
 
 		It("Should handle valid parameter schema JSON", func() {

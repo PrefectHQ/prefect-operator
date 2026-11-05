@@ -166,8 +166,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	workPool, err := prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
 	if err != nil {
 		log.Error(err, "Failed to get work pool from Prefect", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "SyncError", err)
 	}
 	if workPool == nil {
 		log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
@@ -182,15 +181,13 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	flowID, err := prefect.GetFlowIDFromDeployment(ctx, prefectClient, deployment)
 	if err != nil {
 		log.Error(err, "Failed to get flow ID", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "FlowIDError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "FlowIDError", err)
 	}
 
 	deploymentSpec, err := prefect.ConvertToDeploymentSpec(deployment, flowID)
 	if err != nil {
 		log.Error(err, "Failed to convert deployment spec", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "ConversionError", err)
 	}
 
 	desiredSchedules := deploymentSpec.Schedules
@@ -225,14 +222,12 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	}
 	if err != nil {
 		log.Error(err, "Failed to create or update deployment in Prefect", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "SyncError", err)
 	}
 
 	if err := r.reconcileSchedules(ctx, prefectClient, prefectDeployment.ID, desiredSchedules); err != nil {
 		log.Error(err, "Failed to reconcile deployment schedules", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ScheduleSyncError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "ScheduleSyncError", err)
 	}
 
 	prefect.UpdateDeploymentStatus(deployment, prefectDeployment)
@@ -350,6 +345,17 @@ func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 		return true
 	}
 	return false
+}
+
+// syncFailed records why a sync failed in the Synced condition and saves it,
+// so the reason shows on the resource, then returns err so the request is
+// retried with backoff.
+func (r *PrefectDeploymentReconciler) syncFailed(ctx context.Context, deployment *prefectiov1.PrefectDeployment, reason string, err error) (ctrl.Result, error) {
+	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, reason, err.Error())
+	if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
+		log.FromContext(ctx).Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
+	}
+	return ctrl.Result{}, err
 }
 
 // setCondition sets a condition on the deployment status
