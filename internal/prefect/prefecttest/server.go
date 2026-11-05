@@ -31,9 +31,10 @@ limitations under the License.
 // not share the client's Go types, so a wrong JSON tag in the client fails a
 // test instead of making a round trip that hides it.
 //
-// Tests choose behavior per route, named by its method and path pattern as
-// in "PATCH /work_pools/{name}": Fail makes a route answer with an error
-// status, and Calls counts the requests it received.
+// The fake serves the API under /api, as a Prefect server does. Tests choose
+// behavior per route, named by its method and path pattern below /api as in
+// "PATCH /work_pools/{name}": Fail makes a route answer with an error status,
+// and Calls counts the requests it received.
 package prefecttest
 
 import (
@@ -53,11 +54,15 @@ import (
 // object is a Prefect API object as JSON: field names to decoded values.
 type object = map[string]any
 
-// Server is a fake Prefect API. Point a client at its URL.
+// Server is a fake Prefect API. Point a client at its APIURL.
 type Server struct {
 	*httptest.Server
 
+	// APIURL is the base URL of the API: the server's URL followed by /api.
+	APIURL string
+
 	mu       sync.Mutex
+	apiKey   string
 	routes   []string
 	calls    map[string]int
 	failures map[string]int
@@ -112,12 +117,18 @@ func NewServer() *Server {
 
 	// A request the fake has no route for is a bug in the client or a gap in
 	// the fake. Answer 501 so it fails loudly instead of reading as a 404.
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	noRoute := func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented,
 			fmt.Sprintf("prefecttest: no route for %s %s", r.Method, r.URL.EscapedPath()))
-	})
+	}
+	mux.HandleFunc("/", noRoute)
 
-	s.Server = httptest.NewServer(mux)
+	root := http.NewServeMux()
+	root.Handle("/api/", http.StripPrefix("/api", mux))
+	root.HandleFunc("/", noRoute)
+
+	s.Server = httptest.NewServer(root)
+	s.APIURL = s.URL + "/api"
 	return s
 }
 
@@ -133,12 +144,24 @@ func (s *Server) handle(mux *http.ServeMux, route string, h http.HandlerFunc) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.calls[route]++
+		if s.apiKey != "" && r.Header.Get("Authorization") != "Bearer "+s.apiKey {
+			writeError(w, http.StatusUnauthorized, "Invalid authentication credentials")
+			return
+		}
 		if status, ok := s.failures[route]; ok {
 			writeError(w, status, fmt.Sprintf("prefecttest: injected failure for %s", route))
 			return
 		}
 		h(w, r)
 	})
+}
+
+// RequireAPIKey makes every route answer 401 to a request that does not
+// send key as its bearer token.
+func (s *Server) RequireAPIKey(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.apiKey = key
 }
 
 // Fail makes route answer every request with status until ClearFailures.

@@ -29,61 +29,10 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// PrefectClient defines the interface for interacting with the Prefect API
-type PrefectClient interface {
-	// CreateOrUpdateDeployment creates a new deployment or updates an existing one
-	CreateOrUpdateDeployment(ctx context.Context, deployment *DeploymentSpec) (*Deployment, error)
-	// GetDeployment retrieves a deployment by ID
-	GetDeployment(ctx context.Context, id string) (*Deployment, error)
-	// GetDeploymentByName retrieves a deployment by name and flow ID
-	GetDeploymentByName(ctx context.Context, name, flowID string) (*Deployment, error)
-	// UpdateDeployment updates an existing deployment; clearFields resets
-	// previously-declared fields (e.g. the concurrency limit) instead of
-	// leaving them untouched
-	UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec, clearFields []string) (*Deployment, error)
-	// DeleteDeployment deletes a deployment
-	DeleteDeployment(ctx context.Context, id string) error
-	CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error
-	UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error
-	DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error
-	// CreateOrGetFlow creates a new flow or returns an existing one with the same name
-	CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error)
-	// GetFlowByName retrieves a flow by name
-	GetFlowByName(ctx context.Context, name string) (*Flow, error)
-	// CreateWorkPool creates a new work pool
-	CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*WorkPool, error)
-	// GetWorkPool retrieves a work pool by name
-	GetWorkPool(ctx context.Context, name string) (*WorkPool, error)
-	// UpdateWorkPool updates an existing work pool
-	UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error
-	// DeleteWorkPool deletes a work pool
-	DeleteWorkPool(ctx context.Context, id string) error
-	// GetWorkQueue retrieves a work queue within a pool by name; nil when absent
-	GetWorkQueue(ctx context.Context, workPoolName, name string) (*WorkQueue, error)
-	// CreateWorkQueue creates a work queue within a pool
-	CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error)
-	// UpdateWorkQueue updates a work queue in place; clearFields resets
-	// previously-declared fields to their create-time defaults
-	UpdateWorkQueue(ctx context.Context, workPoolName, name string, queue *WorkQueueSpec, clearFields []string) error
-	// DeleteWorkQueue deletes a work queue within a pool by name
-	DeleteWorkQueue(ctx context.Context, workPoolName, name string) error
-	// GetWorkerMetadata retrieves aggregate metadata for all worker types
-	GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error)
-	// CreateAutomation creates a new automation
-	CreateAutomation(ctx context.Context, automation *AutomationSpec) (*Automation, error)
-	// GetAutomation retrieves an automation by ID
-	GetAutomation(ctx context.Context, id string) (*Automation, error)
-	// UpdateAutomation updates an existing automation by ID
-	UpdateAutomation(ctx context.Context, id string, automation *AutomationSpec) (*Automation, error)
-	// DeleteAutomation deletes an automation by ID
-	DeleteAutomation(ctx context.Context, id string) error
-	// FindDeploymentByName resolves a deployment by its name (tenant-wide) to its ID
-	FindDeploymentByName(ctx context.Context, name string) (*Deployment, error)
-}
-
-// Client implements the PrefectClient interface
+// Client calls the Prefect API.
 type Client struct {
 	BaseURL    string
 	APIKey     string
@@ -103,7 +52,7 @@ func NewClient(baseURL, apiKey string, log logr.Logger) *Client {
 	}
 }
 
-// NewClientFromServerReference creates a new PrefectClient from a PrefectServerReference
+// NewClientFromServerReference creates a Client from a PrefectServerReference
 func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
 	// Create a base client first to check if we're running in cluster
 	baseClient := NewClient("", apiKey, log)
@@ -154,8 +103,8 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 	return client, nil
 }
 
-// NewClientFromK8s creates a new PrefectClient from a PrefectServerReference and Kubernetes client
-// This combines API key retrieval with client creation for convenience
+// NewClientFromK8s creates a Client from a PrefectServerReference, reading
+// the API key through the Kubernetes client.
 func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
 	// Get the API key from the server reference
 	apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
@@ -165,6 +114,18 @@ func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerR
 
 	// Create client using the existing factory function, passing the namespace as fallback
 	return NewClientFromServerReference(serverRef, apiKey, namespace, log)
+}
+
+// ClientFactory returns a Client for the Prefect server that serverRef
+// points to. namespace is the namespace of the resource that holds serverRef.
+type ClientFactory func(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, namespace string) (*Client, error)
+
+// NewClientFactory returns a ClientFactory that reads API keys through
+// k8sClient and logs with the logger in the context.
+func NewClientFactory(k8sClient client.Client) ClientFactory {
+	return func(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, namespace string) (*Client, error) {
+		return NewClientFromK8s(ctx, serverRef, k8sClient, namespace, log.FromContext(ctx))
+	}
 }
 
 // DeploymentSpec represents the request payload for creating/updating deployments

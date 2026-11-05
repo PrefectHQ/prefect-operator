@@ -80,12 +80,12 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
-		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
+		prefectClient = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
 
 		reconciler = &PrefectWorkPoolReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         prefectClient,
+			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
 		}
 
@@ -1078,7 +1078,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 			By("Verifying work pool was created in Prefect")
 			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
-			Expect(prefectWorkPool.Name).NotTo(BeNil())
+			remote, err := prefectClient.GetWorkPool(ctx, name.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).NotTo(BeNil())
 
 			By("Verifying finalizer was added")
 			Expect(prefectWorkPool.Finalizers).To(ContainElement(PrefectWorkPoolFinalizer))
@@ -1090,7 +1092,12 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying the deployment was removed from Kubernetes")
+			By("Verifying the work pool was deleted from Prefect")
+			remote, err = prefectClient.GetWorkPool(ctx, name.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).To(BeNil())
+
+			By("Verifying the work pool was removed from Kubernetes")
 			err = k8sClient.Get(ctx, name, prefectWorkPool)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))

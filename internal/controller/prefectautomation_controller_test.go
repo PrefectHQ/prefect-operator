@@ -110,11 +110,11 @@ var _ = Describe("PrefectAutomation controller", func() {
 
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
-		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
+		prefectClient = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
 		reconciler = &PrefectAutomationReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         prefectClient,
+			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
 		}
 	})
@@ -393,6 +393,10 @@ var _ = Describe("PrefectAutomation controller", func() {
 
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
+
+			remote, err := prefectClient.GetAutomation(ctx, *fresh.Status.Id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).To(BeNil())
 
 			err = k8sClient.Get(ctx, name, fresh)
 			Expect(err).To(HaveOccurred())

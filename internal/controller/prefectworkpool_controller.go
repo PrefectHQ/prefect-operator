@@ -60,8 +60,10 @@ const (
 // PrefectWorkPoolReconciler reconciles a PrefectWorkPool object
 type PrefectWorkPoolReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	PrefectClient prefect.PrefectClient
+	Scheme *runtime.Scheme
+	// NewPrefectClient returns a client for the Prefect server that a
+	// resource references.
+	NewPrefectClient prefect.ClientFactory
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectWorkPool does not set spec.interval.
 	DefaultResyncInterval time.Duration
@@ -285,7 +287,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	name := workPool.Name
 	log := log.FromContext(ctx)
 
-	prefectClient, err := r.getPrefectClient(ctx, workPool)
+	prefectClient, err := r.NewPrefectClient(ctx, &workPool.Spec.Server, workPool.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to create Prefect client", "workPool", name)
 		return err
@@ -384,25 +386,15 @@ func (r *PrefectWorkPoolReconciler) handleDeletion(ctx context.Context, workPool
 	}
 
 	if workPool.Name != "" {
-		// Create a Prefect client for cleanup
-		prefectClient := r.PrefectClient
-		if prefectClient == nil {
-			var err error
-			prefectClient, err = prefect.NewClientFromK8s(ctx, &workPool.Spec.Server, r.Client, workPool.Namespace, log)
-			if err != nil {
-				log.Error(err, "Failed to create Prefect client for deletion", "workPool", workPool.Name)
-				// Continue with finalizer removal even if client creation fails
-				// to avoid blocking deletion indefinitely
-			} else {
-				// Attempt to delete from Prefect API
-				if err := prefectClient.DeleteWorkPool(ctx, workPool.Name); err != nil {
-					log.Error(err, "Failed to delete workPool from Prefect API", "workPool", workPool.Name)
-					// Continue with finalizer removal even if Prefect deletion fails
-					// to avoid blocking Kubernetes deletion indefinitely
-				} else {
-					log.Info("Successfully deleted workPool from Prefect API", "workPool", workPool.Name)
-				}
-			}
+		// Remove the finalizer even when the Prefect delete fails, so a Prefect
+		// outage can't block Kubernetes deletion indefinitely.
+		prefectClient, err := r.NewPrefectClient(ctx, &workPool.Spec.Server, workPool.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to create Prefect client for deletion", "workPool", workPool.Name)
+		} else if err := prefectClient.DeleteWorkPool(ctx, workPool.Name); err != nil {
+			log.Error(err, "Failed to delete workPool from Prefect API", "workPool", workPool.Name)
+		} else {
+			log.Info("Successfully deleted workPool from Prefect API", "workPool", workPool.Name)
 		}
 	}
 
@@ -415,25 +407,6 @@ func (r *PrefectWorkPoolReconciler) handleDeletion(ctx context.Context, workPool
 
 	log.Info("Finalizer removed, deletion will proceed", "deployment", workPool.Name)
 	return ctrl.Result{}, nil
-}
-
-func (r *PrefectWorkPoolReconciler) getPrefectClient(ctx context.Context, workPool *prefectiov1.PrefectWorkPool) (prefect.PrefectClient, error) {
-	log := log.FromContext(ctx)
-	name := workPool.Name
-
-	// Use injected client if available (for testing)
-	prefectClient := r.PrefectClient
-
-	if prefectClient == nil {
-		var err error
-		prefectClient, err = prefect.NewClientFromK8s(ctx, &workPool.Spec.Server, r.Client, workPool.Namespace, log)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client", "workPool", name)
-			return nil, err
-		}
-	}
-
-	return prefectClient, nil
 }
 
 func (r *PrefectWorkPoolReconciler) mapConfigMapToWorkPools(ctx context.Context, obj client.Object) []reconcile.Request {

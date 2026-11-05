@@ -50,7 +50,7 @@ var _ = Describe("PrefectDeployment schedule reconciliation", func() {
 		r = &PrefectDeploymentReconciler{}
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
-		client = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
+		client = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
 		flow, err := client.CreateOrGetFlow(ctx, &prefect.FlowSpec{Name: "f"})
 		Expect(err).NotTo(HaveOccurred())
 		dep, err := client.CreateOrUpdateDeployment(ctx, &prefect.DeploymentSpec{Name: "d", FlowID: flow.ID})

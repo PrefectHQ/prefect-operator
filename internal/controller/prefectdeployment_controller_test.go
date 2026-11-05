@@ -121,14 +121,14 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
-		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
+		prefectClient = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
 		// Prefect rejects a deployment whose work pool does not exist.
 		_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "kubernetes-work-pool", Type: "kubernetes"})
 		Expect(err).NotTo(HaveOccurred())
 		reconciler = &PrefectDeploymentReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         prefectClient,
+			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
 		}
 	})
@@ -227,6 +227,10 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Verifying deployment was created in Prefect")
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
 			Expect(prefectDeployment.Status.Id).NotTo(BeNil())
+			id := *prefectDeployment.Status.Id
+			remote, err := prefectClient.GetDeployment(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).NotTo(BeNil())
 
 			By("Verifying finalizer was added")
 			Expect(prefectDeployment.Finalizers).To(ContainElement("prefect.io/deployment-cleanup"))
@@ -237,6 +241,11 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Reconciling deletion - should clean up from Prefect API")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the deployment was deleted from Prefect")
+			remote, err = prefectClient.GetDeployment(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).To(BeNil())
 
 			By("Verifying the deployment was removed from Kubernetes")
 			err = k8sClient.Get(ctx, name, prefectDeployment)
@@ -834,28 +843,23 @@ var _ = Describe("PrefectDeployment controller", func() {
 		})
 	})
 
-	Context("When testing real Prefect client creation", func() {
-		It("Should create real Prefect client when PrefectClient is nil", func() {
-			By("Creating reconciler without an injected client")
-			realReconciler := &PrefectDeploymentReconciler{
-				Client:        k8sClient,
-				Scheme:        k8sClient.Scheme(),
-				PrefectClient: nil,
+	Context("When using the operator's client factory", func() {
+		It("Should send the API key from the referenced Secret to the referenced server", func() {
+			prefectAPI.RequireAPIKey("test-api-key-value")
+			prefectDeployment.Spec.Server.RemoteAPIURL = new(prefectAPI.URL)
+			prefectDeployment.Spec.Server.AccountID = nil
+			prefectDeployment.Spec.Server.WorkspaceID = nil
+			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient)
+
+			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+			for range 2 {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
 			}
 
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
-
-			By("First reconcile - adding finalizer")
-			result, err := realReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
-
-			By("Second reconcile should attempt health check and requeue when server not ready")
-			result, err = realReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			// Should not error but should requeue because server is not healthy
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.Ready).To(BeTrue())
+			Expect(prefectAPI.Calls(createDeploymentRoute)).To(Equal(1))
 		})
 	})
 

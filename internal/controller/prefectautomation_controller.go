@@ -50,8 +50,10 @@ const (
 // PrefectAutomationReconciler reconciles a PrefectAutomation object
 type PrefectAutomationReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	PrefectClient prefect.PrefectClient
+	Scheme *runtime.Scheme
+	// NewPrefectClient returns a client for the Prefect server that a
+	// resource references.
+	NewPrefectClient prefect.ClientFactory
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectAutomation does not set spec.interval.
 	DefaultResyncInterval time.Duration
@@ -142,14 +144,10 @@ func (r *PrefectAutomationReconciler) needsSync(automation *prefectiov1.PrefectA
 func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, automation *prefectiov1.PrefectAutomation) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	prefectClient := r.PrefectClient
-	if prefectClient == nil {
-		var err error
-		prefectClient, err = prefect.NewClientFromK8s(ctx, &automation.Spec.Server, r.Client, automation.Namespace, log)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client", "automation", automation.Name)
-			return ctrl.Result{}, err
-		}
+	prefectClient, err := r.NewPrefectClient(ctx, &automation.Spec.Server, automation.Namespace)
+	if err != nil {
+		log.Error(err, "Failed to create Prefect client", "automation", automation.Name)
+		return ctrl.Result{}, err
 	}
 
 	// Resolve any deploymentName references to deployment IDs. If a referenced
@@ -259,22 +257,14 @@ func (r *PrefectAutomationReconciler) handleDeletion(ctx context.Context, automa
 	}
 
 	if automation.Status.Id != nil && *automation.Status.Id != "" {
-		prefectClient := r.PrefectClient
-		if prefectClient == nil {
-			var err error
-			prefectClient, err = prefect.NewClientFromK8s(ctx, &automation.Spec.Server, r.Client, automation.Namespace, log)
-			if err != nil {
-				log.Error(err, "Failed to create Prefect client for deletion", "automation", automation.Name)
-				prefectClient = nil
-			}
-		}
-		if prefectClient != nil {
-			if err := prefectClient.DeleteAutomation(ctx, *automation.Status.Id); err != nil {
-				// Don't block K8s deletion on a failed remote delete.
-				log.Error(err, "Failed to delete automation from Prefect API", "automation", automation.Name, "prefectId", *automation.Status.Id)
-			} else {
-				log.Info("Successfully deleted automation from Prefect API", "automation", automation.Name, "prefectId", *automation.Status.Id)
-			}
+		// Don't block K8s deletion on a failed remote delete.
+		prefectClient, err := r.NewPrefectClient(ctx, &automation.Spec.Server, automation.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to create Prefect client for deletion", "automation", automation.Name)
+		} else if err := prefectClient.DeleteAutomation(ctx, *automation.Status.Id); err != nil {
+			log.Error(err, "Failed to delete automation from Prefect API", "automation", automation.Name, "prefectId", *automation.Status.Id)
+		} else {
+			log.Info("Successfully deleted automation from Prefect API", "automation", automation.Name, "prefectId", *automation.Status.Id)
 		}
 	}
 

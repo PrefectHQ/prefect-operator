@@ -713,7 +713,7 @@ var _ = Describe("GetFlowIDFromDeployment", func() {
 		ctx = context.Background()
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
-		client = NewClient(prefectAPI.URL, "", logr.Discard())
+		client = NewClient(prefectAPI.APIURL, "", logr.Discard())
 		k8sDeployment = &prefectiov1.PrefectDeployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      testDeploymentName,

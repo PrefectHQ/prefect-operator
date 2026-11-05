@@ -51,8 +51,10 @@ const (
 // PrefectWorkQueueReconciler reconciles a PrefectWorkQueue object
 type PrefectWorkQueueReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	PrefectClient prefect.PrefectClient
+	Scheme *runtime.Scheme
+	// NewPrefectClient returns a client for the Prefect server that a
+	// resource references.
+	NewPrefectClient prefect.ClientFactory
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectWorkQueue does not set spec.interval.
 	DefaultResyncInterval time.Duration
@@ -138,14 +140,10 @@ func (r *PrefectWorkQueueReconciler) needsSync(workQueue *prefectiov1.PrefectWor
 func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQueue *prefectiov1.PrefectWorkQueue) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	prefectClient := r.PrefectClient
-	if prefectClient == nil {
-		var err error
-		prefectClient, err = prefect.NewClientFromK8s(ctx, &workQueue.Spec.Server, r.Client, workQueue.Namespace, log)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client", "workQueue", workQueue.Name)
-			return ctrl.Result{}, err
-		}
+	prefectClient, err := r.NewPrefectClient(ctx, &workQueue.Spec.Server, workQueue.Namespace)
+	if err != nil {
+		log.Error(err, "Failed to create Prefect client", "workQueue", workQueue.Name)
+		return ctrl.Result{}, err
 	}
 
 	spec := &prefect.WorkQueueSpec{
@@ -339,24 +337,15 @@ func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQue
 	}
 
 	if !adopted && workQueue.Status.Id != nil && *workQueue.Status.Id != "" {
-		prefectClient := r.PrefectClient
-		if prefectClient == nil {
-			var err error
-			prefectClient, err = prefect.NewClientFromK8s(ctx, &workQueue.Spec.Server, r.Client, workQueue.Namespace, log)
-			if err != nil {
-				log.Error(err, "Failed to create Prefect client for deletion", "workQueue", workQueue.Name)
-				prefectClient = nil
-			}
-		}
-		if prefectClient != nil {
-			if err := prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName); err != nil {
-				// Don't block K8s deletion on a failed remote delete (e.g. the
-				// pool-scoped route's rejection of deleting a pool's default
-				// queue).
-				log.Error(err, "Failed to delete work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
-			} else {
-				log.Info("Successfully deleted work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
-			}
+		// Don't block K8s deletion on a failed remote delete (e.g. the
+		// pool-scoped route's rejection of deleting a pool's default queue).
+		prefectClient, err := r.NewPrefectClient(ctx, &workQueue.Spec.Server, workQueue.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to create Prefect client for deletion", "workQueue", workQueue.Name)
+		} else if err := prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName); err != nil {
+			log.Error(err, "Failed to delete work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
+		} else {
+			log.Info("Successfully deleted work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
 		}
 	}
 
