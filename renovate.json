@@ -3,7 +3,8 @@
   "extends": [
     "github>PrefectHQ/renovate-config",
     "github>PrefectHQ/renovate-config:go",
-    "github>PrefectHQ/renovate-config:helm"
+    "github>PrefectHQ/renovate-config:helm",
+    "helpers:pinGitHubActionDigests"
   ],
   "postUpdateOptions": [
     "gomodTidy"
