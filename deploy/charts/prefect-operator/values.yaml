@@ -145,9 +145,8 @@ rbac:
   operator:
     # -- specifies whether the operator role & role binding should be created
     create: true
-  ## For each CRD, "Editor" and "Viewer" roles are created by default, aiding admins in cluster management.
-  ## Those roles are not used by the operator itself. You can disable those roles by setting
-  # the following lines to `create: false` or comment them out.
+  ## For each CRD, "Editor" and "Viewer" ClusterRoles are created by default, for admins to grant
+  ## people access to the resources. The operator doesn't use them. Set `create: false` to skip one.
   userRoles:
     prefectServer:
       editor:
@@ -162,6 +161,27 @@ rbac:
         create: true
       viewer:
         # -- specifies whether the workpool viewer role should be created
+        create: true
+    prefectWorkQueue:
+      editor:
+        # -- specifies whether the work queue editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the work queue viewer role should be created
+        create: true
+    prefectDeployment:
+      editor:
+        # -- specifies whether the deployment editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the deployment viewer role should be created
+        create: true
+    prefectAutomation:
+      editor:
+        # -- specifies whether the automation editor role should be created
+        create: true
+      viewer:
+        # -- specifies whether the automation viewer role should be created
         create: true
 
 
