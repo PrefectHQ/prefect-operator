@@ -134,7 +134,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		configMapRef := workPool.Spec.BaseJobTemplate.ConfigMap
 		err := r.Get(ctx, types.NamespacedName{Name: configMapRef.Name, Namespace: workPool.Namespace}, &baseJobTemplateConfigMap)
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, r.syncFailed(&workPool, "BaseJobTemplateError", err)
 		}
 	}
 
@@ -296,7 +296,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	prefectWorkPool, err := prefectClient.GetWorkPool(ctx, name)
 	if err != nil {
 		log.Error(err, "Failed to get work pool in Prefect", "workPool", name)
-		return err
+		return r.syncFailed(workPool, "SyncError", err)
 	}
 
 	var baseJobTemplate []byte
@@ -306,7 +306,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 
 		baseJobTemplateJson, exists := baseJobTemplateConfigMap.Data[key]
 		if !exists {
-			return fmt.Errorf("can't find key %s in ConfigMap %s", key, baseJobTemplateConfigMap.Name)
+			return r.syncFailed(workPool, "BaseJobTemplateError", fmt.Errorf("can't find key %s in ConfigMap %s", key, baseJobTemplateConfigMap.Name))
 		}
 
 		baseJobTemplate = []byte(baseJobTemplateJson)
@@ -316,29 +316,25 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 		workPoolSpec, err := prefect.ConvertToWorkPoolSpec(ctx, workPool, baseJobTemplate, prefectClient)
 		if err != nil {
 			log.Error(err, "Failed to convert work pool spec", "workPool", name)
-			r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
-			return err
+			return r.syncFailed(workPool, "ConversionError", err)
 		}
 
 		prefectWorkPool, err = prefectClient.CreateWorkPool(ctx, workPoolSpec)
 		if err != nil {
 			log.Error(err, "Failed to create work pool in Prefect", "workPool", name)
-			r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-			return err
+			return r.syncFailed(workPool, "SyncError", err)
 		}
 	} else {
 		workPoolSpec, err := prefect.ConvertToWorkPoolUpdateSpec(ctx, workPool, baseJobTemplate, prefectClient)
 		if err != nil {
 			log.Error(err, "Failed to convert work pool spec", "workPool", name)
-			r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
-			return err
+			return r.syncFailed(workPool, "ConversionError", err)
 		}
 
 		err = prefectClient.UpdateWorkPool(ctx, workPool.Name, workPoolSpec)
 		if err != nil {
 			log.Error(err, "Failed to update work pool in Prefect", "workPool", name)
-			r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-			return err
+			return r.syncFailed(workPool, "SyncError", err)
 		}
 	}
 
@@ -360,6 +356,13 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Work pool successfully synced with Prefect API")
 
 	return nil
+}
+
+// syncFailed records why a sync failed in the Synced condition, which
+// Reconcile saves on its way out, and returns err.
+func (r *PrefectWorkPoolReconciler) syncFailed(workPool *prefectiov1.PrefectWorkPool, reason string, err error) error {
+	r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, reason, err.Error())
+	return err
 }
 
 // setCondition sets a condition on the deployment status

@@ -166,31 +166,24 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	workPool, err := prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
 	if err != nil {
 		log.Error(err, "Failed to get work pool from Prefect", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "SyncError", err)
 	}
 	if workPool == nil {
 		log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
-		deployment.Status.Ready = false
-		if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
-			log.Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
-		}
+		r.notSynced(ctx, deployment, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	flowID, err := prefect.GetFlowIDFromDeployment(ctx, prefectClient, deployment)
 	if err != nil {
 		log.Error(err, "Failed to get flow ID", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "FlowIDError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "FlowIDError", err)
 	}
 
 	deploymentSpec, err := prefect.ConvertToDeploymentSpec(deployment, flowID)
 	if err != nil {
 		log.Error(err, "Failed to convert deployment spec", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "ConversionError", err)
 	}
 
 	desiredSchedules := deploymentSpec.Schedules
@@ -225,14 +218,12 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	}
 	if err != nil {
 		log.Error(err, "Failed to create or update deployment in Prefect", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "SyncError", err)
 	}
 
 	if err := r.reconcileSchedules(ctx, prefectClient, prefectDeployment.ID, desiredSchedules); err != nil {
 		log.Error(err, "Failed to reconcile deployment schedules", "deployment", deployment.Name)
-		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "ScheduleSyncError", err.Error())
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "ScheduleSyncError", err)
 	}
 
 	prefect.UpdateDeploymentStatus(deployment, prefectDeployment)
@@ -290,6 +281,16 @@ func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, cl
 			continue
 		}
 		delete(desiredBySlug, *e.Slug)
+		d = withScheduleDefaults(d)
+		if e.MaxScheduledRuns != nil && d.MaxScheduledRuns == nil {
+			// Prefect ignores a null in a schedule update, so clearing the
+			// limit means replacing the schedule.
+			if err := client.DeleteDeploymentSchedule(ctx, deploymentID, e.ID); err != nil {
+				return fmt.Errorf("delete schedule: %w", err)
+			}
+			toCreate = append(toCreate, d)
+			continue
+		}
 		if scheduleNeedsUpdate(e, d) {
 			if err := client.UpdateDeploymentSchedule(ctx, deploymentID, e.ID, prefect.DeploymentScheduleUpdate{
 				Schedule:         &d.Schedule,
@@ -320,36 +321,75 @@ func slugValue(s *string) string {
 	return *s
 }
 
+// withScheduleDefaults fills in the values Prefect gives the schedule fields
+// that the spec leaves unset, so that removing a field from the spec resets it
+// in Prefect. An interval schedule's anchor date stays unset: Prefect defaults
+// it to the time the schedule was created, which the spec can't know.
+func withScheduleDefaults(s prefect.DeploymentSchedule) prefect.DeploymentSchedule {
+	if s.Active == nil {
+		s.Active = new(true)
+	}
+	if s.Parameters == nil {
+		s.Parameters = map[string]any{}
+	}
+	if s.Schedule.Cron != nil && s.Schedule.DayOr == nil {
+		s.Schedule.DayOr = new(true)
+	}
+	// A cron schedule has no timezone by default. Interval and rrule
+	// schedules default to UTC.
+	if s.Schedule.Timezone == nil && (s.Schedule.Interval != nil || s.Schedule.RRule != nil) {
+		s.Schedule.Timezone = new("UTC")
+	}
+	return s
+}
+
+// scheduleNeedsUpdate reports whether a schedule in Prefect differs from the
+// desired one, which withScheduleDefaults has filled in.
 func scheduleNeedsUpdate(current, desired prefect.DeploymentSchedule) bool {
 	c, d := current.Schedule, desired.Schedule
-	if d.Cron != nil && (c.Cron == nil || *c.Cron != *d.Cron) {
-		return true
-	}
-	if d.RRule != nil && (c.RRule == nil || *c.RRule != *d.RRule) {
-		return true
-	}
-	if d.Interval != nil && (c.Interval == nil || *c.Interval != *d.Interval) {
-		return true
-	}
 	if d.AnchorDate != nil && (c.AnchorDate == nil || !c.AnchorDate.Equal(*d.AnchorDate)) {
 		return true
 	}
-	if d.Timezone != nil && (c.Timezone == nil || *c.Timezone != *d.Timezone) {
+	return !equalPtr(c.Cron, d.Cron) ||
+		!equalPtr(c.RRule, d.RRule) ||
+		!equalPtr(c.Interval, d.Interval) ||
+		!equalPtr(c.Timezone, d.Timezone) ||
+		!equalPtr(c.DayOr, d.DayOr) ||
+		!equalPtr(current.Active, desired.Active) ||
+		!equalPtr(current.MaxScheduledRuns, desired.MaxScheduledRuns) ||
+		!equalParameters(current.Parameters, desired.Parameters)
+}
+
+func equalPtr[T comparable](a, b *T) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// equalParameters treats no parameters and an empty set as the same.
+func equalParameters(a, b map[string]any) bool {
+	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	if d.DayOr != nil && (c.DayOr == nil || *c.DayOr != *d.DayOr) {
-		return true
+	return reflect.DeepEqual(a, b)
+}
+
+// syncFailed records why a sync failed and returns err so the request is
+// retried with backoff.
+func (r *PrefectDeploymentReconciler) syncFailed(ctx context.Context, deployment *prefectiov1.PrefectDeployment, reason string, err error) (ctrl.Result, error) {
+	r.notSynced(ctx, deployment, reason, err.Error())
+	return ctrl.Result{}, err
+}
+
+// notSynced records why the deployment is not synced in the Synced condition,
+// marks it not ready, and saves the status so both show on the resource.
+func (r *PrefectDeploymentReconciler) notSynced(ctx context.Context, deployment *prefectiov1.PrefectDeployment, reason, message string) {
+	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, reason, message)
+	deployment.Status.Ready = false
+	if err := r.Status().Update(ctx, deployment); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to update deployment status", "deployment", deployment.Name)
 	}
-	if desired.Active != nil && (current.Active == nil || *current.Active != *desired.Active) {
-		return true
-	}
-	if desired.MaxScheduledRuns != nil && (current.MaxScheduledRuns == nil || *current.MaxScheduledRuns != *desired.MaxScheduledRuns) {
-		return true
-	}
-	if desired.Parameters != nil && !reflect.DeepEqual(desired.Parameters, current.Parameters) {
-		return true
-	}
-	return false
 }
 
 // setCondition sets a condition on the deployment status

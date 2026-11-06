@@ -99,11 +99,7 @@ func (r *PrefectAutomationReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	if err := automation.Validate(); err != nil {
-		r.setCondition(&automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "InvalidSpec", err.Error())
-		automation.Status.Ready = false
-		if updateErr := r.Status().Update(ctx, &automation); updateErr != nil {
-			log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
-		}
+		r.notSynced(ctx, &automation, "InvalidSpec", err.Error())
 		return ctrl.Result{}, nil
 	}
 
@@ -159,20 +155,12 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 		dep, derr := prefectClient.FindDeploymentByName(ctx, name)
 		if derr != nil && !errors.Is(derr, prefect.ErrNotFound) {
 			log.Error(derr, "Failed to resolve referenced deployment", "automation", automation.Name, "deployment", name)
-			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "SyncError", derr.Error())
-			automation.Status.Ready = false
-			if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
-				log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
-			}
+			r.notSynced(ctx, automation, "SyncError", derr.Error())
 			return ctrl.Result{RequeueAfter: RequeueIntervalError}, nil
 		}
 		if derr != nil {
 			log.V(1).Info("Referenced deployment not found, requeuing", "automation", automation.Name, "deployment", name)
-			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "DeploymentNotFound", fmt.Sprintf("referenced deployment %q not found yet", name))
-			automation.Status.Ready = false
-			if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
-				log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
-			}
+			r.notSynced(ctx, automation, "DeploymentNotFound", fmt.Sprintf("referenced deployment %q not found yet", name))
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		deploymentIDs[name] = dep.ID
@@ -181,10 +169,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 	automationSpec, err := prefect.ConvertToAutomationSpec(automation, deploymentIDs)
 	if err != nil {
 		log.Error(err, "Failed to convert automation spec", "automation", automation.Name)
-		r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "ConversionError", err.Error())
-		if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
-			log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
-		}
+		r.notSynced(ctx, automation, "ConversionError", err.Error())
 		return ctrl.Result{}, nil
 	}
 
@@ -204,11 +189,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 		if errors.Is(err, prefect.ErrNotFound) {
 			log.Info("Automation no longer exists in Prefect, recreating", "automation", automation.Name, "prefectId", *automation.Status.Id)
 			automation.Status.Id = nil
-			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "Recreating", "Automation was deleted in Prefect; recreating")
-			automation.Status.Ready = false
-			if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
-				log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
-			}
+			r.notSynced(ctx, automation, "Recreating", "Automation was deleted in Prefect; recreating")
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 	} else {
@@ -216,10 +197,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 	}
 	if err != nil {
 		log.Error(err, "Failed to sync automation with Prefect", "automation", automation.Name)
-		r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
-		if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
-			log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
-		}
+		r.notSynced(ctx, automation, "SyncError", err.Error())
 		return ctrl.Result{RequeueAfter: RequeueIntervalError}, nil
 	}
 
@@ -245,6 +223,16 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 
 	log.Info("Successfully synced automation with Prefect", "automationId", result.ID)
 	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(automation))}, nil
+}
+
+// notSynced records why the automation is not synced in the Synced condition,
+// marks it not ready, and saves the status so both show on the resource.
+func (r *PrefectAutomationReconciler) notSynced(ctx context.Context, automation *prefectiov1.PrefectAutomation, reason, message string) {
+	r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, reason, message)
+	automation.Status.Ready = false
+	if err := r.Status().Update(ctx, automation); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to update automation status", "automation", automation.Name)
+	}
 }
 
 func (r *PrefectAutomationReconciler) setCondition(automation *prefectiov1.PrefectAutomation, conditionType string, status metav1.ConditionStatus, reason, message string) {

@@ -47,6 +47,7 @@ import (
 const (
 	createWorkPoolRoute = "POST /work_pools/"
 	updateWorkPoolRoute = "PATCH /work_pools/{name}"
+	workerMetadataRoute = "GET /collections/views/aggregate-worker-metadata"
 )
 
 var _ = Describe("PrefectWorkPool Controller", func() {
@@ -1207,6 +1208,58 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		})
 	})
 
+	Context("When a job template ConfigMap changes", func() {
+		var configMap *corev1.ConfigMap
+
+		// createPool creates a PrefectWorkPool with the given job template.
+		createPool := func(namespace, name string, template *prefectiov1.RawValueSource) {
+			Expect(k8sClient.Create(ctx, &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+				Spec:       prefectiov1.PrefectWorkPoolSpec{BaseJobTemplate: template},
+			})).To(Succeed())
+		}
+		fromConfigMap := func(name string) *prefectiov1.RawValueSource {
+			return &prefectiov1.RawValueSource{ConfigMap: &corev1.ConfigMapKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: name},
+				Key:                  "baseJobTemplate.json",
+			}}
+		}
+
+		BeforeEach(func() {
+			configMap = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "job-template", Namespace: namespaceName}}
+		})
+
+		It("should enqueue only the work pools in its namespace that use it", func() {
+			otherNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName + "-other"}}
+			Expect(k8sClient.Create(ctx, otherNamespace)).To(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, otherNamespace)
+
+			createPool(namespaceName, "uses-it", fromConfigMap("job-template"))
+			createPool(namespaceName, "uses-another", fromConfigMap("other-template"))
+			createPool(namespaceName, "inline", &prefectiov1.RawValueSource{
+				Value: &runtime.RawExtension{Raw: baseJobTemplateJson},
+			})
+			createPool(namespaceName, "no-template", nil)
+			createPool(otherNamespace.Name, "uses-a-namesake", fromConfigMap("job-template"))
+
+			Expect(reconciler.mapConfigMapToWorkPools(ctx, configMap)).To(ConsistOf(
+				reconcile.Request{NamespacedName: types.NamespacedName{Namespace: namespaceName, Name: "uses-it"}},
+			))
+		})
+
+		It("should enqueue nothing when no work pool uses it", func() {
+			createPool(namespaceName, "no-template", nil)
+			Expect(reconciler.mapConfigMapToWorkPools(ctx, configMap)).To(BeEmpty())
+		})
+
+		It("should ignore an object that isn't a ConfigMap", func() {
+			createPool(namespaceName, "uses-it", fromConfigMap("job-template"))
+			Expect(reconciler.mapConfigMapToWorkPools(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "job-template", Namespace: namespaceName},
+			})).To(BeEmpty())
+		})
+	})
+
 	Context("When testing error scenarios", func() {
 		BeforeEach(func() {
 			prefectWorkPool = &prefectiov1.PrefectWorkPool{
@@ -1218,22 +1271,70 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			}
 		})
 
-		It("should return the error when Prefect fails the create", func() {
-			prefectAPI.Fail(createWorkPoolRoute, http.StatusInternalServerError)
-
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
-
-			By("First reconcile - adding finalizer")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+		// seedPool creates the work pool in Prefect so the sync takes the
+		// update path.
+		seedPool := func() {
+			_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: name.Name, Type: "kubernetes"})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
+		}
 
-			By("Second reconcile should handle the error")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("status 500"))
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-		})
+		DescribeTable("Should save why a sync failed",
+			func(breakSync func(), reason, errSubstring string) {
+				breakSync()
+				Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+				By("Finalizer pass")
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).To(MatchError(ContainSubstring(errSubstring)))
+				Expect(result.RequeueAfter).To(BeZero())
+
+				Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+				cond := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, PrefectWorkPoolConditionSynced)
+				Expect(cond).NotTo(BeNil())
+				Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(cond.Reason).To(Equal(reason))
+				Expect(cond.Message).To(Equal(err.Error()))
+			},
+			Entry("when the create fails", func() {
+				prefectAPI.Fail(createWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the update fails", func() {
+				seedPool()
+				prefectAPI.Fail(updateWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the default job template can't be read for a create", func() {
+				prefectAPI.Fail(workerMetadataRoute, http.StatusInternalServerError)
+			}, "ConversionError", "failed to retrieve worker metadata"),
+			Entry("when the default job template can't be read for an update", func() {
+				seedPool()
+				prefectAPI.Fail(workerMetadataRoute, http.StatusInternalServerError)
+			}, "ConversionError", "failed to retrieve worker metadata"),
+			Entry("when the work pool lookup fails", func() {
+				prefectAPI.Fail(readWorkPoolRoute, http.StatusInternalServerError)
+			}, "SyncError", "status 500"),
+			Entry("when the job template ConfigMap doesn't exist", func() {
+				prefectWorkPool.Spec.BaseJobTemplate = &prefectiov1.RawValueSource{
+					ConfigMap: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "job-template"},
+						Key:                  "baseJobTemplate.json",
+					},
+				}
+			}, "BaseJobTemplateError", `configmaps "job-template" not found`),
+			Entry("when the job template ConfigMap lacks the key", func() {
+				Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "job-template", Namespace: namespaceName},
+					Data:       map[string]string{"other.json": "{}"},
+				})).To(Succeed())
+				prefectWorkPool.Spec.BaseJobTemplate = &prefectiov1.RawValueSource{
+					ConfigMap: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "job-template"},
+						Key:                  "baseJobTemplate.json",
+					},
+				}
+			}, "BaseJobTemplateError", "can't find key baseJobTemplate.json in ConfigMap job-template"),
+		)
 	})
 })

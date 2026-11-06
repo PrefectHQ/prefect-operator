@@ -290,6 +290,35 @@ var _ = Describe("PrefectAutomation controller", func() {
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal("InvalidSpec"))
 		})
+
+		It("Should save a conversion error and leave Prefect alone", func() {
+			fresh := syncedAutomation()
+			Expect(fresh.Status.Ready).To(BeTrue())
+
+			// A compound trigger's child must set event or metric. The CRD
+			// and Validate both accept an empty child; only conversion
+			// rejects it.
+			fresh.Spec.Trigger = prefectiov1.PrefectAutomationTrigger{
+				Compound: &prefectiov1.PrefectCompoundTrigger{
+					Require:  "any",
+					Triggers: []prefectiov1.PrefectChildTrigger{{}},
+				},
+			}
+			Expect(k8sClient.Update(ctx, fresh)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeZero(), "the spec must change before a retry can succeed")
+
+			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
+			cond := meta.FindStatusCondition(fresh.Status.Conditions, PrefectAutomationConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal("ConversionError"))
+			Expect(cond.Message).To(ContainSubstring("child trigger 0"))
+			Expect(fresh.Status.Ready).To(BeFalse())
+			Expect(prefectAPI.Calls(updateAutomationRoute)).To(BeZero())
+		})
 	})
 
 	Context("When an action references a deployment by name", func() {

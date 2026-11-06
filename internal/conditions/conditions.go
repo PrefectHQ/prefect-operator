@@ -67,6 +67,16 @@ func AlreadyExists(object string, message string) metav1.Condition {
 		Status:  metav1.ConditionFalse,
 	}
 }
+
+func Failed(object string, message string) metav1.Condition {
+	return metav1.Condition{
+		Type:    fmt.Sprintf("%sReconciled", object),
+		Reason:  fmt.Sprintf("%sFailed", object),
+		Message: message,
+		Status:  metav1.ConditionFalse,
+	}
+}
+
 func Updated(object string) metav1.Condition {
 	return metav1.Condition{
 		Type:    fmt.Sprintf("%sReconciled", object),
