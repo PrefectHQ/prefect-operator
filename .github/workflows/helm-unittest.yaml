@@ -33,10 +33,15 @@ jobs:
           helm dependency build deploy/charts/prefect-operator
 
       # The image has Helm and the helm-unittest plugin installed, so the job
-      # doesn't install the plugin.
+      # doesn't install the plugin. helm-unittest creates tests/__snapshot__ in
+      # the checkout, so the container runs as the runner's user, which owns
+      # the checkout. That user has no home directory in the image, and Helm
+      # needs a writable one for its cache.
       - name: Run chart unit tests
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
             --volume "${GITHUB_WORKSPACE}/deploy/charts/prefect-operator:/apps" \
             helmunittest/helm-unittest:4.3.0-1.2.1@sha256:28ea86c3e0b07f501f0c2e9c08b9f41e240f4a4b571cb5106b36cf0f0607e989 \
             .
