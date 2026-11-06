@@ -54,9 +54,9 @@ func main() {
 	flag.DurationVar(&defaultResyncInterval, "default-resync-interval", 5*time.Minute,
 		"How often to re-check each Prefect resource against the Prefect API to correct "+
 			"out-of-band drift, unless a resource sets its own spec.interval.")
-	opts := zap.Options{
-		Development: true,
-	}
+	// Without --zap-* flags, logs are JSON at info level. `make run` passes
+	// --zap-devel for console output at debug level.
+	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 

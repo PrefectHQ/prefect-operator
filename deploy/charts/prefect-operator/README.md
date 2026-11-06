@@ -100,6 +100,8 @@ tbd
 | operator.livenessProbe.config.initialDelaySeconds | int | `15` | The number of seconds to wait before starting the first probe. |
 | operator.livenessProbe.config.periodSeconds | int | `20` | The number of seconds to wait between consecutive probes. |
 | operator.livenessProbe.enabled | bool | `true` |  |
+| operator.logFormat | string | `"json"` | operator log format: json or console. Uses the operator's json default when empty |
+| operator.logLevel | string | `"info"` | operator log level: debug, info, error, or an integer above 0 for more verbose debug logs. Uses the operator's info default when empty |
 | operator.nodeSelector | object | `{}` | node labels for operator pods assignment |
 | operator.podAnnotations | object | `{}` | extra annotations for operator pod |
 | operator.podLabels | object | `{}` | extra labels for operator pod |

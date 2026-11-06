@@ -36,6 +36,11 @@ operator:
   # -- default interval for checking Prefect resources for out-of-band drift. Uses the operator's 5m default when empty
   defaultResyncInterval: ""
 
+  # -- operator log level: debug, info, error, or an integer above 0 for more verbose debug logs. Uses the operator's info default when empty
+  logLevel: info
+  # -- operator log format: json or console. Uses the operator's json default when empty
+  logFormat: json
+
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
   livenessProbe:
     enabled: true
