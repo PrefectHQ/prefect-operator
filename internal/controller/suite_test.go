@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"fmt"
+	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -36,18 +35,17 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
+	// The Makefile's ENVTEST_K8S_VERSION picks the Kubernetes version, and
+	// `make test` passes its binaries in KUBEBUILDER_ASSETS. Without it, envtest
+	// looks in /usr/local/kubebuilder/bin and fails with a less helpful error.
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		Fail("KUBEBUILDER_ASSETS is not set. Run `make test`, or set it the way the Makefile's test target does.")
+	}
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "deploy", "charts", "prefect-operator", "crds")},
 		ErrorIfCRDPathMissing: true,
-
-		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without call the makefile target test. If not informed it will look for the
-		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
-		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run make test it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.29.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
 	}
 
 	var err error

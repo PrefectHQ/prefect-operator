@@ -1458,32 +1458,6 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(condition.Reason).To(Equal("MigrationJobCreated"))
 					Expect(condition.Message).To(Equal("MigrationJob was created"))
 				})
-
-				DescribeTable("on a later reconcile, should go on only once the migration Job completes",
-					func(status batchv1.JobStatus, done bool, reason string) {
-						setMigrationJobStatus(ctx, prefectserver, status)
-
-						reconciler := &PrefectServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-						result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-						Expect(err).NotTo(HaveOccurred())
-
-						Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
-						condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
-						Expect(condition).NotTo(BeNil())
-						Expect(condition.Reason).To(Equal(reason))
-						if done {
-							Expect(result.RequeueAfter).To(BeZero())
-							Expect(condition.Status).To(Equal(metav1.ConditionTrue))
-						} else {
-							Expect(result.RequeueAfter).To(Equal(migrationJobPollInterval))
-							Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-						}
-					},
-					Entry("waits while it runs", migrationRunning, false, "MigrationJobAlreadyExists"),
-					Entry("waits while it retries a failed pod", migrationRetrying, false, "MigrationJobAlreadyExists"),
-					Entry("goes on once it completes", migrationComplete, true, "MigrationJobCreated"),
-					Entry("stops once it fails", migrationFailed, false, "MigrationJobFailed"),
-				)
 			})
 
 			Describe("the Deployment", func() {
@@ -1566,6 +1540,59 @@ var _ = Describe("PrefectServer controller", func() {
 					}))
 				})
 			})
+		})
+
+		Context("When a server backed by PostgreSQL has a migration Job", func() {
+			// The API server rejects moving a finished Job back to running, so these
+			// specs start from the unfinished Job that the first reconcile creates.
+			BeforeEach(func() {
+				prefectserver = &prefectiov1.PrefectServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespaceName,
+						Name:      "prefect-on-postgres",
+					},
+					Spec: prefectiov1.PrefectServerSpec{
+						Postgres: &prefectiov1.PostgresConfiguration{
+							Host:     new("some-postgres-server"),
+							Port:     new(15432),
+							User:     new("a-prefect-user"),
+							Password: new("this-is-a-bad-idea"),
+							Database: new("some-prefect"),
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
+
+				reconciler := &PrefectServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			DescribeTable("on a later reconcile, should go on only once the migration Job completes",
+				func(status batchv1.JobStatus, done bool, reason string) {
+					setMigrationJobStatus(ctx, prefectserver, status)
+
+					reconciler := &PrefectServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+					result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
+					condition := meta.FindStatusCondition(prefectserver.Status.Conditions, "MigrationJobReconciled")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Reason).To(Equal(reason))
+					if done {
+						Expect(result.RequeueAfter).To(BeZero())
+						Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+					} else {
+						Expect(result.RequeueAfter).To(Equal(migrationJobPollInterval))
+						Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+					}
+				},
+				Entry("waits while it runs", migrationRunning, false, "MigrationJobAlreadyExists"),
+				Entry("waits while it retries a failed pod", migrationRetrying, false, "MigrationJobAlreadyExists"),
+				Entry("goes on once it completes", migrationComplete, true, "MigrationJobCreated"),
+				Entry("stops once it fails", migrationFailed, false, "MigrationJobFailed"),
+			)
 		})
 
 		Context("When creating a server backed by PostgreSQL ConfigMaps and Secrets", func() {
@@ -2098,22 +2125,41 @@ var _ = Describe("PrefectServer controller", func() {
 })
 
 // Migration Job statuses as the Job controller sets them. A failed pod alone
-// leaves the Job running; only the Complete or Failed condition ends it.
+// leaves the Job running; only the Complete or Failed condition ends it. The
+// API server rejects a finished Job without a startTime, a Complete condition
+// without SuccessCriteriaMet, and a Failed condition without FailureTarget.
 var (
-	migrationRunning  = batchv1.JobStatus{Active: 1}
-	migrationRetrying = batchv1.JobStatus{Active: 1, Failed: 1}
+	migrationStarted  = metav1.NewTime(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+	migrationFinished = metav1.NewTime(migrationStarted.Add(time.Minute))
+
+	migrationRunning  = batchv1.JobStatus{StartTime: &migrationStarted, Active: 1}
+	migrationRetrying = batchv1.JobStatus{StartTime: &migrationStarted, Active: 1, Failed: 1}
 	migrationComplete = batchv1.JobStatus{
-		Succeeded:  1,
-		Conditions: []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue}},
+		StartTime:      &migrationStarted,
+		CompletionTime: &migrationFinished,
+		Succeeded:      1,
+		Conditions: []batchv1.JobCondition{
+			{Type: batchv1.JobSuccessCriteriaMet, Status: corev1.ConditionTrue, Reason: "CompletionsReached"},
+			{Type: batchv1.JobComplete, Status: corev1.ConditionTrue, Reason: "CompletionsReached"},
+		},
 	}
 	migrationFailed = batchv1.JobStatus{
-		Failed: 7,
-		Conditions: []batchv1.JobCondition{{
-			Type:    batchv1.JobFailed,
-			Status:  corev1.ConditionTrue,
-			Reason:  "BackoffLimitExceeded",
-			Message: "Job has reached the specified backoff limit",
-		}},
+		StartTime: &migrationStarted,
+		Failed:    7,
+		Conditions: []batchv1.JobCondition{
+			{
+				Type:    batchv1.JobFailureTarget,
+				Status:  corev1.ConditionTrue,
+				Reason:  "BackoffLimitExceeded",
+				Message: "Job has reached the specified backoff limit",
+			},
+			{
+				Type:    batchv1.JobFailed,
+				Status:  corev1.ConditionTrue,
+				Reason:  "BackoffLimitExceeded",
+				Message: "Job has reached the specified backoff limit",
+			},
+		},
 	}
 )
 

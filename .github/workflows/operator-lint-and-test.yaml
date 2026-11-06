@@ -7,6 +7,8 @@ name: Lint and Test Prefect Operator Chart
       - main
     paths:
       - deploy/charts/**
+      - .github/workflows/operator-lint-and-test.yaml
+      - .github/linters/operator-ct.yaml
 
 # Do not grant jobs any permissions by default
 permissions: {}
@@ -21,10 +23,12 @@ jobs:
     strategy:
       matrix:
         kubernetes:
-          - "1.26.0"
-          - "1.27.0"
-          - "1.28.0"
-          - "1.29.0"
+          # Node images built for the kind release that helm/kind-action
+          # installs by default (kind v0.33.0 for kind-action v1.15.1).
+          - "1.34.11"
+          - "1.35.8"
+          - "1.36.4"
+          - "1.37.0"
       fail-fast: false
     steps:
       - name: Checkout Code
