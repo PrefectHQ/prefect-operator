@@ -109,7 +109,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
-		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
+		prefectClient = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
 		// The pool-scoped queue routes 404 without the pool, so seed it.
 		_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "example-pool", Type: "kubernetes"})
 		Expect(err).NotTo(HaveOccurred())
@@ -117,7 +117,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		reconciler = &PrefectWorkQueueReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         prefectClient,
+			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
 		}
 	})

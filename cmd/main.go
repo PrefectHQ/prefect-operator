@@ -39,6 +39,7 @@ import (
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/controller"
+	"github.com/PrefectHQ/prefect-operator/internal/prefect"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -127,6 +128,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	prefectClients := prefect.NewClientFactory(mgr.GetClient())
+
 	if err = (&controller.PrefectServerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -138,6 +141,7 @@ func main() {
 	if err = (&controller.PrefectWorkPoolReconciler{
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
+		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkPool")
@@ -147,7 +151,7 @@ func main() {
 	if err = (&controller.PrefectDeploymentReconciler{
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
-		PrefectClient:         nil, // Will create client dynamically from deployment config
+		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectDeployment")
@@ -157,7 +161,7 @@ func main() {
 	if err = (&controller.PrefectAutomationReconciler{
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
-		PrefectClient:         nil, // Will create client dynamically from automation config
+		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectAutomation")
@@ -167,7 +171,7 @@ func main() {
 	if err = (&controller.PrefectWorkQueueReconciler{
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
-		PrefectClient:         nil, // Will create client dynamically from work queue config
+		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkQueue")

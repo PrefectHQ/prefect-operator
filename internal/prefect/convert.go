@@ -187,7 +187,7 @@ func UpdateDeploymentStatus(k8sDeployment *prefectiov1.PrefectDeployment, prefec
 }
 
 // GetFlowIDFromDeployment extracts or generates a flow ID for the deployment
-func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeployment *prefectiov1.PrefectDeployment) (string, error) {
+func GetFlowIDFromDeployment(ctx context.Context, client *Client, k8sDeployment *prefectiov1.PrefectDeployment) (string, error) {
 	entryPoint := k8sDeployment.Spec.Deployment.Entrypoint
 
 	_, after, ok := strings.Cut(entryPoint, ":")
@@ -213,15 +213,15 @@ func GetFlowIDFromDeployment(ctx context.Context, client PrefectClient, k8sDeplo
 }
 
 // ConvertToWorkPoolSpec converts a K8s PrefectWorkPool to a Prefect API WorkPool
-func ConvertToWorkPoolUpdateSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient) (*WorkPoolSpec, error) {
+func ConvertToWorkPoolUpdateSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client *Client) (*WorkPoolSpec, error) {
 	return convertToWorkPoolSpec(ctx, k8sWorkPool, baseJobTemplate, client, true)
 }
 
-func ConvertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient) (*WorkPoolSpec, error) {
+func ConvertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client *Client) (*WorkPoolSpec, error) {
 	return convertToWorkPoolSpec(ctx, k8sWorkPool, baseJobTemplate, client, false)
 }
 
-func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client PrefectClient, update bool) (*WorkPoolSpec, error) {
+func convertToWorkPoolSpec(ctx context.Context, k8sWorkPool *prefectiov1.PrefectWorkPool, baseJobTemplate []byte, client *Client, update bool) (*WorkPoolSpec, error) {
 	spec := &WorkPoolSpec{}
 
 	workPool := k8sWorkPool.Spec

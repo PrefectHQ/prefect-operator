@@ -61,8 +61,10 @@ const (
 // PrefectDeploymentReconciler reconciles a PrefectDeployment object
 type PrefectDeploymentReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	PrefectClient prefect.PrefectClient
+	Scheme *runtime.Scheme
+	// NewPrefectClient returns a client for the Prefect server that a
+	// resource references.
+	NewPrefectClient prefect.ClientFactory
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectDeployment does not set spec.interval.
 	DefaultResyncInterval time.Duration
@@ -153,27 +155,22 @@ func (r *PrefectDeploymentReconciler) needsSync(deployment *prefectiov1.PrefectD
 func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deployment *prefectiov1.PrefectDeployment) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	// Use injected client if available (for testing)
-	prefectClient := r.PrefectClient
-	if prefectClient == nil {
-		var err error
-		prefectClient, err = prefect.NewClientFromK8s(ctx, &deployment.Spec.Server, r.Client, deployment.Namespace, log)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
-			return ctrl.Result{}, err
-		}
+	prefectClient, err := r.NewPrefectClient(ctx, &deployment.Spec.Server, deployment.Namespace)
+	if err != nil {
+		log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
+		return ctrl.Result{}, err
+	}
 
-		// Check that the referenced work pool exists (only for real clients)
-		_, err = prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
-		if err != nil {
-			log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
-			r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
-			deployment.Status.Ready = false
-			if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
-				log.Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
-			}
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	// Check that the referenced work pool exists
+	_, err = prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
+	if err != nil {
+		log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
+		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
+		deployment.Status.Ready = false
+		if updateErr := r.Status().Update(ctx, deployment); updateErr != nil {
+			log.Error(updateErr, "Failed to update deployment status", "deployment", deployment.Name)
 		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	flowID, err := prefect.GetFlowIDFromDeployment(ctx, prefectClient, deployment)
@@ -259,7 +256,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(deployment))}, nil
 }
 
-func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, client prefect.PrefectClient, deploymentID string, desired []prefect.DeploymentSchedule) error {
+func (r *PrefectDeploymentReconciler) reconcileSchedules(ctx context.Context, client *prefect.Client, deploymentID string, desired []prefect.DeploymentSchedule) error {
 	current, err := client.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return fmt.Errorf("get current schedules: %w", err)
@@ -384,25 +381,15 @@ func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deploy
 
 	// Only attempt cleanup if we have a deployment ID in Prefect
 	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
-		// Create Prefect client for cleanup
-		prefectClient := r.PrefectClient
-		if prefectClient == nil {
-			var err error
-			prefectClient, err = prefect.NewClientFromK8s(ctx, &deployment.Spec.Server, r.Client, deployment.Namespace, log)
-			if err != nil {
-				log.Error(err, "Failed to create Prefect client for deletion", "deployment", deployment.Name)
-				// Continue with finalizer removal even if client creation fails
-				// to avoid blocking deletion indefinitely
-			} else {
-				// Attempt to delete from Prefect API
-				if err := prefectClient.DeleteDeployment(ctx, *deployment.Status.Id); err != nil {
-					log.Error(err, "Failed to delete deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
-					// Continue with finalizer removal even if Prefect deletion fails
-					// to avoid blocking Kubernetes deletion indefinitely
-				} else {
-					log.Info("Successfully deleted deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
-				}
-			}
+		// Remove the finalizer even when the Prefect delete fails, so a Prefect
+		// outage can't block Kubernetes deletion indefinitely.
+		prefectClient, err := r.NewPrefectClient(ctx, &deployment.Spec.Server, deployment.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to create Prefect client for deletion", "deployment", deployment.Name)
+		} else if err := prefectClient.DeleteDeployment(ctx, *deployment.Status.Id); err != nil {
+			log.Error(err, "Failed to delete deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
+		} else {
+			log.Info("Successfully deleted deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
 		}
 	}
 

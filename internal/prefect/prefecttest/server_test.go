@@ -48,7 +48,7 @@ var _ = Describe("Fake Prefect API", func() {
 		ctx = context.Background()
 		server = prefecttest.NewServer()
 		DeferCleanup(server.Close)
-		client = prefect.NewClient(server.URL, "", logr.Discard())
+		client = prefect.NewClient(server.APIURL, "", logr.Discard())
 	})
 
 	createPool := func(name string) *prefect.WorkPool {
@@ -65,7 +65,7 @@ var _ = Describe("Fake Prefect API", func() {
 
 	Describe("routing", func() {
 		It("answers 501 for a request it has no route for", func() {
-			resp, err := http.Post(server.URL+"/deployments/not-a-route", "application/json", bytes.NewReader([]byte(`{}`)))
+			resp, err := http.Post(server.APIURL+"/deployments/not-a-route", "application/json", bytes.NewReader([]byte(`{}`)))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(http.StatusNotImplemented))
 		})
@@ -147,7 +147,7 @@ var _ = Describe("Fake Prefect API", func() {
 
 		It("rejects an update that sets the name", func() {
 			created := createDeployment(&prefect.DeploymentSpec{Name: "daily", FlowID: flow.ID})
-			req, err := http.NewRequest(http.MethodPatch, server.URL+"/deployments/"+created.ID,
+			req, err := http.NewRequest(http.MethodPatch, server.APIURL+"/deployments/"+created.ID,
 				bytes.NewReader([]byte(`{"name": "renamed"}`)))
 			Expect(err).NotTo(HaveOccurred())
 			resp, err := http.DefaultClient.Do(req)
