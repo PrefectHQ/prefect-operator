@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,10 +11,11 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -42,6 +44,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 		name              types.NamespacedName
 		prefectDeployment *prefectiov1.PrefectDeployment
 		reconciler        *PrefectDeploymentReconciler
+		recorder          *events.FakeRecorder
 		prefectAPI        *prefecttest.Server
 		prefectClient     *prefect.Client
 	)
@@ -112,11 +115,13 @@ var _ = Describe("PrefectDeployment controller", func() {
 		// Prefect rejects a deployment whose work pool does not exist.
 		_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "kubernetes-work-pool", Type: "kubernetes"})
 		Expect(err).NotTo(HaveOccurred())
+		recorder = events.NewFakeRecorder(100)
 		reconciler = &PrefectDeploymentReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
 			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
+			Recorder:              recorder,
 		}
 	})
 
@@ -142,6 +147,28 @@ var _ = Describe("PrefectDeployment controller", func() {
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Context("When a Prefect client can't be created", func() {
+		It("Should record why in the Synced condition and a Warning event", func() {
+			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+
+			By("Finalizer pass")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			reconciler.NewPrefectClient = failingPrefectClients(errors.New("failed to get API key"))
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError("failed to get API key"))
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.Ready).To(BeFalse())
+			cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal("PrefectClientError"))
+			Expect(recorder.Events).To(Receive(Equal("Warning PrefectClientError " + cond.Message)))
+		})
 	})
 
 	Context("When reconciling a new PrefectDeployment", func() {
@@ -628,6 +655,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal("WorkPoolNotFound"))
+			Expect(recorder.Events).To(Receive(Equal("Warning WorkPoolNotFound Work pool 'missing-pool' not found")))
 
 			By("Seeding the pool into Prefect")
 			_, err = prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "missing-pool", Type: "kubernetes"})
@@ -764,7 +792,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Waiting for deployment deletion to complete")
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, name, prefectDeployment)
-				return errors.IsNotFound(err)
+				return apierrors.IsNotFound(err)
 			}, "10s", "100ms").Should(BeTrue())
 
 			By("Creating a new deployment with same name to trigger status update error")

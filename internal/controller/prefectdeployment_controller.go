@@ -8,10 +8,12 @@ import (
 	"slices"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -52,6 +54,9 @@ type PrefectDeploymentReconciler struct {
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectDeployment does not set spec.interval.
 	DefaultResyncInterval time.Duration
+	// Recorder emits Kubernetes events on the resources this controller
+	// reconciles.
+	Recorder events.EventRecorder
 }
 
 // resyncInterval returns the effective drift-detection interval for the
@@ -63,6 +68,7 @@ func (r *PrefectDeploymentReconciler) resyncInterval(deployment *prefectiov1.Pre
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments/finalizers,verbs=update
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation of a PrefectDeployment
 func (r *PrefectDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -142,7 +148,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	prefectClient, err := r.NewPrefectClient(ctx, &deployment.Spec.Server, deployment.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
-		return ctrl.Result{}, err
+		return r.syncFailed(ctx, deployment, "PrefectClientError", err)
 	}
 
 	// Requeue until the referenced work pool exists (e.g. its PrefectWorkPool
@@ -366,10 +372,12 @@ func (r *PrefectDeploymentReconciler) syncFailed(ctx context.Context, deployment
 	return ctrl.Result{}, err
 }
 
-// notSynced records why the deployment is not synced in the Synced condition,
-// marks it not ready, and saves the status so both show on the resource.
+// notSynced records why the deployment is not synced in the Synced condition
+// and a Warning event, marks it not ready, and saves the status so both show
+// on the resource.
 func (r *PrefectDeploymentReconciler) notSynced(ctx context.Context, deployment *prefectiov1.PrefectDeployment, reason, message string) {
 	r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, reason, message)
+	r.Recorder.Eventf(deployment, nil, corev1.EventTypeWarning, reason, eventActionSync, "%s", message)
 	deployment.Status.Ready = false
 	if err := r.Status().Update(ctx, deployment); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update deployment status", "deployment", deployment.Name)
@@ -412,7 +420,7 @@ func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deploy
 			return prefectClient.DeleteDeployment(ctx, *id)
 		}
 	}
-	return finalize(ctx, r.Client, deployment, PrefectDeploymentFinalizer, deleteFromPrefect)
+	return finalize(ctx, r.Client, r.Recorder, deployment, PrefectDeploymentFinalizer, deleteFromPrefect)
 }
 
 // SetupWithManager sets up the controller with the Manager.

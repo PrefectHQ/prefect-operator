@@ -17,3 +17,11 @@ func fakePrefectClients(api *prefecttest.Server) prefect.ClientFactory {
 		return prefect.NewClient(api.APIURL, "", logr.Discard()), nil
 	}
 }
+
+// failingPrefectClients returns a ClientFactory that always fails with err,
+// as the real one does when it can't read a resource's API key.
+func failingPrefectClients(err error) prefect.ClientFactory {
+	return func(context.Context, *prefectiov1.PrefectServerReference, string) (*prefect.Client, error) {
+		return nil, err
+	}
+}

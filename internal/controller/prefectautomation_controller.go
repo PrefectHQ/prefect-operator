@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -41,6 +43,9 @@ type PrefectAutomationReconciler struct {
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectAutomation does not set spec.interval.
 	DefaultResyncInterval time.Duration
+	// Recorder emits Kubernetes events on the resources this controller
+	// reconciles.
+	Recorder events.EventRecorder
 }
 
 // resyncInterval returns the effective drift-detection interval for the
@@ -52,6 +57,7 @@ func (r *PrefectAutomationReconciler) resyncInterval(automation *prefectiov1.Pre
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations/finalizers,verbs=update
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation of a PrefectAutomation
 func (r *PrefectAutomationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -127,6 +133,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 	prefectClient, err := r.NewPrefectClient(ctx, &automation.Spec.Server, automation.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to create Prefect client", "automation", automation.Name)
+		r.notSynced(ctx, automation, "PrefectClientError", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -209,10 +216,12 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 	return ctrl.Result{RequeueAfter: utils.JitterResyncInterval(r.resyncInterval(automation))}, nil
 }
 
-// notSynced records why the automation is not synced in the Synced condition,
-// marks it not ready, and saves the status so both show on the resource.
+// notSynced records why the automation is not synced in the Synced condition
+// and a Warning event, marks it not ready, and saves the status so both show
+// on the resource.
 func (r *PrefectAutomationReconciler) notSynced(ctx context.Context, automation *prefectiov1.PrefectAutomation, reason, message string) {
 	r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, reason, message)
+	r.Recorder.Eventf(automation, nil, corev1.EventTypeWarning, reason, eventActionSync, "%s", message)
 	automation.Status.Ready = false
 	if err := r.Status().Update(ctx, automation); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update automation status", "automation", automation.Name)
@@ -242,7 +251,7 @@ func (r *PrefectAutomationReconciler) handleDeletion(ctx context.Context, automa
 			return prefectClient.DeleteAutomation(ctx, *id)
 		}
 	}
-	return finalize(ctx, r.Client, automation, PrefectAutomationFinalizer, deleteFromPrefect)
+	return finalize(ctx, r.Client, r.Recorder, automation, PrefectAutomationFinalizer, deleteFromPrefect)
 }
 
 // SetupWithManager sets up the controller with the Manager.

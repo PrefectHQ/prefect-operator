@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -12,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +39,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 		name          types.NamespacedName
 		automation    *prefectiov1.PrefectAutomation
 		reconciler    *PrefectAutomationReconciler
+		recorder      *events.FakeRecorder
 		prefectAPI    *prefecttest.Server
 		prefectClient *prefect.Client
 	)
@@ -97,11 +100,13 @@ var _ = Describe("PrefectAutomation controller", func() {
 		prefectAPI = prefecttest.NewServer()
 		DeferCleanup(prefectAPI.Close)
 		prefectClient = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
+		recorder = events.NewFakeRecorder(100)
 		reconciler = &PrefectAutomationReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
 			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
+			Recorder:              recorder,
 		}
 	})
 
@@ -233,6 +238,28 @@ var _ = Describe("PrefectAutomation controller", func() {
 		})
 	})
 
+	Context("When a Prefect client can't be created", func() {
+		It("Should record why in the Synced condition and a Warning event", func() {
+			Expect(k8sClient.Create(ctx, automation)).To(Succeed())
+
+			By("Finalizer pass")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			reconciler.NewPrefectClient = failingPrefectClients(errors.New("failed to get API key"))
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError("failed to get API key"))
+
+			Expect(k8sClient.Get(ctx, name, automation)).To(Succeed())
+			Expect(automation.Status.Ready).To(BeFalse())
+			cond := meta.FindStatusCondition(automation.Status.Conditions, PrefectAutomationConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal("PrefectClientError"))
+			Expect(recorder.Events).To(Receive(Equal("Warning PrefectClientError " + cond.Message)))
+		})
+	})
+
 	Context("When the spec is invalid", func() {
 		It("Should set InvalidSpec when no trigger is set", func() {
 			automation.Spec.Trigger = prefectiov1.PrefectAutomationTrigger{}
@@ -251,6 +278,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			cond := meta.FindStatusCondition(automation.Status.Conditions, PrefectAutomationConditionSynced)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal("InvalidSpec"))
+			Expect(recorder.Events).To(Receive(Equal("Warning InvalidSpec " + cond.Message)))
 		})
 
 		It("Should set InvalidSpec when an action sets both deploymentId and deploymentName", func() {

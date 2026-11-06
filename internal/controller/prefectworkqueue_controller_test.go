@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -12,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +37,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		name          types.NamespacedName
 		workQueue     *prefectiov1.PrefectWorkQueue
 		reconciler    *PrefectWorkQueueReconciler
+		recorder      *events.FakeRecorder
 		prefectAPI    *prefecttest.Server
 		prefectClient *prefect.Client
 	)
@@ -98,11 +101,13 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "example-pool", Type: "kubernetes"})
 		Expect(err).NotTo(HaveOccurred())
 
+		recorder = events.NewFakeRecorder(100)
 		reconciler = &PrefectWorkQueueReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
 			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
+			Recorder:              recorder,
 		}
 	})
 
@@ -187,6 +192,28 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		})
 	})
 
+	Context("When a Prefect client can't be created", func() {
+		It("Should record why in the Synced condition and a Warning event", func() {
+			Expect(k8sClient.Create(ctx, workQueue)).To(Succeed())
+
+			By("Finalizer pass")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			reconciler.NewPrefectClient = failingPrefectClients(errors.New("failed to get API key"))
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError("failed to get API key"))
+
+			Expect(k8sClient.Get(ctx, name, workQueue)).To(Succeed())
+			Expect(workQueue.Status.Ready).To(BeFalse())
+			cond := meta.FindStatusCondition(workQueue.Status.Conditions, PrefectWorkQueueConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal("PrefectClientError"))
+			Expect(recorder.Events).To(Receive(Equal("Warning PrefectClientError " + cond.Message)))
+		})
+	})
+
 	Context("When the work pool does not exist yet", func() {
 		It("Should requeue with WorkPoolNotFound until the pool appears", func() {
 			workQueue.Spec.WorkPoolName = "missing-pool"
@@ -206,6 +233,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			cond := meta.FindStatusCondition(workQueue.Status.Conditions, PrefectWorkQueueConditionSynced)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal("WorkPoolNotFound"))
+			Expect(recorder.Events).To(Receive(Equal("Warning WorkPoolNotFound Work pool 'missing-pool' not found")))
 
 			By("Seeding the pool into Prefect")
 			_, err = prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "missing-pool", Type: "kubernetes"})

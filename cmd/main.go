@@ -113,6 +113,7 @@ func main() {
 	}
 
 	prefectClients := prefect.NewClientFactory(mgr.GetClient())
+	recorder := mgr.GetEventRecorder("prefect-operator")
 
 	if err = (&controller.PrefectServerReconciler{
 		Client: mgr.GetClient(),
@@ -127,6 +128,7 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
+		Recorder:              recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkPool")
 		os.Exit(1)
@@ -137,6 +139,7 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
+		Recorder:              recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectDeployment")
 		os.Exit(1)
@@ -147,6 +150,7 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
+		Recorder:              recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectAutomation")
 		os.Exit(1)
@@ -157,6 +161,7 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		NewPrefectClient:      prefectClients,
 		DefaultResyncInterval: defaultResyncInterval,
+		Recorder:              recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectWorkQueue")
 		os.Exit(1)
