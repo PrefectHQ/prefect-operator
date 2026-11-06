@@ -11,6 +11,11 @@ commonLabels:
 # -- annotations to add to all deployed objects
 commonAnnotations: {}
 
+## CustomResourceDefinitions
+crds:
+  # -- install and upgrade the operator's CRDs with the chart. Uninstalling the chart leaves them in place. Set to false when the CRDs are managed outside this release, such as by another release of the chart in the same cluster
+  install: true
+
 
 ## Deployment Configuration
 operator:

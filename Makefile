@@ -79,7 +79,7 @@ clean: ## Clean up the project directory.
 
 .PHONY: manifests
 manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=deploy/charts/prefect-operator/crds
+	$(CONTROLLER_GEN) crd webhook paths="./..." output:crd:artifacts:config=deploy/charts/prefect-operator/files/crds
 	$(CONTROLLER_GEN) rbac:roleName=prefect-operator paths="./..." output:rbac:artifacts:config=deploy/charts/prefect-operator/files
 
 .PHONY: generate
@@ -88,8 +88,8 @@ generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopy
 
 .PHONY: verify-generated
 verify-generated: manifests generate ## Verify generated files are current.
-	@git diff --exit-code -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds deploy/charts/prefect-operator/files/role.yaml
-	@untracked="$$(git ls-files --others --exclude-standard -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/crds deploy/charts/prefect-operator/files/role.yaml)"; \
+	@git diff --exit-code -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/files/crds deploy/charts/prefect-operator/files/role.yaml
+	@untracked="$$(git ls-files --others --exclude-standard -- api/v1/zz_generated.deepcopy.go deploy/charts/prefect-operator/files/crds deploy/charts/prefect-operator/files/role.yaml)"; \
 		if [[ -n "$$untracked" ]]; then \
 			echo "Untracked generated files:"; \
 			echo "$$untracked"; \
@@ -156,11 +156,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docs
 docs: tools
-	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectservers.yaml --output PrefectServer.md
-	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectworkpools.yaml --output PrefectWorkPool.md
-	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectdeployments.yaml --output PrefectDeployment.md
-	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectautomations.yaml --output PrefectAutomation.md
-	crdoc --resources deploy/charts/prefect-operator/crds/prefect.io_prefectworkqueues.yaml --output PrefectWorkQueue.md
+	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectservers.yaml --output PrefectServer.md
+	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectworkpools.yaml --output PrefectWorkPool.md
+	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectdeployments.yaml --output PrefectDeployment.md
+	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectautomations.yaml --output PrefectAutomation.md
+	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectworkqueues.yaml --output PrefectWorkQueue.md
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -198,11 +198,11 @@ endif
 
 .PHONY: install
 install: manifests tools ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUBECTL) apply -f 'deploy/charts/prefect-operator/crds/*.yaml'
+	$(KUBECTL) apply -f 'deploy/charts/prefect-operator/files/crds/*.yaml'
 
 .PHONY: uninstall
 uninstall: manifests tools ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f 'deploy/charts/prefect-operator/crds/*.yaml'
+	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f 'deploy/charts/prefect-operator/files/crds/*.yaml'
 
 .PHONY: deploy
 deploy: helmbuild ## Install CRDs & the Helm Chart to the K8s cluster specified in ~/.kube/config.

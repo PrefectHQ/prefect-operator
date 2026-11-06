@@ -163,7 +163,7 @@ curl -X POST http://localhost:4200/api/deployments/filter -H "Content-Type: appl
 
 The operator uses controller-gen for:
 
-- CRD generation from Go types → `deploy/charts/prefect-operator/crds/`
+- CRD generation from Go types → `deploy/charts/prefect-operator/files/crds/`. The chart installs them through `templates/crds.yaml`
 - DeepCopy method generation for all API types
 - RBAC manifest generation
 
