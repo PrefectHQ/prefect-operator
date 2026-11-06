@@ -7,10 +7,12 @@ import (
 	"slices"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -42,6 +44,9 @@ type PrefectWorkQueueReconciler struct {
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectWorkQueue does not set spec.interval.
 	DefaultResyncInterval time.Duration
+	// Recorder emits Kubernetes events on the resources this controller
+	// reconciles.
+	Recorder events.EventRecorder
 }
 
 // resyncInterval returns the effective drift-detection interval for the
@@ -53,6 +58,7 @@ func (r *PrefectWorkQueueReconciler) resyncInterval(workQueue *prefectiov1.Prefe
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkqueues,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkqueues/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkqueues/finalizers,verbs=update
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation of a PrefectWorkQueue
 func (r *PrefectWorkQueueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -127,6 +133,7 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 	prefectClient, err := r.NewPrefectClient(ctx, &workQueue.Spec.Server, workQueue.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to create Prefect client", "workQueue", workQueue.Name)
+		r.notSynced(ctx, workQueue, "PrefectClientError", err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -273,10 +280,12 @@ func workQueueMatches(desired prefectiov1.PrefectWorkQueueSpec, remote *prefect.
 	return true
 }
 
-// notSynced records why the work queue is not synced in the Synced condition,
-// marks it not ready, and saves the status so both show on the resource.
+// notSynced records why the work queue is not synced in the Synced condition
+// and a Warning event, marks it not ready, and saves the status so both show
+// on the resource.
 func (r *PrefectWorkQueueReconciler) notSynced(ctx context.Context, workQueue *prefectiov1.PrefectWorkQueue, reason, message string) {
 	r.setCondition(workQueue, PrefectWorkQueueConditionSynced, metav1.ConditionFalse, reason, message)
+	r.Recorder.Eventf(workQueue, nil, corev1.EventTypeWarning, reason, eventActionSync, "%s", message)
 	workQueue.Status.Ready = false
 	if err := r.Status().Update(ctx, workQueue); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update work queue status", "workQueue", workQueue.Name)
@@ -318,7 +327,7 @@ func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQue
 			return prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName)
 		}
 	}
-	return finalize(ctx, r.Client, workQueue, PrefectWorkQueueFinalizer, deleteFromPrefect)
+	return finalize(ctx, r.Client, r.Recorder, workQueue, PrefectWorkQueueFinalizer, deleteFromPrefect)
 }
 
 // SetupWithManager sets up the controller with the Manager.

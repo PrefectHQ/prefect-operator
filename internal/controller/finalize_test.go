@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -22,9 +23,10 @@ var _ = Describe("finalize", func() {
 	)
 
 	var (
-		ctx   context.Context
-		name  types.NamespacedName
-		calls int
+		ctx      context.Context
+		name     types.NamespacedName
+		calls    int
+		recorder *events.FakeRecorder
 	)
 
 	// deleting creates a ConfigMap with finalizers, deletes it so that it has
@@ -50,6 +52,7 @@ var _ = Describe("finalize", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		calls = 0
+		recorder = events.NewFakeRecorder(10)
 		namespaceName := fmt.Sprintf("finalize-ns-%d", time.Now().UnixNano())
 		Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}})).To(Succeed())
 		name = types.NamespacedName{Namespace: namespaceName, Name: "finalize-test"}
@@ -58,7 +61,7 @@ var _ = Describe("finalize", func() {
 	It("deletes from Prefect and then removes the finalizer", func() {
 		obj := deleting(finalizer)
 
-		result, err := finalize(ctx, k8sClient, obj, finalizer, func(context.Context) error {
+		result, err := finalize(ctx, k8sClient, recorder, obj, finalizer, func(context.Context) error {
 			calls++
 			return nil
 		})
@@ -66,26 +69,29 @@ var _ = Describe("finalize", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.IsZero()).To(BeTrue())
 		Expect(calls).To(Equal(1))
+		Expect(recorder.Events).NotTo(Receive())
 		expectGone()
 	})
 
 	It("removes the finalizer when the Prefect delete fails", func() {
 		obj := deleting(finalizer)
 
-		_, err := finalize(ctx, k8sClient, obj, finalizer, func(context.Context) error {
+		_, err := finalize(ctx, k8sClient, recorder, obj, finalizer, func(context.Context) error {
 			calls++
 			return errors.New("prefect is down")
 		})
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(calls).To(Equal(1))
+		Expect(recorder.Events).To(Receive(Equal(
+			"Warning DeleteFailed Failed to delete from Prefect, so it may still exist there: prefect is down")))
 		expectGone()
 	})
 
 	It("removes the finalizer when there's nothing to delete in Prefect", func() {
 		obj := deleting(finalizer)
 
-		_, err := finalize(ctx, k8sClient, obj, finalizer, nil)
+		_, err := finalize(ctx, k8sClient, recorder, obj, finalizer, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		expectGone()
@@ -94,7 +100,7 @@ var _ = Describe("finalize", func() {
 	It("does nothing when the object doesn't have the finalizer", func() {
 		obj := deleting(otherFinalizer)
 
-		_, err := finalize(ctx, k8sClient, obj, finalizer, func(context.Context) error {
+		_, err := finalize(ctx, k8sClient, recorder, obj, finalizer, func(context.Context) error {
 			calls++
 			return nil
 		})
@@ -116,7 +122,7 @@ var _ = Describe("finalize", func() {
 		obj.Labels = map[string]string{"changed": "true"}
 		Expect(k8sClient.Update(ctx, obj)).To(Succeed())
 
-		_, err := finalize(ctx, k8sClient, stale, finalizer, nil)
+		_, err := finalize(ctx, k8sClient, recorder, stale, finalizer, nil)
 
 		Expect(apierrors.IsConflict(err)).To(BeTrue(), "expected a conflict, got %v", err)
 		Expect(k8sClient.Get(ctx, name, obj)).To(Succeed())

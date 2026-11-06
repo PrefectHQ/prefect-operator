@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -51,6 +52,9 @@ type PrefectWorkPoolReconciler struct {
 	// DefaultResyncInterval is the fallback drift-detection interval used when a
 	// PrefectWorkPool does not set spec.interval.
 	DefaultResyncInterval time.Duration
+	// Recorder emits Kubernetes events on the resources this controller
+	// reconciles.
+	Recorder events.EventRecorder
 }
 
 // resyncInterval returns the effective drift-detection interval for the work
@@ -62,6 +66,7 @@ func (r *PrefectWorkPoolReconciler) resyncInterval(workPool *prefectiov1.Prefect
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools/finalizers,verbs=update
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 
@@ -217,6 +222,8 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	)
 
 	if err != nil {
+		r.Recorder.Eventf(&workPool, nil, corev1.EventTypeWarning, "WorkerDeploymentError", eventActionSync,
+			"Failed to create or update the worker Deployment: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -274,7 +281,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	prefectClient, err := r.NewPrefectClient(ctx, &workPool.Spec.Server, workPool.Namespace)
 	if err != nil {
 		log.Error(err, "Failed to create Prefect client", "workPool", name)
-		return err
+		return r.syncFailed(workPool, "PrefectClientError", err)
 	}
 
 	prefectWorkPool, err := prefectClient.GetWorkPool(ctx, name)
@@ -358,9 +365,10 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 }
 
 // syncFailed records why a sync failed in the Synced condition, which
-// Reconcile saves on its way out, and returns err.
+// Reconcile saves on its way out, and in a Warning event, and returns err.
 func (r *PrefectWorkPoolReconciler) syncFailed(workPool *prefectiov1.PrefectWorkPool, reason string, err error) error {
 	r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionFalse, reason, err.Error())
+	r.Recorder.Eventf(workPool, nil, corev1.EventTypeWarning, reason, eventActionSync, "%v", err)
 	return err
 }
 
@@ -395,7 +403,7 @@ func (r *PrefectWorkPoolReconciler) handleDeletion(ctx context.Context, workPool
 			return prefectClient.DeleteWorkPool(ctx, workPool.Name)
 		}
 	}
-	return finalize(ctx, r.Client, workPool, PrefectWorkPoolFinalizer, deleteFromPrefect)
+	return finalize(ctx, r.Client, r.Recorder, workPool, PrefectWorkPoolFinalizer, deleteFromPrefect)
 }
 
 func (r *PrefectWorkPoolReconciler) mapConfigMapToWorkPools(ctx context.Context, obj client.Object) []reconcile.Request {

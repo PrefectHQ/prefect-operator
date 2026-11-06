@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -42,6 +44,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		name                types.NamespacedName
 		prefectWorkPool     *prefectiov1.PrefectWorkPool
 		reconciler          *PrefectWorkPoolReconciler
+		recorder            *events.FakeRecorder
 		prefectAPI          *prefecttest.Server
 		prefectClient       *prefect.Client
 		baseJobTemplate     map[string]any
@@ -67,11 +70,13 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		DeferCleanup(prefectAPI.Close)
 		prefectClient = prefect.NewClient(prefectAPI.APIURL, "", logr.Discard())
 
+		recorder = events.NewFakeRecorder(100)
 		reconciler = &PrefectWorkPoolReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
 			NewPrefectClient:      fakePrefectClients(prefectAPI),
 			DefaultResyncInterval: testResyncInterval,
+			Recorder:              recorder,
 		}
 
 		baseJobTemplate = map[string]any{
@@ -1375,7 +1380,11 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				Expect(cond.Reason).To(Equal(reason))
 				Expect(cond.Message).To(Equal(err.Error()))
+				Expect(recorder.Events).To(Receive(Equal("Warning " + reason + " " + cond.Message)))
 			},
+			Entry("when a Prefect client can't be created", func() {
+				reconciler.NewPrefectClient = failingPrefectClients(errors.New("failed to get API key"))
+			}, "PrefectClientError", "failed to get API key"),
 			Entry("when the create fails", func() {
 				prefectAPI.Fail(createWorkPoolRoute, http.StatusInternalServerError)
 			}, "SyncError", "status 500"),
@@ -1414,5 +1423,20 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				}
 			}, "BaseJobTemplateError", "can't find key baseJobTemplate.json in ConfigMap job-template"),
 		)
+
+		It("Should record a Warning event when the worker Deployment can't be saved", func() {
+			// The API server rejects container names that aren't DNS labels.
+			prefectWorkPool.Spec.ExtraContainers = []corev1.Container{{Name: "not_a_dns_label", Image: "busybox"}}
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+
+			By("Finalizer pass")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError(ContainSubstring("not_a_dns_label")))
+			Expect(recorder.Events).To(Receive(Equal(
+				"Warning WorkerDeploymentError Failed to create or update the worker Deployment: " + err.Error())))
+		})
 	})
 })
