@@ -229,33 +229,20 @@ func (r *PrefectAutomationReconciler) setCondition(automation *prefectiov1.Prefe
 	})
 }
 
-// handleDeletion cleans up the automation in Prefect and removes the finalizer
+// handleDeletion deletes the automation in Prefect, if a sync created it, and
+// removes the finalizer.
 func (r *PrefectAutomationReconciler) handleDeletion(ctx context.Context, automation *prefectiov1.PrefectAutomation) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	log.Info("Handling deletion of PrefectAutomation", "automation", automation.Name)
-
-	if !controllerutil.ContainsFinalizer(automation, PrefectAutomationFinalizer) {
-		return ctrl.Result{}, nil
-	}
-
-	if automation.Status.Id != nil && *automation.Status.Id != "" {
-		// Don't block K8s deletion on a failed remote delete.
-		prefectClient, err := r.NewPrefectClient(ctx, &automation.Spec.Server, automation.Namespace)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client for deletion", "automation", automation.Name)
-		} else if err := prefectClient.DeleteAutomation(ctx, *automation.Status.Id); err != nil {
-			log.Error(err, "Failed to delete automation from Prefect API", "automation", automation.Name, "prefectId", *automation.Status.Id)
-		} else {
-			log.Info("Successfully deleted automation from Prefect API", "automation", automation.Name, "prefectId", *automation.Status.Id)
+	var deleteFromPrefect func(context.Context) error
+	if id := automation.Status.Id; id != nil && *id != "" {
+		deleteFromPrefect = func(ctx context.Context) error {
+			prefectClient, err := r.NewPrefectClient(ctx, &automation.Spec.Server, automation.Namespace)
+			if err != nil {
+				return fmt.Errorf("creating Prefect client: %w", err)
+			}
+			return prefectClient.DeleteAutomation(ctx, *id)
 		}
 	}
-
-	controllerutil.RemoveFinalizer(automation, PrefectAutomationFinalizer)
-	if err := r.Update(ctx, automation); err != nil {
-		log.Error(err, "Failed to remove finalizer", "automation", automation.Name)
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
+	return finalize(ctx, r.Client, automation, PrefectAutomationFinalizer, deleteFromPrefect)
 }
 
 // SetupWithManager sets up the controller with the Manager.
