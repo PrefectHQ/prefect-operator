@@ -350,7 +350,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			By("Deployment not found yet - requeue")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(5 * time.Second))
+			Expect(result.RequeueAfter).To(Equal(RequeueIntervalWaiting))
 
 			Expect(k8sClient.Get(ctx, name, automation)).To(Succeed())
 			Expect(automation.Status.Ready).To(BeFalse())
