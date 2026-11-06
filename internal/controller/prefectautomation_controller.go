@@ -152,10 +152,20 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 
 	// Resolve any deploymentName references to deployment IDs. If a referenced
 	// deployment doesn't exist yet (e.g. its PrefectDeployment hasn't reconciled),
-	// requeue until it does.
+	// requeue until it does. Any other failure, including a name that matches
+	// more than one deployment, is a sync error.
 	deploymentIDs := map[string]string{}
 	for _, name := range prefect.DeploymentNamesReferenced(automation) {
 		dep, derr := prefectClient.FindDeploymentByName(ctx, name)
+		if derr != nil && !errors.Is(derr, prefect.ErrNotFound) {
+			log.Error(derr, "Failed to resolve referenced deployment", "automation", automation.Name, "deployment", name)
+			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "SyncError", derr.Error())
+			automation.Status.Ready = false
+			if updateErr := r.Status().Update(ctx, automation); updateErr != nil {
+				log.Error(updateErr, "Failed to update automation status", "automation", automation.Name)
+			}
+			return ctrl.Result{RequeueAfter: RequeueIntervalError}, nil
+		}
 		if derr != nil {
 			log.V(1).Info("Referenced deployment not found, requeuing", "automation", automation.Name, "deployment", name)
 			r.setCondition(automation, PrefectAutomationConditionSynced, metav1.ConditionFalse, "DeploymentNotFound", fmt.Sprintf("referenced deployment %q not found yet", name))

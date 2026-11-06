@@ -85,9 +85,6 @@ manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourc
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-	@echo "Adding coverage ignore directive to generated files..."
-	@awk 'NR==1{print; print ""; print "//go:coverage ignore"; next} {print}' api/v1/zz_generated.deepcopy.go > api/v1/zz_generated.deepcopy.go.tmp
-	@mv api/v1/zz_generated.deepcopy.go.tmp api/v1/zz_generated.deepcopy.go
 
 .PHONY: verify-generated
 verify-generated: manifests generate ## Verify generated files are current.
@@ -121,9 +118,14 @@ update-chart-deps:
 
 GINKGO_OPTIONS ?= -v --skip-package test/e2e -coverprofile cover.out -coverpkg ./api/v1/...,./internal/... -r
 
+# Go has no directive that leaves a file out of coverage, so the test target
+# removes the generated DeepCopy code from cover.out after the run and prints
+# the total again. Ginkgo's own composite figure still counts that code.
 .PHONY: test
 test: manifests generate fmt vet tools ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GINKGO) run $(GINKGO_OPTIONS)
+	@grep -v '/zz_generated\.deepcopy\.go:' cover.out > cover.out.tmp && mv cover.out.tmp cover.out
+	@echo "Coverage without generated code: $$(go tool cover -func cover.out | tail -n 1 | awk '{print $$NF}')"
 
 .PHONY: watch
 watch: manifests generate fmt vet tools ## Watch tests.

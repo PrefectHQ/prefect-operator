@@ -161,9 +161,15 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		return ctrl.Result{}, err
 	}
 
-	// Check that the referenced work pool exists
-	_, err = prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
+	// Requeue until the referenced work pool exists (e.g. its PrefectWorkPool
+	// hasn't reconciled yet). Any other failure of the lookup is a sync error.
+	workPool, err := prefectClient.GetWorkPool(ctx, deployment.Spec.WorkPool.Name)
 	if err != nil {
+		log.Error(err, "Failed to get work pool from Prefect", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
+		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "SyncError", err.Error())
+		return ctrl.Result{}, err
+	}
+	if workPool == nil {
 		log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
 		r.setCondition(deployment, PrefectDeploymentConditionSynced, metav1.ConditionFalse, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
 		deployment.Status.Ready = false

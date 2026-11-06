@@ -148,7 +148,7 @@ var _ = Describe("Automation client", func() {
 			Expect(dep.ID).To(Equal("dep-1"))
 		})
 
-		It("errors when the name matches no deployment", func() {
+		It("returns ErrNotFound when the name matches no deployment", func() {
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
 				w.Header().Set("Content-Type", "application/json")
@@ -158,7 +158,7 @@ var _ = Describe("Automation client", func() {
 			client = NewClient(mockServer.URL, "", logger)
 
 			_, err := client.FindDeploymentByName(ctx, "nope")
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ErrNotFound))
 			Expect(err.Error()).To(ContainSubstring("no deployment found"))
 		})
 
@@ -175,8 +175,8 @@ var _ = Describe("Automation client", func() {
 			client = NewClient(mockServer.URL, "", logger)
 
 			_, err := client.FindDeploymentByName(ctx, "daily-etl")
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("ambiguous"))
+			Expect(err).To(MatchError(ContainSubstring("ambiguous")))
+			Expect(err).NotTo(MatchError(ErrNotFound))
 		})
 	})
 })
