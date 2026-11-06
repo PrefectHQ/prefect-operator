@@ -1330,6 +1330,11 @@ func (in *PrefectWorkPoolStatus) DeepCopyInto(out *PrefectWorkPoolStatus) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.Adopted != nil {
+		in, out := &in.Adopted, &out.Adopted
+		*out = new(bool)
+		**out = **in
+	}
 	if in.LastSyncTime != nil {
 		in, out := &in.LastSyncTime, &out.LastSyncTime
 		*out = (*in).DeepCopy()

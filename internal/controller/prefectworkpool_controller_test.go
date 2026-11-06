@@ -561,6 +561,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		It("should record the sync in the status", func() {
 			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
 			Expect(prefectWorkPool.Status.Id).To(HaveValue(Equal(createdID)))
+			Expect(prefectWorkPool.Status.Adopted).To(HaveValue(BeFalse()))
 			Expect(prefectWorkPool.Status.ObservedGeneration).To(Equal(prefectWorkPool.Generation))
 
 			synced := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, PrefectWorkPoolConditionSynced)
@@ -1070,6 +1071,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			By("Verifying finalizer was added")
 			Expect(prefectWorkPool.Finalizers).To(ContainElement(PrefectWorkPoolFinalizer))
 
+			By("Verifying the work pool is recorded as created, not adopted")
+			Expect(prefectWorkPool.Status.Adopted).To(HaveValue(BeFalse()))
+
 			By("Deleting the PrefectWorkPool")
 			Expect(k8sClient.Delete(ctx, prefectWorkPool)).To(Succeed())
 
@@ -1086,6 +1090,96 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			err = k8sClient.Get(ctx, name, prefectWorkPool)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+	})
+
+	Context("When a work pool with the same name already exists in Prefect", func() {
+		var existingID string
+
+		BeforeEach(func() {
+			existing, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: name.Name, Type: "kubernetes"})
+			Expect(err).NotTo(HaveOccurred())
+			existingID = existing.ID
+
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace},
+				Spec:       prefectiov1.PrefectWorkPoolSpec{Type: "kubernetes", Workers: 1},
+			}
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
+		})
+
+		reconcileOnce := func() {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		deleteResource := func() {
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, prefectWorkPool)).To(Succeed())
+			reconcileOnce()
+			err := k8sClient.Get(ctx, name, prefectWorkPool)
+			Expect(err).To(MatchError(ContainSubstring("not found")))
+		}
+
+		expectPoolInPrefect := func() {
+			remote, err := prefectClient.GetWorkPool(ctx, name.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote).NotTo(BeNil())
+			Expect(remote.ID).To(Equal(existingID))
+		}
+
+		It("Should adopt the pool and leave it in Prefect when the resource is deleted", func() {
+			reconcileOnce() // finalizer
+			reconcileOnce() // sync
+
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			Expect(prefectWorkPool.Status.Id).To(HaveValue(Equal(existingID)))
+			Expect(prefectWorkPool.Status.Adopted).To(HaveValue(BeTrue()))
+			Expect(prefectAPI.Calls(createWorkPoolRoute)).To(Equal(1), "only the seeding create")
+
+			deleteResource()
+			expectPoolInPrefect()
+		})
+
+		It("Should leave the pool in Prefect when the resource is deleted before it syncs", func() {
+			reconcileOnce() // finalizer only
+
+			deleteResource()
+			expectPoolInPrefect()
+		})
+
+		Context("and the resource synced before status.adopted existed", func() {
+			// legacySync syncs the resource and then clears status.adopted, as
+			// a resource synced by an older operator would have it.
+			legacySync := func() {
+				reconcileOnce() // finalizer
+				reconcileOnce() // sync
+				Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+				prefectWorkPool.Status.Adopted = nil
+				Expect(k8sClient.Status().Update(ctx, prefectWorkPool)).To(Succeed())
+			}
+
+			It("Should record the pool as created on the next sync", func() {
+				legacySync()
+
+				Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+				prefectWorkPool.Spec.Workers = 2
+				Expect(k8sClient.Update(ctx, prefectWorkPool)).To(Succeed())
+				reconcileOnce()
+
+				Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+				Expect(prefectWorkPool.Status.ObservedGeneration).To(Equal(prefectWorkPool.Generation))
+				Expect(prefectWorkPool.Status.Adopted).To(HaveValue(BeFalse()))
+			})
+
+			It("Should still delete the pool in Prefect when the resource is deleted", func() {
+				legacySync()
+
+				deleteResource()
+				remote, err := prefectClient.GetWorkPool(ctx, name.Name)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(remote).To(BeNil())
+			})
 		})
 	})
 
