@@ -6021,6 +6021,17 @@ PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
         </td>
         <td>true</td>
       </tr><tr>
+        <td><b>adopted</b></td>
+        <td>boolean</td>
+        <td>
+          Adopted is true when a work pool with this name already existed in
+Prefect when this resource first synced. Deleting the resource leaves an
+adopted work pool in place; only work pools this resource created are
+deleted from Prefect. A resource that synced before this field existed
+is recorded as having created its work pool.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>baseJobTemplateVersion</b></td>
         <td>string</td>
         <td>

@@ -283,6 +283,12 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 		return r.syncFailed(workPool, "SyncError", err)
 	}
 
+	// A pool that exists before this resource's first sync was created by
+	// something else. A resource that synced before status.adopted existed
+	// has a status ID, so it's recorded as having created its pool, and
+	// deleting it still deletes the pool, as it did before.
+	adopted := prefectWorkPool != nil && (workPool.Status.Id == nil || *workPool.Status.Id == "")
+
 	var baseJobTemplate []byte
 
 	if baseJobTemplateConfigMap.Name != "" {
@@ -324,6 +330,15 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 
 	prefect.UpdateWorkPoolStatus(workPool, prefectWorkPool)
 
+	// Adoption is decided once. A pool recreated after an out-of-band delete
+	// keeps the first decision.
+	if workPool.Status.Adopted == nil {
+		workPool.Status.Adopted = &adopted
+		if adopted {
+			log.Info("Adopted existing work pool", "prefectId", prefectWorkPool.ID)
+		}
+	}
+
 	specHash, err := utils.Hash(workPool.Spec, 16)
 	if err != nil {
 		log.Error(err, "Failed to calculate spec hash", "workPool", workPool.Name)
@@ -362,15 +377,25 @@ func (r *PrefectWorkPoolReconciler) setCondition(workPool *prefectiov1.PrefectWo
 	meta.SetStatusCondition(&workPool.Status.Conditions, condition)
 }
 
-// handleDeletion deletes the work pool in Prefect and removes the finalizer.
+// handleDeletion deletes the work pool in Prefect, if this resource created
+// it, and removes the finalizer. An adopted pool was created by something
+// else, such as a person in the Prefect UI, and may run work that this
+// resource doesn't know about, so it's left in place.
 func (r *PrefectWorkPoolReconciler) handleDeletion(ctx context.Context, workPool *prefectiov1.PrefectWorkPool) (ctrl.Result, error) {
-	return finalize(ctx, r.Client, workPool, PrefectWorkPoolFinalizer, func(ctx context.Context) error {
-		prefectClient, err := r.NewPrefectClient(ctx, &workPool.Spec.Server, workPool.Namespace)
-		if err != nil {
-			return fmt.Errorf("creating Prefect client: %w", err)
+	var deleteFromPrefect func(context.Context) error
+	switch {
+	case workPool.Status.Adopted != nil && *workPool.Status.Adopted:
+		log.FromContext(ctx).Info("Leaving adopted work pool in place in Prefect")
+	case workPool.Status.Id != nil && *workPool.Status.Id != "":
+		deleteFromPrefect = func(ctx context.Context) error {
+			prefectClient, err := r.NewPrefectClient(ctx, &workPool.Spec.Server, workPool.Namespace)
+			if err != nil {
+				return fmt.Errorf("creating Prefect client: %w", err)
+			}
+			return prefectClient.DeleteWorkPool(ctx, workPool.Name)
 		}
-		return prefectClient.DeleteWorkPool(ctx, workPool.Name)
-	})
+	}
+	return finalize(ctx, r.Client, workPool, PrefectWorkPoolFinalizer, deleteFromPrefect)
 }
 
 func (r *PrefectWorkPoolReconciler) mapConfigMapToWorkPools(ctx context.Context, obj client.Object) []reconcile.Request {

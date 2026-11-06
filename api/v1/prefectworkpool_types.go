@@ -68,6 +68,14 @@ type PrefectWorkPoolStatus struct {
 	// +optional
 	Id *string `json:"id,omitempty"`
 
+	// Adopted is true when a work pool with this name already existed in
+	// Prefect when this resource first synced. Deleting the resource leaves an
+	// adopted work pool in place; only work pools this resource created are
+	// deleted from Prefect. A resource that synced before this field existed
+	// is recorded as having created its work pool.
+	// +optional
+	Adopted *bool `json:"adopted,omitempty"`
+
 	// Version is the version of the Prefect Worker that is currently running
 	Version string `json:"version"`
 
