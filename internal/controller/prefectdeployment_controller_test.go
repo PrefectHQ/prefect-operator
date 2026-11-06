@@ -647,7 +647,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 		It("Should requeue with WorkPoolNotFound until the pool appears", func() {
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(5 * time.Second))
+			Expect(result.RequeueAfter).To(Equal(RequeueIntervalWaiting))
 			Expect(prefectAPI.Calls(createDeploymentRoute)).To(BeZero())
 
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())

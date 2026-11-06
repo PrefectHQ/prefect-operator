@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -13,9 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -57,6 +61,7 @@ func (r *PrefectAutomationReconciler) resyncInterval(automation *prefectiov1.Pre
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectautomations/finalizers,verbs=update
+//+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments,verbs=get;list;watch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation of a PrefectAutomation
@@ -139,8 +144,9 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 
 	// Resolve any deploymentName references to deployment IDs. If a referenced
 	// deployment doesn't exist yet (e.g. its PrefectDeployment hasn't reconciled),
-	// requeue until it does. Any other failure, including a name that matches
-	// more than one deployment, is a sync error.
+	// requeue until it does. A PrefectDeployment's first sync triggers a
+	// reconcile sooner; see SetupWithManager. Any other failure, including a
+	// name that matches more than one deployment, is a sync error.
 	deploymentIDs := map[string]string{}
 	for _, name := range prefect.DeploymentNamesReferenced(automation) {
 		dep, derr := prefectClient.FindDeploymentByName(ctx, name)
@@ -152,7 +158,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 		if derr != nil {
 			log.V(1).Info("Referenced deployment not found, requeuing", "automation", automation.Name, "deployment", name)
 			r.notSynced(ctx, automation, "DeploymentNotFound", fmt.Sprintf("referenced deployment %q not found yet", name))
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: RequeueIntervalWaiting}, nil
 		}
 		deploymentIDs[name] = dep.ID
 	}
@@ -254,9 +260,25 @@ func (r *PrefectAutomationReconciler) handleDeletion(ctx context.Context, automa
 	return finalize(ctx, r.Client, r.Recorder, automation, PrefectAutomationFinalizer, deleteFromPrefect)
 }
 
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager sets up the controller with the Manager. When a
+// PrefectDeployment gets its Prefect ID, the automations that reference it by
+// name are reconciled, so an automation waiting for a deployment syncs right
+// away.
 func (r *PrefectAutomationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&prefectiov1.PrefectAutomation{}).
+		Watches(&prefectiov1.PrefectDeployment{},
+			handler.EnqueueRequestsFromMapFunc(r.automationsUsingDeployment),
+			builder.WithPredicates(deploymentGotPrefectID)).
 		Complete(r)
+}
+
+// automationsUsingDeployment returns a request for each PrefectAutomation with
+// an action that references deployment by name. It matches in every
+// namespace, because a PrefectDeployment's name is the deployment's name in
+// Prefect.
+func (r *PrefectAutomationReconciler) automationsUsingDeployment(ctx context.Context, deployment client.Object) []reconcile.Request {
+	return requestsFor(ctx, r.Client, &prefectiov1.PrefectAutomationList{}, func(a *prefectiov1.PrefectAutomation) bool {
+		return slices.Contains(prefect.DeploymentNamesReferenced(a), deployment.GetName())
+	})
 }

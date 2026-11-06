@@ -15,9 +15,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -42,6 +45,13 @@ const (
 
 	// RequeueIntervalError is the interval for requeuing on errors
 	RequeueIntervalError = 30 * time.Second
+
+	// RequeueIntervalWaiting is how often a resource checks Prefect again for
+	// an object it depends on that doesn't exist yet, such as a work pool.
+	// When a PrefectWorkPool or PrefectDeployment creates that object, a watch
+	// triggers the reconcile sooner. The interval covers objects created
+	// outside the operator.
+	RequeueIntervalWaiting = 30 * time.Second
 )
 
 // PrefectDeploymentReconciler reconciles a PrefectDeployment object
@@ -68,6 +78,7 @@ func (r *PrefectDeploymentReconciler) resyncInterval(deployment *prefectiov1.Pre
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectdeployments/finalizers,verbs=update
+//+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools,verbs=get;list;watch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation of a PrefectDeployment
@@ -161,7 +172,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 	if workPool == nil {
 		log.V(1).Info("Work pool not found, requeuing", "deployment", deployment.Name, "workPool", deployment.Spec.WorkPool.Name)
 		r.notSynced(ctx, deployment, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", deployment.Spec.WorkPool.Name))
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: RequeueIntervalWaiting}, nil
 	}
 
 	flowID, err := prefect.GetFlowIDFromDeployment(ctx, prefectClient, deployment)
@@ -423,9 +434,23 @@ func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deploy
 	return finalize(ctx, r.Client, r.Recorder, deployment, PrefectDeploymentFinalizer, deleteFromPrefect)
 }
 
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager sets up the controller with the Manager. When a
+// PrefectWorkPool gets its Prefect ID, the deployments that use it are
+// reconciled, so a deployment waiting for its work pool syncs right away.
 func (r *PrefectDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&prefectiov1.PrefectDeployment{}).
+		Watches(&prefectiov1.PrefectWorkPool{},
+			handler.EnqueueRequestsFromMapFunc(r.deploymentsUsingWorkPool),
+			builder.WithPredicates(workPoolGotPrefectID)).
 		Complete(r)
+}
+
+// deploymentsUsingWorkPool returns a request for each PrefectDeployment that
+// uses workPool. It matches by name in every namespace, because a
+// PrefectWorkPool's name is the work pool's name in Prefect.
+func (r *PrefectDeploymentReconciler) deploymentsUsingWorkPool(ctx context.Context, workPool client.Object) []reconcile.Request {
+	return requestsFor(ctx, r.Client, &prefectiov1.PrefectDeploymentList{}, func(d *prefectiov1.PrefectDeployment) bool {
+		return d.Spec.WorkPool.Name == workPool.GetName()
+	})
 }

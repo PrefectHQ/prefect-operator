@@ -14,9 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -58,6 +61,7 @@ func (r *PrefectWorkQueueReconciler) resyncInterval(workQueue *prefectiov1.Prefe
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkqueues,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkqueues/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectworkqueues/finalizers,verbs=update
+//+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools,verbs=get;list;watch
 //+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile handles the reconciliation of a PrefectWorkQueue
@@ -158,10 +162,11 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 			// A create can only 404 when the pool is missing. The pool hasn't
 			// been created yet (e.g. its PrefectWorkPool hasn't reconciled);
 			// requeue until it exists, mirroring how the automation controller
-			// waits for a referenced deployment.
+			// waits for a referenced deployment. A PrefectWorkPool's first
+			// sync triggers a reconcile sooner; see SetupWithManager.
 			log.V(1).Info("Work pool not found, requeuing", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
 			r.notSynced(ctx, workQueue, "WorkPoolNotFound", fmt.Sprintf("Work pool '%s' not found", workQueue.Spec.WorkPoolName))
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: RequeueIntervalWaiting}, nil
 		}
 		if err == nil {
 			log.Info("Created work queue", "workQueue", workQueue.Name, "prefectId", remote.ID)
@@ -330,9 +335,23 @@ func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQue
 	return finalize(ctx, r.Client, r.Recorder, workQueue, PrefectWorkQueueFinalizer, deleteFromPrefect)
 }
 
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager sets up the controller with the Manager. When a
+// PrefectWorkPool gets its Prefect ID, the work queues in that pool are
+// reconciled, so a queue waiting for its work pool syncs right away.
 func (r *PrefectWorkQueueReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&prefectiov1.PrefectWorkQueue{}).
+		Watches(&prefectiov1.PrefectWorkPool{},
+			handler.EnqueueRequestsFromMapFunc(r.workQueuesInWorkPool),
+			builder.WithPredicates(workPoolGotPrefectID)).
 		Complete(r)
+}
+
+// workQueuesInWorkPool returns a request for each PrefectWorkQueue in
+// workPool. It matches by name in every namespace, because a
+// PrefectWorkPool's name is the work pool's name in Prefect.
+func (r *PrefectWorkQueueReconciler) workQueuesInWorkPool(ctx context.Context, workPool client.Object) []reconcile.Request {
+	return requestsFor(ctx, r.Client, &prefectiov1.PrefectWorkQueueList{}, func(q *prefectiov1.PrefectWorkQueue) bool {
+		return q.Spec.WorkPoolName == workPool.GetName()
+	})
 }

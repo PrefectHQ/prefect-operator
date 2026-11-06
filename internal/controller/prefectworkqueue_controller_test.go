@@ -226,7 +226,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 			By("Pool not found yet - requeue")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(5 * time.Second))
+			Expect(result.RequeueAfter).To(Equal(RequeueIntervalWaiting))
 
 			Expect(k8sClient.Get(ctx, name, workQueue)).To(Succeed())
 			Expect(workQueue.Status.Ready).To(BeFalse())
