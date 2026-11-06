@@ -7,6 +7,8 @@ name: Lint and Test Prefect Operator Chart
       - main
     paths:
       - deploy/charts/**
+      - .github/workflows/operator-lint-and-test.yaml
+      - .github/linters/operator-ct.yaml
 
 # Do not grant jobs any permissions by default
 permissions: {}
