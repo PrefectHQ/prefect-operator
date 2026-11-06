@@ -1,0 +1,96 @@
+suite: user roles
+
+templates:
+  - templates/user-roles.yaml
+
+tests:
+  - it: creates an editor and a viewer role for each custom resource
+    asserts:
+      - hasDocuments:
+          count: 10
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: prefect-server:editor
+          any: true
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: prefect-workpool:viewer
+          any: true
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: prefect-workqueue:editor
+          any: true
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: prefect-deployment:viewer
+          any: true
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: prefect-automation:editor
+          any: true
+
+  - it: lets editors change the resource and read its status
+    documentSelector:
+      path: metadata.name
+      value: prefect-workqueue:editor
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: ["prefect.io"]
+              resources: ["prefectworkqueues"]
+              verbs: [create, delete, get, list, patch, update, watch]
+            - apiGroups: ["prefect.io"]
+              resources: ["prefectworkqueues/status"]
+              verbs: ["get"]
+
+  - it: lets viewers read the resource and its status
+    documentSelector:
+      path: metadata.name
+      value: prefect-deployment:viewer
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: ["prefect.io"]
+              resources: ["prefectdeployments"]
+              verbs: [get, list, watch]
+            - apiGroups: ["prefect.io"]
+              resources: ["prefectdeployments/status"]
+              verbs: ["get"]
+
+  - it: skips a role whose create value is false
+    set:
+      rbac.userRoles.prefectAutomation.viewer.create: false
+    asserts:
+      - hasDocuments:
+          count: 9
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: prefect-automation:editor
+          any: true
+      - hasDocuments:
+          count: 0
+          filterAware: true
+        documentSelector:
+          path: metadata.name
+          value: prefect-automation:viewer
+          skipEmptyTemplates: true
+
+  - it: creates no roles when every create value is false
+    set:
+      rbac.userRoles:
+        prefectServer: {editor: {create: false}, viewer: {create: false}}
+        prefectWorkpool: {editor: {create: false}, viewer: {create: false}}
+        prefectWorkQueue: {editor: {create: false}, viewer: {create: false}}
+        prefectDeployment: {editor: {create: false}, viewer: {create: false}}
+        prefectAutomation: {editor: {create: false}, viewer: {create: false}}
+    asserts:
+      - hasDocuments:
+          count: 0

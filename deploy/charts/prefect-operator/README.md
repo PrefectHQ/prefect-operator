@@ -115,8 +115,14 @@ tbd
 | operator.tolerations | list | `[]` | tolerations for operator pods assignment |
 | operator.topologySpreadConstraints | list | `[]` | topology spread constraints for operator pod assignment spread across your cluster among failure-domains |
 | rbac.operator.create | bool | `true` | specifies whether the operator role & role binding should be created |
+| rbac.userRoles.prefectAutomation.editor.create | bool | `true` | specifies whether the automation editor role should be created |
+| rbac.userRoles.prefectAutomation.viewer.create | bool | `true` | specifies whether the automation viewer role should be created |
+| rbac.userRoles.prefectDeployment.editor.create | bool | `true` | specifies whether the deployment editor role should be created |
+| rbac.userRoles.prefectDeployment.viewer.create | bool | `true` | specifies whether the deployment viewer role should be created |
 | rbac.userRoles.prefectServer.editor.create | bool | `true` | specifies whether the server editor role should be created |
 | rbac.userRoles.prefectServer.viewer.create | bool | `true` | specifies whether the server viewer role should be created |
+| rbac.userRoles.prefectWorkQueue.editor.create | bool | `true` | specifies whether the work queue editor role should be created |
+| rbac.userRoles.prefectWorkQueue.viewer.create | bool | `true` | specifies whether the work queue viewer role should be created |
 | rbac.userRoles.prefectWorkpool.editor.create | bool | `true` | specifies whether the workpool editor role should be created |
 | rbac.userRoles.prefectWorkpool.viewer.create | bool | `true` | specifies whether the workpool viewer role should be created |
 | serviceAccount.annotations | object | `{}` | additional service account annotations (evaluated as a template) |

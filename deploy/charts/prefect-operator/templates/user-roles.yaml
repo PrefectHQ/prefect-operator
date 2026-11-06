@@ -1,0 +1,56 @@
+{{- /*
+Editor and viewer ClusterRoles for each Prefect custom resource. The operator
+doesn't use them; they're for granting people access to the resources.
+"values" is the key under .Values.rbac.userRoles.
+*/}}
+{{- $resources := list
+  (dict "values" "prefectServer" "role" "prefect-server" "resource" "prefectservers")
+  (dict "values" "prefectWorkpool" "role" "prefect-workpool" "resource" "prefectworkpools")
+  (dict "values" "prefectWorkQueue" "role" "prefect-workqueue" "resource" "prefectworkqueues")
+  (dict "values" "prefectDeployment" "role" "prefect-deployment" "resource" "prefectdeployments")
+  (dict "values" "prefectAutomation" "role" "prefect-automation" "resource" "prefectautomations")
+}}
+{{- range $resources }}
+{{- if dig .values "editor" "create" false $.Values.rbac.userRoles }}
+---
+kind: ClusterRole
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" $ }}
+metadata:
+  name: {{ .role }}:editor
+  labels:
+    app.kubernetes.io/component: prefect
+rules:
+  - apiGroups: ["prefect.io"]
+    resources: [{{ .resource | quote }}]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: [{{ printf "%s/status" .resource | quote }}]
+    verbs: ["get"]
+{{- end }}
+{{- if dig .values "viewer" "create" false $.Values.rbac.userRoles }}
+---
+kind: ClusterRole
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" $ }}
+metadata:
+  name: {{ .role }}:viewer
+  labels:
+    app.kubernetes.io/component: prefect
+rules:
+  - apiGroups: ["prefect.io"]
+    resources: [{{ .resource | quote }}]
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups: ["prefect.io"]
+    resources: [{{ printf "%s/status" .resource | quote }}]
+    verbs: ["get"]
+{{- end }}
+{{- end }}
