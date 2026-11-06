@@ -208,6 +208,10 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 					NodeSelector: map[string]string{
 						"some": "node-selector",
 					},
+					PodSecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: new(true),
+						RunAsUser:    new(int64(1001)),
+					},
 				},
 			}
 		})
@@ -356,6 +360,10 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			It("should have the correct scheduling constraints", func() {
 				Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(prefectWorkPool.Spec.NodeSelector))
 				Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(prefectWorkPool.Spec.Tolerations))
+			})
+
+			It("should have the correct pod security context", func() {
+				Expect(deployment.Spec.Template.Spec.SecurityContext).To(Equal(prefectWorkPool.Spec.PodSecurityContext))
 			})
 
 			It("should be owned by the PrefectWorkPool", func() {

@@ -257,11 +257,12 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		}
 
 		// mergo skips empty values and merges maps, so assign these directly to
-		// ensure that constraints removed from the server are also removed here.
+		// ensure that settings removed from the server are also removed here.
 		desiredPodSpec := desiredDeployment.Spec.Template.Spec
 		deploy.Spec.Template.Spec.NodeSelector = desiredPodSpec.NodeSelector
 		deploy.Spec.Template.Spec.Tolerations = desiredPodSpec.Tolerations
 		deploy.Spec.Template.Spec.Affinity = desiredPodSpec.Affinity
+		deploy.Spec.Template.Spec.SecurityContext = desiredPodSpec.SecurityContext
 
 		return nil
 	})
@@ -359,6 +360,7 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 
 	deploymentSpec.Template.Spec.Affinity = server.Spec.Affinity
 	deploymentSpec.Template.Spec.Tolerations = server.Spec.Tolerations
+	deploymentSpec.Template.Spec.SecurityContext = server.Spec.PodSecurityContext
 
 	// Append any extra containers into the Deployment if configured.
 	if server.Spec.ExtraContainers != nil {
@@ -607,9 +609,10 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 				Labels: server.MigrationJobLabels(),
 			},
 			Spec: corev1.PodSpec{
-				NodeSelector: server.Spec.NodeSelector,
-				Tolerations:  server.Spec.Tolerations,
-				Affinity:     migrationJobAffinity(server),
+				NodeSelector:    server.Spec.NodeSelector,
+				Tolerations:     server.Spec.Tolerations,
+				Affinity:        migrationJobAffinity(server),
+				SecurityContext: server.Spec.PodSecurityContext,
 				InitContainers: []corev1.Container{
 					r.initContainerWaitForPostgres(server),
 				},

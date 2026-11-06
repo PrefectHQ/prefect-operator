@@ -182,6 +182,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					Affinity:           workPool.Spec.Affinity,
 					Tolerations:        workPool.Spec.Tolerations,
 					NodeSelector:       workPool.Spec.NodeSelector,
+					SecurityContext:    workPool.Spec.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
 							Name: constants.PrefectDataVolumeName,

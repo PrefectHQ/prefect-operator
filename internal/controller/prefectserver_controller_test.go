@@ -43,6 +43,11 @@ var _ = Describe("PrefectServer controller", func() {
 	tolerations := []corev1.Toleration{
 		{Key: "dedicated", Operator: corev1.TolerationOpEqual, Value: "prefect", Effect: corev1.TaintEffectNoSchedule},
 	}
+	podSecurityContext := &corev1.PodSecurityContext{
+		RunAsNonRoot: new(true),
+		RunAsUser:    new(int64(1001)),
+		FSGroup:      new(int64(1001)),
+	}
 
 	var (
 		ctx           context.Context
@@ -237,7 +242,8 @@ var _ = Describe("PrefectServer controller", func() {
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
-						Tolerations: tolerations,
+						Tolerations:        tolerations,
+						PodSecurityContext: podSecurityContext,
 					},
 				}
 				Expect(k8sClient.Create(ctx, prefectserver)).To(Succeed())
@@ -433,6 +439,10 @@ var _ = Describe("PrefectServer controller", func() {
 				It("should have the correct tolerations", func() {
 					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 				})
+
+				It("should have the correct pod security context", func() {
+					Expect(deployment.Spec.Template.Spec.SecurityContext).To(Equal(podSecurityContext))
+				})
 			})
 
 			Describe("the Service", func() {
@@ -543,7 +553,7 @@ var _ = Describe("PrefectServer controller", func() {
 				}))
 			})
 
-			It("should remove scheduling constraints cleared from the server", func() {
+			It("should remove scheduling constraints and security context cleared from the server", func() {
 				controllerReconciler := &PrefectServerReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
@@ -551,6 +561,7 @@ var _ = Describe("PrefectServer controller", func() {
 
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 				prefectserver.Spec.Tolerations = tolerations
+				prefectserver.Spec.PodSecurityContext = podSecurityContext
 				prefectserver.Spec.NodeSelector = map[string]string{"keep": "this", "remove": "this"}
 				prefectserver.Spec.Affinity = &corev1.Affinity{
 					PodAntiAffinity: &corev1.PodAntiAffinity{
@@ -572,9 +583,11 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 				Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKey("remove"))
 				Expect(deployment.Spec.Template.Spec.Affinity).NotTo(BeNil())
+				Expect(deployment.Spec.Template.Spec.SecurityContext).To(Equal(podSecurityContext))
 
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 				prefectserver.Spec.Tolerations = nil
+				prefectserver.Spec.PodSecurityContext = nil
 				prefectserver.Spec.NodeSelector = map[string]string{"keep": "this"}
 				prefectserver.Spec.Affinity = nil
 				Expect(k8sClient.Update(ctx, prefectserver)).To(Succeed())
@@ -585,6 +598,8 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(deployment.Spec.Template.Spec.Tolerations).To(BeEmpty())
 				Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"keep": "this"}))
 				Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+				// The API server defaults an unset pod security context to an empty one.
+				Expect(deployment.Spec.Template.Spec.SecurityContext).To(Equal(&corev1.PodSecurityContext{}))
 			})
 
 			It("should update the Deployment with new resource requirements", func() {
@@ -1088,7 +1103,8 @@ var _ = Describe("PrefectServer controller", func() {
 						Name:      "prefect-on-sqlite",
 					},
 					Spec: prefectiov1.PrefectServerSpec{
-						Tolerations: tolerations,
+						Tolerations:        tolerations,
+						PodSecurityContext: podSecurityContext,
 						SQLite: &prefectiov1.SQLiteConfiguration{
 							StorageClassName: "standard",
 							Size:             resource.MustParse("512Mi"),
@@ -1170,6 +1186,10 @@ var _ = Describe("PrefectServer controller", func() {
 			Describe("the Deployment", func() {
 				It("should have the correct tolerations", func() {
 					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
+				It("should have the correct pod security context", func() {
+					Expect(deployment.Spec.Template.Spec.SecurityContext).To(Equal(podSecurityContext))
 				})
 
 				It("should use persistent storage", func() {
@@ -1374,7 +1394,8 @@ var _ = Describe("PrefectServer controller", func() {
 						NodeSelector: map[string]string{
 							"some": "node-selector",
 						},
-						Tolerations: tolerations,
+						Tolerations:        tolerations,
+						PodSecurityContext: podSecurityContext,
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
 								RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -1475,6 +1496,10 @@ var _ = Describe("PrefectServer controller", func() {
 					Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 				})
 
+				It("should have the correct pod security context", func() {
+					Expect(deployment.Spec.Template.Spec.SecurityContext).To(Equal(podSecurityContext))
+				})
+
 				It("should not use persistent storage", func() {
 					Expect(deployment.Spec.Template.Spec.Volumes).To(BeEmpty())
 
@@ -1542,6 +1567,10 @@ var _ = Describe("PrefectServer controller", func() {
 
 				It("should have the correct tolerations", func() {
 					Expect(migrateJob.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+				})
+
+				It("should have the correct pod security context", func() {
+					Expect(migrateJob.Spec.Template.Spec.SecurityContext).To(Equal(podSecurityContext))
 				})
 
 				It("should only have the node affinity", func() {

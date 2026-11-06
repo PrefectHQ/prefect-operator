@@ -96,6 +96,10 @@ type PrefectServerSpec struct {
 	// Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
 	// nodes with matching taints.
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// PodSecurityContext defines the pod-level security attributes for the Prefect Server Deployment
+	// and migration Job pods.
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 }
 
 // Replicas returns the desired server Deployment replica count, defaulting to 1.

@@ -57,6 +57,9 @@ type PrefectWorkPoolSpec struct {
 	// NodeSelector defines the node labels the worker pods must match in order to be scheduled.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
+	// PodSecurityContext defines the pod-level security attributes for the worker pods.
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+
 	// Resources defines the CPU and memory resources for each worker in the Work Pool
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
