@@ -84,7 +84,7 @@ manifests: tools ## Generate WebhookConfiguration, ClusterRole and CustomResourc
 
 .PHONY: generate
 generate: tools ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object paths="./..."
 
 .PHONY: verify-generated
 verify-generated: manifests generate ## Verify generated files are current.
