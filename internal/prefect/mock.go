@@ -101,7 +101,7 @@ func (m *MockClient) GetAutomation(ctx context.Context, id string) (*Automation,
 	defer m.mu.RUnlock()
 	a, ok := m.automations[id]
 	if !ok {
-		return nil, fmt.Errorf("automation %s not found", id)
+		return nil, nil
 	}
 	return a, nil
 }
@@ -116,7 +116,7 @@ func (m *MockClient) UpdateAutomation(ctx context.Context, id string, automation
 	m.UpdateAutomationCalls++
 	existing, ok := m.automations[id]
 	if !ok {
-		return nil, fmt.Errorf("automation %s: %w", id, ErrAutomationNotFound)
+		return nil, fmt.Errorf("automation %s: %w", id, ErrNotFound)
 	}
 	existing.Name = automation.Name
 	existing.Description = automation.Description
@@ -300,7 +300,7 @@ func (m *MockClient) UpdateDeployment(ctx context.Context, id string, deployment
 
 	existing, ok := m.deployments[id]
 	if !ok {
-		return nil, fmt.Errorf("deployment not found")
+		return nil, fmt.Errorf("deployment %s: %w", id, ErrNotFound)
 	}
 
 	existing.Updated = time.Now()
@@ -390,7 +390,7 @@ func (m *MockClient) UpdateDeploymentSchedule(ctx context.Context, deploymentID,
 	m.UpdateScheduleCalls++
 	d, ok := m.deployments[deploymentID]
 	if !ok {
-		return fmt.Errorf("mock error: deployment %s not found", deploymentID)
+		return fmt.Errorf("deployment %s: %w", deploymentID, ErrNotFound)
 	}
 	for i := range d.Schedules {
 		if d.Schedules[i].ID == scheduleID {
@@ -409,7 +409,7 @@ func (m *MockClient) UpdateDeploymentSchedule(ctx context.Context, deploymentID,
 			return nil
 		}
 	}
-	return fmt.Errorf("mock error: schedule %s not found", scheduleID)
+	return fmt.Errorf("schedule %s: %w", scheduleID, ErrNotFound)
 }
 
 func (m *MockClient) DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error {
@@ -420,7 +420,7 @@ func (m *MockClient) DeleteDeploymentSchedule(ctx context.Context, deploymentID,
 	defer m.mu.Unlock()
 	d, ok := m.deployments[deploymentID]
 	if !ok {
-		return fmt.Errorf("mock error: deployment %s not found", deploymentID)
+		return nil
 	}
 	kept := make([]DeploymentSchedule, 0, len(d.Schedules))
 	for _, s := range d.Schedules {
@@ -688,7 +688,7 @@ func (m *MockClient) UpdateWorkPool(ctx context.Context, name string, workPool *
 
 	existing, ok := m.workPools[name]
 	if !ok {
-		return fmt.Errorf("work pool not found")
+		return fmt.Errorf("work pool %q: %w", name, ErrNotFound)
 	}
 
 	existing.Updated = time.Now()
@@ -753,7 +753,7 @@ func (m *MockClient) GetWorkQueue(ctx context.Context, workPoolName, name string
 }
 
 // CreateWorkQueue stores a new work queue in the mock store. Like the real
-// pool-scoped route, it fails with ErrWorkPoolNotFound when the pool does not
+// pool-scoped route, it fails with ErrNotFound when the pool does not
 // exist — seed the pool with CreateWorkPool first.
 func (m *MockClient) CreateWorkQueue(ctx context.Context, workPoolName string, queue *WorkQueueSpec) (*WorkQueue, error) {
 	if m.ShouldFailCreate {
@@ -764,7 +764,7 @@ func (m *MockClient) CreateWorkQueue(ctx context.Context, workPoolName string, q
 	defer m.mu.Unlock()
 
 	if _, ok := m.workPools[workPoolName]; !ok {
-		return nil, fmt.Errorf("work pool %q: %w", workPoolName, ErrWorkPoolNotFound)
+		return nil, fmt.Errorf("work pool %q: %w", workPoolName, ErrNotFound)
 	}
 
 	created := &WorkQueue{
@@ -797,7 +797,7 @@ func (m *MockClient) UpdateWorkQueue(ctx context.Context, workPoolName, name str
 
 	existing, ok := m.workQueues[workQueueKey(workPoolName, name)]
 	if !ok {
-		return fmt.Errorf("work queue %q in pool %q: %w", name, workPoolName, ErrWorkQueueNotFound)
+		return fmt.Errorf("work queue %q in pool %q: %w", name, workPoolName, ErrNotFound)
 	}
 
 	if queue.Description != nil {

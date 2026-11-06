@@ -46,27 +46,26 @@ type contractCall struct {
 	// okBody is the JSON the server answers a successful call with.
 	okBody string
 	call   func(ctx context.Context, c *Client) (any, error)
-	// on404 asserts the result of a call that Prefect answers with 404. It is
-	// nil for calls without a not-found case (creates and filters).
+	// on404 asserts the result of a call that Prefect answers with 404.
 	on404 func(result any, err error)
 }
 
-// Not-found outcomes.
+// Not-found outcomes, one per kind of operation (see ErrNotFound).
 var (
+	// returnsNil is the outcome for Get methods.
 	returnsNil = func(result any, err error) {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeNil())
 	}
+	// succeeds is the outcome for Delete methods.
 	succeeds = func(_ any, err error) {
 		Expect(err).NotTo(HaveOccurred())
 	}
-	failsWithStatus = func(_ any, err error) {
+	// failsNotFound is the outcome for every other method. The error still
+	// carries the status and body for logs and conditions.
+	failsNotFound = func(_ any, err error) {
+		Expect(err).To(MatchError(ErrNotFound))
 		Expect(err).To(MatchError(ContainSubstring("status 404")))
-	}
-	failsWith = func(sentinel error) func(any, error) {
-		return func(_ any, err error) {
-			Expect(err).To(MatchError(sentinel))
-		}
 	}
 )
 
@@ -81,6 +80,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.CreateOrUpdateDeployment(ctx, &DeploymentSpec{Name: "etl", FlowID: "flow-1"})
 		},
+		on404: failsNotFound,
 	},
 	{
 		name: "GetDeployment", method: http.MethodGet, path: "/deployments/dep-1",
@@ -88,7 +88,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.GetDeployment(ctx, "dep-1")
 		},
-		on404: failsWithStatus,
+		on404: returnsNil,
 	},
 	{
 		name: "UpdateDeployment", method: http.MethodPatch, path: "/deployments/dep-1",
@@ -96,14 +96,14 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.UpdateDeployment(ctx, "dep-1", &DeploymentSpec{Name: "etl"}, nil)
 		},
-		on404: failsWith(ErrDeploymentNotFound),
+		on404: failsNotFound,
 	},
 	{
 		name: "DeleteDeployment", method: http.MethodDelete, path: "/deployments/dep-1",
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.DeleteDeployment(ctx, "dep-1"))
 		},
-		on404: failsWithStatus,
+		on404: succeeds,
 	},
 	{
 		name: "FindDeploymentByName", method: http.MethodPost, path: "/deployments/filter",
@@ -111,6 +111,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.FindDeploymentByName(ctx, "etl")
 		},
+		on404: failsNotFound,
 	},
 
 	// Deployment schedules
@@ -119,20 +120,21 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.CreateDeploymentSchedules(ctx, "dep-1", []DeploymentSchedule{{}}))
 		},
+		on404: failsNotFound,
 	},
 	{
 		name: "UpdateDeploymentSchedule", method: http.MethodPatch, path: "/deployments/dep-1/schedules/sched-1",
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.UpdateDeploymentSchedule(ctx, "dep-1", "sched-1", DeploymentScheduleUpdate{}))
 		},
-		on404: failsWithStatus,
+		on404: failsNotFound,
 	},
 	{
 		name: "DeleteDeploymentSchedule", method: http.MethodDelete, path: "/deployments/dep-1/schedules/sched-1",
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.DeleteDeploymentSchedule(ctx, "dep-1", "sched-1"))
 		},
-		on404: failsWithStatus,
+		on404: succeeds,
 	},
 
 	// Flows
@@ -160,20 +162,21 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.CreateWorkPool(ctx, &WorkPoolSpec{Name: "pool"})
 		},
+		on404: failsNotFound,
 	},
 	{
 		name: "UpdateWorkPool", method: http.MethodPatch, path: "/work_pools/pool",
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.UpdateWorkPool(ctx, "pool", &WorkPoolSpec{}))
 		},
-		on404: failsWithStatus,
+		on404: failsNotFound,
 	},
 	{
 		name: "DeleteWorkPool", method: http.MethodDelete, path: "/work_pools/pool",
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.DeleteWorkPool(ctx, "pool"))
 		},
-		on404: failsWithStatus,
+		on404: succeeds,
 	},
 	{
 		name: "GetWorkerMetadata", method: http.MethodGet, path: "/collections/views/aggregate-worker-metadata",
@@ -181,6 +184,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.GetWorkerMetadata(ctx)
 		},
+		// The route is missing, not an object, but the outcome is the same.
 		on404: returnsNil,
 	},
 
@@ -200,14 +204,14 @@ var contractCalls = []contractCall{
 			return c.CreateWorkQueue(ctx, "pool", &WorkQueueSpec{Name: "ingest"})
 		},
 		// A 404 here means the parent pool is missing.
-		on404: failsWith(ErrWorkPoolNotFound),
+		on404: failsNotFound,
 	},
 	{
 		name: "UpdateWorkQueue", method: http.MethodPatch, path: "/work_pools/pool/queues/ingest",
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.UpdateWorkQueue(ctx, "pool", "ingest", &WorkQueueSpec{Name: "ingest"}, nil))
 		},
-		on404: failsWith(ErrWorkQueueNotFound),
+		on404: failsNotFound,
 	},
 	{
 		name: "DeleteWorkQueue", method: http.MethodDelete, path: "/work_pools/pool/queues/ingest",
@@ -224,6 +228,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.CreateAutomation(ctx, &AutomationSpec{Name: "alert"})
 		},
+		on404: failsNotFound,
 	},
 	{
 		name: "GetAutomation", method: http.MethodGet, path: "/automations/auto-1",
@@ -231,7 +236,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.GetAutomation(ctx, "auto-1")
 		},
-		on404: failsWithStatus,
+		on404: returnsNil,
 	},
 	{
 		// UpdateAutomation re-reads the automation after the PUT.
@@ -240,7 +245,7 @@ var contractCalls = []contractCall{
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.UpdateAutomation(ctx, "auto-1", &AutomationSpec{Name: "alert"})
 		},
-		on404: failsWith(ErrAutomationNotFound),
+		on404: failsNotFound,
 	},
 	{
 		name: "DeleteAutomation", method: http.MethodDelete, path: "/automations/auto-1",
@@ -312,6 +317,31 @@ var _ = Describe("Client contract", func() {
 		Expect(paths).To(Equal([]string{"/flows/name/etl%20%232%3F", "/work_pools/my%20pool"}))
 	})
 
+	// UpdateDeployment and UpdateAutomation read the object back after Prefect
+	// answers the update with 204. An object deleted in between fails the read.
+	DescribeTable("returns ErrNotFound when the read-back after an update 404s",
+		func(call func(context.Context, *Client) (any, error)) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			DeferCleanup(server.Close)
+
+			result, err := call(ctx, NewClient(server.URL, "", logr.Discard()))
+			Expect(err).To(MatchError(ErrNotFound))
+			Expect(result).To(BeNil())
+		},
+		Entry("UpdateDeployment", func(ctx context.Context, c *Client) (any, error) {
+			return c.UpdateDeployment(ctx, "dep-1", &DeploymentSpec{Name: "etl"}, nil)
+		}),
+		Entry("UpdateAutomation", func(ctx context.Context, c *Client) (any, error) {
+			return c.UpdateAutomation(ctx, "auto-1", &AutomationSpec{Name: "alert"})
+		}),
+	)
+
 	for _, cc := range contractCalls {
 		Describe(cc.name, func() {
 			It("calls "+cc.method+" "+cc.path+" with the API key", func() {
@@ -343,20 +373,19 @@ var _ = Describe("Client contract", func() {
 				}
 			})
 
-			if cc.on404 != nil {
-				It("handles a 404", func() {
-					server, _ := serve(http.StatusNotFound, `{"detail": "Not found."}`)
+			It("handles a 404", func() {
+				server, _ := serve(http.StatusNotFound, `{"detail": "Not found."}`)
 
-					result, err := cc.call(ctx, NewClient(server.URL, apiKey, logr.Discard()))
-					cc.on404(result, err)
-				})
-			}
+				result, err := cc.call(ctx, NewClient(server.URL, apiKey, logr.Discard()))
+				cc.on404(result, err)
+			})
 
 			It("returns an error carrying the status and body on a 500", func() {
 				server, _ := serve(http.StatusInternalServerError, `{"detail": "boom"}`)
 
 				_, err := cc.call(ctx, NewClient(server.URL, apiKey, logr.Discard()))
 				Expect(err).To(MatchError(And(ContainSubstring("status 500"), ContainSubstring("boom"))))
+				Expect(err).NotTo(MatchError(ErrNotFound))
 			})
 		})
 	}

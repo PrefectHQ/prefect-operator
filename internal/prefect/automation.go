@@ -18,16 +18,10 @@ package prefect
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 )
-
-// ErrAutomationNotFound is returned when an automation no longer exists in
-// Prefect (e.g. it was deleted out-of-band). Callers can use errors.Is to
-// distinguish this from other API errors and recreate rather than loop.
-var ErrAutomationNotFound = errors.New("automation not found")
 
 // AutomationSpec is the request payload for creating/updating an automation.
 // Trigger and actions are kept as generic maps so the client stays agnostic to
@@ -66,28 +60,26 @@ func (c *Client) CreateAutomation(ctx context.Context, automation *AutomationSpe
 	return &result, nil
 }
 
-// GetAutomation retrieves an automation by ID via GET /automations/{id}.
+// GetAutomation retrieves an automation by ID via GET /automations/{id}. It
+// returns (nil, nil) when the automation does not exist.
 func (c *Client) GetAutomation(ctx context.Context, id string) (*Automation, error) {
+	return getObject[Automation](ctx, c, c.endpoint("/automations/%s", id))
+}
+
+// UpdateAutomation updates an automation via PUT /automations/{id}. A PUT
+// replaces the whole automation, so fields unset in the spec are cleared. It
+// returns the automation as read back after the update.
+func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *AutomationSpec) (*Automation, error) {
+	reqURL := c.endpoint("/automations/%s", id)
+	if err := c.do(ctx, http.MethodPut, reqURL, automation, nil); err != nil {
+		return nil, err
+	}
+	// Prefect answers the PUT with 204 and no body, so read the automation back.
 	var result Automation
-	if err := c.do(ctx, http.MethodGet, c.endpoint("/automations/%s", id), nil, &result); err != nil {
+	if err := c.do(ctx, http.MethodGet, reqURL, nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
-}
-
-// UpdateAutomation updates an automation via PUT /automations/{id} (full replace,
-// matching the declarative desired state). Returns the freshly-read automation.
-func (c *Client) UpdateAutomation(ctx context.Context, id string, automation *AutomationSpec) (*Automation, error) {
-	err := c.do(ctx, http.MethodPut, c.endpoint("/automations/%s", id), automation, nil)
-	// A 404 means the automation was deleted out-of-band; signal recreate.
-	if isNotFound(err) {
-		return nil, ErrAutomationNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	// PUT /automations/{id} returns 204 with no body; re-read to return current state.
-	return c.GetAutomation(ctx, id)
 }
 
 // FindDeploymentByName resolves a deployment by name (tenant-wide) via
@@ -117,10 +109,5 @@ func (c *Client) FindDeploymentByName(ctx context.Context, name string) (*Deploy
 
 // DeleteAutomation deletes an automation via DELETE /automations/{id}.
 func (c *Client) DeleteAutomation(ctx context.Context, id string) error {
-	err := c.do(ctx, http.MethodDelete, c.endpoint("/automations/%s", id), nil, nil)
-	// Treat 404 as already-deleted (idempotent cleanup).
-	if isNotFound(err) {
-		return nil
-	}
-	return err
+	return c.deleteObject(ctx, c.endpoint("/automations/%s", id))
 }

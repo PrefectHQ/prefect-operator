@@ -791,20 +791,6 @@ var _ = Describe("Prefect HTTP Client", func() {
 				Expect(deployment).To(BeNil())
 			})
 
-			It("Should reject 404 Not Found (when not handling explicitly)", func() {
-				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(http.StatusNotFound) // 404 Not Found
-					_, _ = w.Write([]byte(`{"error":"Not found"}`))
-				}))
-
-				client = NewClient(mockServer.URL, "test-api-key", logger)
-				deployment, err := client.GetDeployment(ctx, "test-123")
-
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("API request failed with status 404"))
-				Expect(deployment).To(BeNil())
-			})
-
 			It("Should reject 422 Unprocessable Entity", func() {
 				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusUnprocessableEntity) // 422 Unprocessable Entity

@@ -19,7 +19,6 @@ package prefect
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 
@@ -131,31 +130,6 @@ var _ = Describe("Automation client", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(calls).To(Equal([]string{http.MethodPut, http.MethodGet}))
 			Expect(automation.Name).To(Equal("renamed"))
-		})
-
-		It("returns ErrAutomationNotFound on a 404", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				Expect(r.Method).To(Equal(http.MethodPut))
-				w.WriteHeader(http.StatusNotFound)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			_, err := client.UpdateAutomation(ctx, "missing-id", &AutomationSpec{Name: "a"})
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrAutomationNotFound)).To(BeTrue())
-		})
-
-		It("returns a generic error on other non-2xx statuses", func() {
-			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer GinkgoRecover()
-				w.WriteHeader(http.StatusInternalServerError)
-			}))
-			client = NewClient(mockServer.URL, "", logger)
-
-			_, err := client.UpdateAutomation(ctx, "some-id", &AutomationSpec{Name: "a"})
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, ErrAutomationNotFound)).To(BeFalse())
 		})
 	})
 

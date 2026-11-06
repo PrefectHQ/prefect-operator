@@ -19,7 +19,6 @@ package prefect
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -31,10 +30,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// ErrDeploymentNotFound is returned when a deployment no longer exists in Prefect
-// (e.g. deleted in the UI), so callers can fall back to recreating it.
-var ErrDeploymentNotFound = errors.New("deployment not found")
 
 // PrefectClient defines the interface for interacting with the Prefect API
 type PrefectClient interface {
@@ -330,13 +325,10 @@ func (c *Client) CreateOrUpdateDeployment(ctx context.Context, deployment *Deplo
 	return &result, nil
 }
 
-// GetDeployment retrieves a deployment by ID
+// GetDeployment retrieves a deployment by ID. It returns (nil, nil) when the
+// deployment does not exist.
 func (c *Client) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
-	var result Deployment
-	if err := c.do(ctx, http.MethodGet, c.endpoint("/deployments/%s", id), nil, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return getObject[Deployment](ctx, c, c.endpoint("/deployments/%s", id))
 }
 
 // GetDeploymentByName retrieves a deployment by name and flow ID
@@ -371,24 +363,23 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 		}
 	}
 
+	reqURL := c.endpoint("/deployments/%s", id)
 	var result Deployment
-	err = c.do(ctx, http.MethodPatch, c.endpoint("/deployments/%s", id), updateBody, &result)
-	if isNotFound(err) {
-		return nil, ErrDeploymentNotFound
-	}
-	if err != nil {
+	if err := c.do(ctx, http.MethodPatch, reqURL, updateBody, &result); err != nil {
 		return nil, err
 	}
-	// Prefect answers the PATCH with 204 and no body, so re-read the deployment.
+	// Prefect answers the PATCH with 204 and no body, so read the deployment back.
 	if result.ID == "" {
-		return c.GetDeployment(ctx, id)
+		if err := c.do(ctx, http.MethodGet, reqURL, nil, &result); err != nil {
+			return nil, err
+		}
 	}
 	return &result, nil
 }
 
-// DeleteDeployment deletes a deployment
+// DeleteDeployment deletes a deployment by ID
 func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
-	return c.do(ctx, http.MethodDelete, c.endpoint("/deployments/%s", id), nil, nil)
+	return c.deleteObject(ctx, c.endpoint("/deployments/%s", id))
 }
 
 type DeploymentScheduleUpdate struct {
@@ -410,7 +401,7 @@ func (c *Client) UpdateDeploymentSchedule(ctx context.Context, deploymentID, sch
 
 // DeleteDeploymentSchedule deletes one of a deployment's schedules
 func (c *Client) DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error {
-	return c.do(ctx, http.MethodDelete, c.endpoint("/deployments/%s/schedules/%s", deploymentID, scheduleID), nil, nil)
+	return c.deleteObject(ctx, c.endpoint("/deployments/%s/schedules/%s", deploymentID, scheduleID))
 }
 
 // CreateOrGetFlow creates a new flow or returns an existing one with the same name
@@ -433,29 +424,13 @@ func (c *Client) CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, er
 // GetFlowByName retrieves a flow by name. It returns (nil, nil) when the flow
 // does not exist.
 func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) {
-	var result Flow
-	err := c.do(ctx, http.MethodGet, c.endpoint("/flows/name/%s", name), nil, &result)
-	if isNotFound(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return getObject[Flow](ctx, c, c.endpoint("/flows/name/%s", name))
 }
 
 // GetWorkPool retrieves a work pool by name. It returns (nil, nil) when the
 // pool does not exist.
 func (c *Client) GetWorkPool(ctx context.Context, name string) (*WorkPool, error) {
-	var result WorkPool
-	err := c.do(ctx, http.MethodGet, c.endpoint("/work_pools/%s", name), nil, &result)
-	if isNotFound(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return getObject[WorkPool](ctx, c, c.endpoint("/work_pools/%s", name))
 }
 
 // CreateWorkPool creates a work pool
@@ -474,7 +449,7 @@ func (c *Client) UpdateWorkPool(ctx context.Context, name string, workPool *Work
 
 // DeleteWorkPool deletes a work pool by name
 func (c *Client) DeleteWorkPool(ctx context.Context, name string) error {
-	return c.do(ctx, http.MethodDelete, c.endpoint("/work_pools/%s", name), nil, nil)
+	return c.deleteObject(ctx, c.endpoint("/work_pools/%s", name))
 }
 
 // isRunningInCluster checks if the operator is running in-cluster
@@ -494,20 +469,18 @@ type WorkerMetadata struct {
 	DefaultBaseJobTemplate map[string]any `json:"default_base_job_configuration"`
 }
 
-// GetWorkerMetadata retrieves aggregate metadata for all worker types
+// GetWorkerMetadata retrieves aggregate metadata for all worker types. It
+// returns (nil, nil) when the server has no worker metadata route.
 func (c *Client) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error) {
-	var result map[string]map[string]WorkerMetadata
-	err := c.do(ctx, http.MethodGet, c.endpoint("/collections/views/aggregate-worker-metadata"), nil, &result)
-	if isNotFound(err) {
-		return nil, nil
-	}
-	if err != nil {
+	// The response is keyed by collection, then by worker type.
+	result, err := getObject[map[string]map[string]WorkerMetadata](ctx, c,
+		c.endpoint("/collections/views/aggregate-worker-metadata"))
+	if result == nil || err != nil {
 		return nil, err
 	}
 
-	// The response is keyed by collection, then by worker type.
 	metadata := map[string]WorkerMetadata{}
-	for _, integration := range result {
+	for _, integration := range *result {
 		maps.Copy(metadata, integration)
 	}
 	return metadata, nil
