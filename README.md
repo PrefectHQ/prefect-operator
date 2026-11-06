@@ -3,7 +3,7 @@
 The Prefect Operator is an application that can manage instances of Prefect.
 It follows the [Kubernetes operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
 
-## Custom Resource Definintions
+## Custom Resource Definitions
 
 ### PrefectServer
 
@@ -25,101 +25,75 @@ The [PrefectDeployment CRD](./PrefectDeployment.md)
 
 The [PrefectAutomation CRD](./PrefectAutomation.md)
 
-## Getting Started
+## Installing
+
+Install the operator with its Helm chart:
+
+```sh
+helm repo add prefect-operator https://prefecthq.github.io/prefect-operator
+helm repo update
+helm install prefect-operator prefect-operator/prefect-operator --namespace prefect-system --create-namespace
+```
+
+The [chart's README](deploy/charts/prefect-operator/README.md) covers verifying the chart's signature, the chart's values, and uninstalling.
+
+## Development
 
 ### Prerequisites
-- go version v1.23.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
-- Local Tooling Dependencies
-  - `mise` |  `curl https://mise.run | sh`
-    - Dependencies for local development can be installed with [`mise`](https://mise.jdx.dev):
-  - `pipx` | `pip install --user pipx`
-    -  Setup python dependencies such as `yamllint` require python tooling like `pipx` (see https://github.com/jdx/mise/issues/2536)
 
-```shell
-mise trust
-mise install
-```
+- [mise](https://mise.jdx.dev) (`curl https://mise.run | sh`). It installs Go, kubectl, Helm, and the other tools pinned in [.mise.toml](.mise.toml):
 
-This will be called automatically in the relevant `make` targets.
+  ```sh
+  mise trust
+  mise install
+  ```
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+  The `make` targets run `mise install` for you. Python tools such as `yamllint` also need `pipx` (`pip install --user pipx`); see [jdx/mise#2536](https://github.com/jdx/mise/issues/2536).
+- Docker, to build the operator image.
+- A Kubernetes cluster, such as minikube. CI installs the chart on the Kubernetes versions listed in [operator-lint-and-test.yaml](.github/workflows/operator-lint-and-test.yaml).
+
+### Run the operator from your machine
+
+Install the CRDs into the cluster in your current kube context, and then run the operator against that cluster:
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/prefect-operator:tag
+make install run
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+Installing CRDs needs cluster-wide permissions. If `make install` fails with RBAC errors, use an account with cluster-admin.
 
-**Install the CRDs into the cluster:**
+In another shell, apply a sample resource from [deploy/samples](deploy/samples/):
 
 ```sh
-make install
+kubectl apply -f deploy/samples/v1_prefectserver_ephemeral.yaml
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+### Deploy your build to a cluster
+
+Build the operator image and push it to a registry that your cluster can pull from:
 
 ```sh
-make deploy IMG=<some-registry>/prefect-operator:tag
+make docker-build docker-push IMG=<some-registry>/prefect-operator:<tag>
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the deploy/sample:
+`make deploy` installs the chart with the image set in its values.yaml, and ignores `IMG`. To deploy your image, build the chart's dependencies and pass the image to Helm:
 
 ```sh
-kubectl apply -k deploy/samples/
+make helmbuild
+helm install prefect-operator deploy/charts/prefect-operator \
+  --namespace prefect-system --create-namespace \
+  --set operator.image.repository=<some-registry>/prefect-operator \
+  --set operator.image.tag=<tag>
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### Uninstall
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k deploy/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
+Delete the resources you created, then the operator, then the CRDs:
 
 ```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
+kubectl delete -f deploy/samples/v1_prefectserver_ephemeral.yaml
 make undeploy
-```
-
-## Project Distribution
-
-Following are the steps to build the installer and distribute this project to users.
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/prefect-operator:tag
-```
-
-NOTE: The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without
-its dependencies.
-
-2. Using the installer
-
-Users can just run kubectl apply -f <URL for YAML BUNDLE> to install the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/prefect-operator/<tag or branch>/dist/install.yaml
+make uninstall
 ```
 
 ## Contributing

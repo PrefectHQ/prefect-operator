@@ -1,6 +1,7 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file gives coding agents guidance for working with code in this repository.
+CLAUDE.md is a symlink to it.
 
 ## Development Commands
 
@@ -8,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 mise trust
-mise install     # Installs all dependencies including go, docker, kubectl, etc.
+mise install     # Installs the tools in .mise.toml, including go, kubectl, and helm
 ```
 
 ### Core Development
@@ -32,7 +33,7 @@ directly to execute individual tests. See the @Makefile for how to run it.
 ```bash
 make manifests   # Generate CRDs, webhooks, ClusterRoles
 make generate    # Generate DeepCopy methods
-make docs        # Generate CRD documentation (PrefectServer.md, PrefectWorkPool.md)
+make docs        # Generate CRD documentation (the Prefect*.md files)
 ```
 
 ### Kubernetes Operations
@@ -42,7 +43,7 @@ make install     # Install CRDs to cluster
 make uninstall   # Remove CRDs from cluster
 make deploy      # Deploy operator via Helm
 make undeploy    # Remove operator deployment
-kubectl apply -k deploy/samples/  # Apply sample resources
+kubectl apply -f deploy/samples/<file>.yaml  # Apply a sample resource
 ```
 
 ### Docker Operations
@@ -60,13 +61,16 @@ This is a Kubernetes operator built with Kubebuilder that manages Prefect infras
 
 - **PrefectServer**: Manages Prefect server deployments with configurable storage backends (ephemeral, SQLite, PostgreSQL) and optional Redis messaging
 - **PrefectWorkPool**: Manages Prefect work pools for different execution environments (Kubernetes, process-based, external)
+- **PrefectWorkQueue**: Manages work queues within a Prefect work pool
 - **PrefectDeployment**: Manages Prefect deployments (not Kubernetes ones) of Python flows
+- **PrefectAutomation**: Manages Prefect automations
 
 ### Key Components
 
 - **Controllers** (`internal/controller/`): Reconciliation logic for CRDs
 - **API Types** (`api/v1/`): CRD definitions and helper methods
-- **Utils** (`internal/utils/`): Hash utilities for detecting resource changes
+- **Prefect client** (`internal/prefect/`): HTTP client for the Prefect API. `internal/prefect/prefecttest/` is the fake Prefect API that the controller tests run against
+- **Utils** (`internal/utils/`): Hash utilities for detecting resource changes, and resync interval helpers
 - **Conditions** (`internal/conditions/`): Status condition management
 - **Constants** (`internal/constants/`): Shared constants
 
@@ -93,7 +97,7 @@ Each backend generates appropriate environment variables for the Prefect server 
 - Unit tests use Ginkgo/Gomega with envtest for Kubernetes API simulation
 - E2E tests require actual Kubernetes cluster
 - Coverage includes API types, controllers, and utilities
-- Tests run against Kubernetes v1.29.0 via envtest
+- envtest runs the Kubernetes version set by `ENVTEST_K8S_VERSION` in the Makefile
 
 The typically manual testing approach is to run a local cluster like `minikube`
 and run the `prefect-operator` locally pointing to that cluster. That means
@@ -118,7 +122,7 @@ make install run  # Install CRDs and run operator locally (long-running process)
 This command should be run in a background shell as it's a long-lived process that watches and reconciles Prefect resources. The operator will:
 - Install/update CRDs to the cluster
 - Start the controller manager locally
-- Watch for changes to PrefectServer, PrefectWorkPool, and PrefectDeployment resources
+- Watch for changes to PrefectServer, PrefectWorkPool, PrefectWorkQueue, PrefectDeployment, and PrefectAutomation resources
 - Use port-forwarding to connect to in-cluster Prefect servers when needed
 
 #### Testing with Sample Resources
