@@ -1,0 +1,18 @@
+{{- /*
+Helm installs a chart's crds/ directory once and never upgrades it, so the
+chart renders the generated CRDs as templates instead. The keep policy leaves
+the CRDs in place on uninstall: deleting a CRD deletes every resource of that
+kind, and the operator's finalizers could then delete the matching objects in
+Prefect.
+*/}}
+{{- if .Values.crds.install }}
+{{- $labels := include "common.labels.standard" (dict "customLabels" .Values.commonLabels "context" $) | fromYaml }}
+{{- $annotations := include "common.tplvalues.render" (dict "value" .Values.commonAnnotations "context" $) | fromYaml }}
+{{- range $path, $_ := .Files.Glob "files/crds/*.yaml" }}
+{{- $crd := $.Files.Get $path | fromYaml }}
+{{- $_ := set $crd.metadata "labels" (merge (dict) $labels ($crd.metadata.labels | default dict)) }}
+{{- $_ := set $crd.metadata "annotations" (merge (dict "helm.sh/resource-policy" "keep") $annotations ($crd.metadata.annotations | default dict)) }}
+---
+{{ toYaml $crd }}
+{{- end }}
+{{- end }}

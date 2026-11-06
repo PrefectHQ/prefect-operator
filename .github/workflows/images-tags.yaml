@@ -35,11 +35,11 @@ jobs:
       - name: Package kubernetes manifests & CRDs
         run: |
           # package just CRDs
-          cat deploy/charts/prefect-operator/crds/*.yaml > prefect-crds.yaml
+          cat deploy/charts/prefect-operator/files/crds/*.yaml > prefect-crds.yaml
           make helmbuild
           # template the helm chart including the CRDs
           helm template prefect-operator deploy/charts/prefect-operator \
-          --include-crds --set "operator.image.tag=${GITHUB_REF_NAME}" \
+          --set "operator.image.tag=${GITHUB_REF_NAME}" \
           > prefect-operator.yaml
           # Remove labels relevant only for Helm installs
           yq -i 'del(.metadata.labels."app.kubernetes.io/managed-by")' prefect-operator.yaml

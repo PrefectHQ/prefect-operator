@@ -51,6 +51,35 @@ helm fetch --verify prefect-operator/prefect-operator --version 2024.9.15203739 
 
     You should see the Prefect Operator pod running
 
+## Upgrading the Chart
+
+`helm upgrade` updates the operator's CRDs along with the rest of the chart.
+
+Only one release can own the CRDs. If you run more than one release of the chart in a cluster, set `crds.install=false` on all but one of them.
+
+### Upgrading from a chart that installed CRDs from `crds/`
+
+Earlier versions of the chart installed the CRDs from its `crds/` directory. Helm never upgrades those, and it doesn't record them as part of the release. The first upgrade to this version fails with an error that a CRD "exists and cannot be imported into the current release".
+
+With Helm 3.17 or later, pass `--take-ownership` on that one upgrade:
+
+```bash
+helm upgrade prefect-operator prefect-operator/prefect-operator --namespace=prefect-system -f values.yaml --take-ownership
+```
+
+With an earlier Helm, mark the CRDs as belonging to the release first, then upgrade as usual:
+
+```bash
+for crd in prefectservers prefectworkpools prefectworkqueues prefectdeployments prefectautomations; do
+  kubectl label crd "$crd.prefect.io" app.kubernetes.io/managed-by=Helm --overwrite
+  kubectl annotate crd "$crd.prefect.io" --overwrite \
+    meta.helm.sh/release-name=prefect-operator \
+    meta.helm.sh/release-namespace=prefect-system
+done
+```
+
+Later upgrades need neither step.
+
 ## Uninstalling the Chart
 
 To uninstall/delete the prefect-operator deployment:
@@ -59,7 +88,15 @@ To uninstall/delete the prefect-operator deployment:
 helm delete prefect-operator -n prefect-system
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.
+The command removes the Kubernetes components associated with the chart and deletes the release. It leaves the CRDs, and the Prefect resources stored in them, in place.
+
+To remove the CRDs too, delete the Prefect resources before you uninstall the chart, so the operator can run their finalizers. That changes Prefect the same way deleting each resource does. Then delete the CRDs:
+
+```bash
+kubectl delete prefectautomations,prefectdeployments,prefectworkqueues,prefectworkpools,prefectservers --all --all-namespaces
+helm delete prefect-operator -n prefect-system
+kubectl delete crd prefectautomations.prefect.io prefectdeployments.prefect.io prefectworkqueues.prefect.io prefectworkpools.prefect.io prefectservers.prefect.io
+```
 
 ## FAQ
 tbd
@@ -85,6 +122,7 @@ tbd
 |-----|------|---------|-------------|
 | commonAnnotations | object | `{}` | annotations to add to all deployed objects |
 | commonLabels | object | `{"app.kubernetes.io/component":"operator"}` | labels to add to all deployed objects |
+| crds.install | bool | `true` | install and upgrade the operator's CRDs with the chart. Uninstalling the chart leaves them in place. Set to false when the CRDs are managed outside this release, such as by another release of the chart in the same cluster |
 | fullnameOverride | string | `"prefect-operator"` | fully override common.names.fullname |
 | nameOverride | string | `""` | partially overrides common.names.name |
 | namespaceOverride | string | `""` | fully override common.names.namespace |
