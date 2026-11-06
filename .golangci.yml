@@ -31,6 +31,10 @@ linters:
       - linters:
           - goconst
         path: _test\.go
+      # The fake Prefect API repeats Prefect's JSON field names.
+      - linters:
+          - goconst
+        path: internal/prefect/prefecttest/
 formatters:
   enable:
     - gofmt

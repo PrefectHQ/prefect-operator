@@ -20,9 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
+	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -41,6 +44,11 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 )
 
+const (
+	createWorkPoolRoute = "POST /work_pools/"
+	updateWorkPoolRoute = "PATCH /work_pools/{name}"
+)
+
 var _ = Describe("PrefectWorkPool Controller", func() {
 	var (
 		ctx                 context.Context
@@ -49,7 +57,8 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		name                types.NamespacedName
 		prefectWorkPool     *prefectiov1.PrefectWorkPool
 		reconciler          *PrefectWorkPoolReconciler
-		mockClient          *prefect.MockClient
+		prefectAPI          *prefecttest.Server
+		prefectClient       *prefect.Client
 		baseJobTemplate     map[string]any
 		baseJobTemplateJson []byte
 	)
@@ -69,12 +78,14 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
-		mockClient = prefect.NewMockClient()
+		prefectAPI = prefecttest.NewServer()
+		DeferCleanup(prefectAPI.Close)
+		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
 
 		reconciler = &PrefectWorkPoolReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         mockClient,
+			PrefectClient:         prefectClient,
 			DefaultResyncInterval: testResyncInterval,
 		}
 
@@ -260,9 +271,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			})
 
 			It("should have the default base job template", func() {
-				workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+				workPool, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(workPool.BaseJobTemplate).To(Equal(prefect.MockDefaultBaseJobTemplate))
+				Expect(workPool.BaseJobTemplate).To(Equal(prefecttest.DefaultBaseJobTemplate()))
 			})
 
 			Context("with inline job template", func() {
@@ -273,7 +284,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				})
 
 				It("should have the base job template defined in the work pool spec", func() {
-					workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+					workPool, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(workPool.BaseJobTemplate).To(Equal(baseJobTemplate))
 				})
@@ -302,7 +313,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				})
 
 				It("should have the base job template defined in the ConfigMap", func() {
-					workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+					workPool, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(workPool.BaseJobTemplate).To(Equal(baseJobTemplate))
 				})
@@ -322,9 +333,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				})
 
 				It("should properly apply base job template patches", func() {
-					workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+					workPool, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 					Expect(err).NotTo(HaveOccurred())
-					patched := prefect.MockDefaultBaseJobTemplate
+					patched := prefecttest.DefaultBaseJobTemplate()
 					patched["plugh"] = "xyzzy"
 					Expect(workPool.BaseJobTemplate).To(Equal(patched))
 				})
@@ -344,9 +355,9 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			})
 
 			It("should properly apply base job template patches", func() {
-				workPool, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+				workPool, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 				Expect(err).NotTo(HaveOccurred())
-				patched := prefect.MockDefaultBaseJobTemplate
+				patched := prefecttest.DefaultBaseJobTemplate()
 				patched["plugh"] = "xyzzy"
 				Expect(workPool.BaseJobTemplate).To(Equal(patched))
 			})
@@ -486,6 +497,8 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 	})
 
 	Context("When updating a work pool", func() {
+		var createdID string
+
 		BeforeEach(func() {
 			prefectWorkPool = &prefectiov1.PrefectWorkPool{
 				ObjectMeta: metav1.ObjectMeta{
@@ -507,11 +520,22 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
 
-			// Reconcile once to create the work pool
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			By("Reconciling twice: once to add the finalizer, once to create the pool in Prefect")
+			for range 2 {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			created, err := prefectClient.GetWorkPool(ctx, name.Name)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			Expect(created).NotTo(BeNil())
+			Expect(created.BaseJobTemplate).To(Equal(prefecttest.DefaultBaseJobTemplate()))
+			createdID = created.ID
 
+			By("Changing the worker settings and the base job template")
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			prefectWorkPool.Spec.BaseJobTemplate = &prefectiov1.RawValueSource{
+				Value: &runtime.RawExtension{Raw: baseJobTemplateJson},
+			}
 			prefectWorkPool.Spec.Settings = []corev1.EnvVar{
 				{Name: "PREFECT_SOME_SETTING", Value: "some-value"},
 			}
@@ -534,9 +558,30 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 
 			Expect(k8sClient.Update(ctx, prefectWorkPool)).To(Succeed())
 
-			// Reconcile again to update the work pool
+			By("Reconciling the change")
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should update the existing Prefect work pool rather than create one", func() {
+			Expect(prefectAPI.Calls(createWorkPoolRoute)).To(Equal(1))
+			Expect(prefectAPI.Calls(updateWorkPoolRoute)).To(Equal(1))
+
+			updated, err := prefectClient.GetWorkPool(ctx, name.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.ID).To(Equal(createdID))
+			Expect(updated.BaseJobTemplate).To(Equal(baseJobTemplate))
+		})
+
+		It("should record the sync in the status", func() {
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			Expect(prefectWorkPool.Status.Id).To(HaveValue(Equal(createdID)))
+			Expect(prefectWorkPool.Status.ObservedGeneration).To(Equal(prefectWorkPool.Generation))
+
+			synced := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, PrefectWorkPoolConditionSynced)
+			Expect(synced).NotTo(BeNil())
+			Expect(synced.Status).To(Equal(metav1.ConditionTrue))
+			Expect(synced.Reason).To(Equal("SyncSuccessful"))
 		})
 
 		It("should update the Deployment with the new setting", func() {
@@ -621,13 +666,13 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		})
 
 		It("should not change the prefect work pool if nothing has changed", func() {
-			before, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+			before, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 
-			after, err := mockClient.GetWorkPool(ctx, prefectWorkPool.Name)
+			after, err := prefectClient.GetWorkPool(ctx, prefectWorkPool.Name)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(after).To(Equal(before))
@@ -1045,10 +1090,6 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying deployment was deleted from Prefect")
-			// The mock client should have been called to delete the deployment
-			// This is implicit in the mock client behavior
-
 			By("Verifying the deployment was removed from Kubernetes")
 			err = k8sClient.Get(ctx, name, prefectWorkPool)
 			Expect(err).To(HaveOccurred())
@@ -1170,10 +1211,8 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			}
 		})
 
-		It("should handle sync errors from mock client", func() {
-			By("Configuring mock client to fail")
-			mockClient.ShouldFailCreate = true
-			mockClient.FailureMessage = "simulated Prefect API error"
+		It("should return the error when Prefect fails the create", func() {
+			prefectAPI.Fail(createWorkPoolRoute, http.StatusInternalServerError)
 
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(Succeed())
@@ -1186,11 +1225,8 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			By("Second reconcile should handle the error")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("simulated Prefect API error"))
+			Expect(err.Error()).To(ContainSubstring("status 500"))
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-
-			By("Resetting mock client")
-			mockClient.ShouldFailCreate = false
 		})
 	})
 })

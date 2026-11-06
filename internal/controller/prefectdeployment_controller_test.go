@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,7 +38,13 @@ import (
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
+	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
+)
+
+const (
+	createFlowRoute       = "POST /flows/"
+	createDeploymentRoute = "POST /deployments/"
 )
 
 var _ = Describe("PrefectDeployment controller", func() {
@@ -47,7 +55,8 @@ var _ = Describe("PrefectDeployment controller", func() {
 		name              types.NamespacedName
 		prefectDeployment *prefectiov1.PrefectDeployment
 		reconciler        *PrefectDeploymentReconciler
-		mockClient        *prefect.MockClient
+		prefectAPI        *prefecttest.Server
+		prefectClient     *prefect.Client
 	)
 
 	BeforeEach(func() {
@@ -110,11 +119,16 @@ var _ = Describe("PrefectDeployment controller", func() {
 			},
 		}
 
-		mockClient = prefect.NewMockClient()
+		prefectAPI = prefecttest.NewServer()
+		DeferCleanup(prefectAPI.Close)
+		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
+		// Prefect rejects a deployment whose work pool does not exist.
+		_, err := prefectClient.CreateWorkPool(ctx, &prefect.WorkPoolSpec{Name: "kubernetes-work-pool", Type: "kubernetes"})
+		Expect(err).NotTo(HaveOccurred())
 		reconciler = &PrefectDeploymentReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         mockClient,
+			PrefectClient:         prefectClient,
 			DefaultResyncInterval: testResyncInterval,
 		}
 	})
@@ -224,10 +238,6 @@ var _ = Describe("PrefectDeployment controller", func() {
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying deployment was deleted from Prefect")
-			// The mock client should have been called to delete the deployment
-			// This is implicit in the mock client behavior
-
 			By("Verifying the deployment was removed from Kubernetes")
 			err = k8sClient.Get(ctx, name, prefectDeployment)
 			Expect(err).To(HaveOccurred())
@@ -283,7 +293,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
 			Expect(prefectDeployment.Status.AppliedFields).To(ConsistOf("concurrencyLimit"))
-			remote, err := mockClient.GetDeployment(ctx, *prefectDeployment.Status.Id)
+			remote, err := prefectClient.GetDeployment(ctx, *prefectDeployment.Status.Id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.GlobalConcurrencyLimit).NotTo(BeNil())
 
@@ -294,7 +304,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("The limit is removed in Prefect, not silently kept")
-			remote, err = mockClient.GetDeployment(ctx, *prefectDeployment.Status.Id)
+			remote, err = prefectClient.GetDeployment(ctx, *prefectDeployment.Status.Id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(remote.GlobalConcurrencyLimit).To(BeNil())
 			Expect(remote.ConcurrencyLimit).To(BeNil())
@@ -539,33 +549,8 @@ var _ = Describe("PrefectDeployment controller", func() {
 	})
 
 	Context("When testing error scenarios", func() {
-		It("Should handle sync errors from mock client", func() {
-			By("Configuring mock client to fail")
-			mockClient.ShouldFailCreate = true
-			mockClient.FailureMessage = "simulated Prefect API error"
-
-			By("Creating deployment")
-			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
-
-			By("First reconcile - adding finalizer")
-			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(time.Second))
-
-			By("Second reconcile should handle the error")
-			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("simulated Prefect API error"))
-			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
-
-			By("Resetting mock client")
-			mockClient.ShouldFailCreate = false
-		})
-
 		It("Should handle flow creation errors", func() {
-			By("Configuring mock client to fail flow creation")
-			mockClient.ShouldFailFlowCreate = true
-			mockClient.FailureMessage = "simulated flow creation error"
+			prefectAPI.Fail(createFlowRoute, http.StatusInternalServerError)
 
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
@@ -579,14 +564,11 @@ var _ = Describe("PrefectDeployment controller", func() {
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to create or get flow"))
-			Expect(err.Error()).To(ContainSubstring("simulated flow creation error"))
+			Expect(err.Error()).To(ContainSubstring("status 500"))
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
 			By("Checking that error condition is set")
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
-
-			By("Resetting mock client")
-			mockClient.ShouldFailFlowCreate = false
 		})
 
 		It("Should handle errors when retrieving deployment", func() {
@@ -615,7 +597,6 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 			By("Reconciling with spec that causes conversion errors")
 			// Create a deployment with invalid data that will cause conversion errors
-			mockClient.ShouldFailCreate = false
 			// First establish the deployment
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -637,9 +618,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating deployment")
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 
-			By("Configuring mock client to fail on CreateOrUpdateDeployment")
-			mockClient.ShouldFailCreate = true
-			mockClient.FailureMessage = "CreateOrUpdateDeployment error"
+			prefectAPI.Fail(createDeploymentRoute, http.StatusInternalServerError)
 
 			By("First reconcile - adding finalizer")
 			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
@@ -649,14 +628,11 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Second reconcile should handle the CreateOrUpdateDeployment error")
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("CreateOrUpdateDeployment error"))
+			Expect(err.Error()).To(ContainSubstring("status 500"))
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
 			By("Checking that error condition is set")
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
-
-			By("Resetting mock client")
-			mockClient.ShouldFailCreate = false
 		})
 
 		It("Should handle status update errors", func() {
@@ -860,11 +836,11 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 	Context("When testing real Prefect client creation", func() {
 		It("Should create real Prefect client when PrefectClient is nil", func() {
-			By("Creating reconciler without mock client")
+			By("Creating reconciler without an injected client")
 			realReconciler := &PrefectDeploymentReconciler{
 				Client:        k8sClient,
 				Scheme:        k8sClient.Scheme(),
-				PrefectClient: nil, // No mock client
+				PrefectClient: nil,
 			}
 
 			By("Creating deployment")

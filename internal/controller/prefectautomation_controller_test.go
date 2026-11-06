@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,6 +35,12 @@ import (
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
+	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
+)
+
+const (
+	createAutomationRoute = "POST /automations/"
+	updateAutomationRoute = "PUT /automations/{id}"
 )
 
 var _ = Describe("PrefectAutomation controller", func() {
@@ -43,7 +51,8 @@ var _ = Describe("PrefectAutomation controller", func() {
 		name          types.NamespacedName
 		automation    *prefectiov1.PrefectAutomation
 		reconciler    *PrefectAutomationReconciler
-		mockClient    *prefect.MockClient
+		prefectAPI    *prefecttest.Server
+		prefectClient *prefect.Client
 	)
 
 	// syncedAutomation drives the reconciler through finalizer + first sync and
@@ -99,11 +108,13 @@ var _ = Describe("PrefectAutomation controller", func() {
 			},
 		}
 
-		mockClient = prefect.NewMockClient()
+		prefectAPI = prefecttest.NewServer()
+		DeferCleanup(prefectAPI.Close)
+		prefectClient = prefect.NewClient(prefectAPI.URL, "", logr.Discard())
 		reconciler = &PrefectAutomationReconciler{
 			Client:                k8sClient,
 			Scheme:                k8sClient.Scheme(),
-			PrefectClient:         mockClient,
+			PrefectClient:         prefectClient,
 			DefaultResyncInterval: testResyncInterval,
 		}
 	})
@@ -188,7 +199,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			Expect(result.RequeueAfter).To(BeJitteredResync(testResyncInterval))
 
 			// The remote already matches, so no update happened.
-			Expect(mockClient.UpdateAutomationCalls).To(BeZero())
+			Expect(prefectAPI.Calls(updateAutomationRoute)).To(BeZero())
 
 			Expect(k8sClient.Get(ctx, name, fresh)).To(Succeed())
 			Expect(fresh.Status.Ready).To(BeTrue())
@@ -229,8 +240,8 @@ var _ = Describe("PrefectAutomation controller", func() {
 
 			// The update really ran and its payload arrived: if the up-to-date
 			// compare ever regresses to skipping real changes, this fails.
-			Expect(mockClient.UpdateAutomationCalls).To(Equal(1))
-			stored, getErr := mockClient.GetAutomation(ctx, initialID)
+			Expect(prefectAPI.Calls(updateAutomationRoute)).To(Equal(1))
+			stored, getErr := prefectClient.GetAutomation(ctx, initialID)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(stored.Description).To(Equal("updated"))
 		})
@@ -305,7 +316,9 @@ var _ = Describe("PrefectAutomation controller", func() {
 			Expect(cond.Reason).To(Equal("DeploymentNotFound"))
 
 			By("Seeding the deployment into Prefect")
-			_, err = mockClient.CreateOrUpdateDeployment(ctx, &prefect.DeploymentSpec{Name: "daily-etl", FlowID: "flow-1"})
+			flow, err := prefectClient.CreateOrGetFlow(ctx, &prefect.FlowSpec{Name: "etl"})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = prefectClient.CreateOrUpdateDeployment(ctx, &prefect.DeploymentSpec{Name: "daily-etl", FlowID: flow.ID})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Now it resolves and syncs")
@@ -325,7 +338,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 			originalID := *fresh.Status.Id
 
 			By("Deleting the automation directly in Prefect")
-			Expect(mockClient.DeleteAutomation(ctx, originalID)).To(Succeed())
+			Expect(prefectClient.DeleteAutomation(ctx, originalID)).To(Succeed())
 
 			By("Changing the spec to force a sync")
 			fresh.Spec.Description = new("changed")
@@ -353,8 +366,7 @@ var _ = Describe("PrefectAutomation controller", func() {
 
 	Context("When Prefect returns a sync error", func() {
 		It("Should set SyncError and requeue on the error interval", func() {
-			mockClient.ShouldFailCreate = true
-			mockClient.FailureMessage = "simulated Prefect API error"
+			prefectAPI.Fail(createAutomationRoute, http.StatusInternalServerError)
 
 			Expect(k8sClient.Create(ctx, automation)).To(Succeed())
 
