@@ -299,44 +299,26 @@ func (r *PrefectWorkQueueReconciler) setCondition(workQueue *prefectiov1.Prefect
 // it), and deleting a CR that was only added to put a limit on such a queue
 // must not take down the queue and everything routing through it.
 func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQueue *prefectiov1.PrefectWorkQueue) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	log.Info("Handling deletion of PrefectWorkQueue", "workQueue", workQueue.Name)
-
-	if !controllerutil.ContainsFinalizer(workQueue, PrefectWorkQueueFinalizer) {
-		return ctrl.Result{}, nil
-	}
-
-	adopted := workQueue.Status.Adopted != nil && *workQueue.Status.Adopted
-	if adopted {
-		log.Info("Leaving adopted work queue in place in Prefect", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
-	}
-
-	// Delete the queue the last sync managed; after an unsynced rename,
-	// spec.name points at a queue this resource never touched.
-	managedName := workQueue.Status.ManagedName
-	if managedName == "" {
-		managedName = workQueue.Spec.Name
-	}
-
-	if !adopted && workQueue.Status.Id != nil && *workQueue.Status.Id != "" {
-		// Don't block K8s deletion on a failed remote delete (e.g. the
-		// pool-scoped route's rejection of deleting a pool's default queue).
-		prefectClient, err := r.NewPrefectClient(ctx, &workQueue.Spec.Server, workQueue.Namespace)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client for deletion", "workQueue", workQueue.Name)
-		} else if err := prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName); err != nil {
-			log.Error(err, "Failed to delete work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
-		} else {
-			log.Info("Successfully deleted work queue from Prefect API", "workQueue", workQueue.Name, "workPool", workQueue.Spec.WorkPoolName)
+	var deleteFromPrefect func(context.Context) error
+	switch {
+	case workQueue.Status.Adopted != nil && *workQueue.Status.Adopted:
+		log.FromContext(ctx).Info("Leaving adopted work queue in place in Prefect", "workPool", workQueue.Spec.WorkPoolName)
+	case workQueue.Status.Id != nil && *workQueue.Status.Id != "":
+		// Delete the queue the last sync managed; after an unsynced rename,
+		// spec.name points at a queue this resource never touched.
+		managedName := workQueue.Status.ManagedName
+		if managedName == "" {
+			managedName = workQueue.Spec.Name
+		}
+		deleteFromPrefect = func(ctx context.Context) error {
+			prefectClient, err := r.NewPrefectClient(ctx, &workQueue.Spec.Server, workQueue.Namespace)
+			if err != nil {
+				return fmt.Errorf("creating Prefect client: %w", err)
+			}
+			return prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName)
 		}
 	}
-
-	controllerutil.RemoveFinalizer(workQueue, PrefectWorkQueueFinalizer)
-	if err := r.Update(ctx, workQueue); err != nil {
-		log.Error(err, "Failed to remove finalizer", "workQueue", workQueue.Name)
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
+	return finalize(ctx, r.Client, workQueue, PrefectWorkQueueFinalizer, deleteFromPrefect)
 }
 
 // SetupWithManager sets up the controller with the Manager.

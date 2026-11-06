@@ -362,38 +362,15 @@ func (r *PrefectWorkPoolReconciler) setCondition(workPool *prefectiov1.PrefectWo
 	meta.SetStatusCondition(&workPool.Status.Conditions, condition)
 }
 
-// handleDeletion handles the cleanup of a PrefectWorkPool that is being deleted
+// handleDeletion deletes the work pool in Prefect and removes the finalizer.
 func (r *PrefectWorkPoolReconciler) handleDeletion(ctx context.Context, workPool *prefectiov1.PrefectWorkPool) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	log.Info("Handling deletion of PrefectWorkPool", "workPool", workPool.Name)
-
-	// If the finalizer is not present, nothing to do
-	if !controllerutil.ContainsFinalizer(workPool, PrefectWorkPoolFinalizer) {
-		return ctrl.Result{}, nil
-	}
-
-	if workPool.Name != "" {
-		// Remove the finalizer even when the Prefect delete fails, so a Prefect
-		// outage can't block Kubernetes deletion indefinitely.
+	return finalize(ctx, r.Client, workPool, PrefectWorkPoolFinalizer, func(ctx context.Context) error {
 		prefectClient, err := r.NewPrefectClient(ctx, &workPool.Spec.Server, workPool.Namespace)
 		if err != nil {
-			log.Error(err, "Failed to create Prefect client for deletion", "workPool", workPool.Name)
-		} else if err := prefectClient.DeleteWorkPool(ctx, workPool.Name); err != nil {
-			log.Error(err, "Failed to delete workPool from Prefect API", "workPool", workPool.Name)
-		} else {
-			log.Info("Successfully deleted workPool from Prefect API", "workPool", workPool.Name)
+			return fmt.Errorf("creating Prefect client: %w", err)
 		}
-	}
-
-	// Remove the finalizer to allow Kubernetes to complete deletion
-	controllerutil.RemoveFinalizer(workPool, PrefectWorkPoolFinalizer)
-	if err := r.Update(ctx, workPool); err != nil {
-		log.Error(err, "Failed to remove finalizer", "deployment", workPool.Name)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, err
-	}
-
-	log.Info("Finalizer removed, deletion will proceed", "deployment", workPool.Name)
-	return ctrl.Result{}, nil
+		return prefectClient.DeleteWorkPool(ctx, workPool.Name)
+	})
 }
 
 func (r *PrefectWorkPoolReconciler) mapConfigMapToWorkPools(ctx context.Context, obj client.Object) []reconcile.Request {

@@ -399,39 +399,20 @@ func declaredDeploymentFields(spec prefectiov1.PrefectDeploymentSpec) []string {
 	return fields
 }
 
-// handleDeletion handles the cleanup of a PrefectDeployment that is being deleted
+// handleDeletion deletes the deployment in Prefect, if a sync created it, and
+// removes the finalizer.
 func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deployment *prefectiov1.PrefectDeployment) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	log.Info("Handling deletion of PrefectDeployment", "deployment", deployment.Name)
-
-	// If finalizer is not present, nothing to do
-	if !controllerutil.ContainsFinalizer(deployment, PrefectDeploymentFinalizer) {
-		return ctrl.Result{}, nil
-	}
-
-	// Only attempt cleanup if we have a deployment ID in Prefect
-	if deployment.Status.Id != nil && *deployment.Status.Id != "" {
-		// Remove the finalizer even when the Prefect delete fails, so a Prefect
-		// outage can't block Kubernetes deletion indefinitely.
-		prefectClient, err := r.NewPrefectClient(ctx, &deployment.Spec.Server, deployment.Namespace)
-		if err != nil {
-			log.Error(err, "Failed to create Prefect client for deletion", "deployment", deployment.Name)
-		} else if err := prefectClient.DeleteDeployment(ctx, *deployment.Status.Id); err != nil {
-			log.Error(err, "Failed to delete deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
-		} else {
-			log.Info("Successfully deleted deployment from Prefect API", "deployment", deployment.Name, "prefectId", *deployment.Status.Id)
+	var deleteFromPrefect func(context.Context) error
+	if id := deployment.Status.Id; id != nil && *id != "" {
+		deleteFromPrefect = func(ctx context.Context) error {
+			prefectClient, err := r.NewPrefectClient(ctx, &deployment.Spec.Server, deployment.Namespace)
+			if err != nil {
+				return fmt.Errorf("creating Prefect client: %w", err)
+			}
+			return prefectClient.DeleteDeployment(ctx, *id)
 		}
 	}
-
-	// Remove finalizer to allow Kubernetes to complete deletion
-	controllerutil.RemoveFinalizer(deployment, PrefectDeploymentFinalizer)
-	if err := r.Update(ctx, deployment); err != nil {
-		log.Error(err, "Failed to remove finalizer", "deployment", deployment.Name)
-		return ctrl.Result{}, err
-	}
-
-	log.Info("Finalizer removed, deletion will proceed", "deployment", deployment.Name)
-	return ctrl.Result{}, nil
+	return finalize(ctx, r.Client, deployment, PrefectDeploymentFinalizer, deleteFromPrefect)
 }
 
 // SetupWithManager sets up the controller with the Manager.
