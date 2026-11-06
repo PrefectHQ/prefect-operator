@@ -17,3 +17,42 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --default-resync-interval=90s
+
+  - it: logs JSON at info level by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-log-level=info
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-encoder=json
+
+  - it: configures the log level and format
+    set:
+      operator.logLevel: debug
+      operator.logFormat: console
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-log-level=debug
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-encoder=console
+
+  - it: accepts an integer log level
+    set:
+      operator.logLevel: 2
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-log-level=2
+
+  - it: uses the operator defaults when the log values are empty
+    set:
+      operator.logLevel: ""
+      operator.logFormat: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --leader-elect

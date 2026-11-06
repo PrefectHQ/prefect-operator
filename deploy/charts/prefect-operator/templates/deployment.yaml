@@ -59,6 +59,12 @@ spec:
             {{- if .Values.operator.defaultResyncInterval }}
             - {{ printf "--default-resync-interval=%s" .Values.operator.defaultResyncInterval | quote }}
             {{- end }}
+            {{- with .Values.operator.logLevel }}
+            - {{ printf "--zap-log-level=%v" . | quote }}
+            {{- end }}
+            {{- with .Values.operator.logFormat }}
+            - {{ printf "--zap-encoder=%s" . | quote }}
+            {{- end }}
           env:
             {{- if .Values.operator.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVars "context" $) | nindent 12 }}
