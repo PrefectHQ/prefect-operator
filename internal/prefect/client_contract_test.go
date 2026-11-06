@@ -46,9 +46,6 @@ type contractCall struct {
 	// okBody is the JSON the server answers a successful call with.
 	okBody string
 	call   func(ctx context.Context, c *Client) (any, error)
-	// bearerWithoutKey marks methods that send an Authorization header even
-	// when the client has no API key.
-	bearerWithoutKey bool
 	// on404 asserts the result of a call that Prefect answers with 404. It is
 	// nil for calls without a not-found case (creates and filters).
 	on404 func(result any, err error)
@@ -80,14 +77,14 @@ var contractCalls = []contractCall{
 	// Deployments
 	{
 		name: "CreateOrUpdateDeployment", method: http.MethodPost, path: "/deployments/",
-		okBody: `{"id": "dep-1"}`, bearerWithoutKey: true,
+		okBody: `{"id": "dep-1"}`,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.CreateOrUpdateDeployment(ctx, &DeploymentSpec{Name: "etl", FlowID: "flow-1"})
 		},
 	},
 	{
 		name: "GetDeployment", method: http.MethodGet, path: "/deployments/dep-1",
-		okBody: `{"id": "dep-1"}`, bearerWithoutKey: true,
+		okBody: `{"id": "dep-1"}`,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.GetDeployment(ctx, "dep-1")
 		},
@@ -103,7 +100,6 @@ var contractCalls = []contractCall{
 	},
 	{
 		name: "DeleteDeployment", method: http.MethodDelete, path: "/deployments/dep-1",
-		bearerWithoutKey: true,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.DeleteDeployment(ctx, "dep-1"))
 		},
@@ -152,7 +148,7 @@ var contractCalls = []contractCall{
 	// Work pools
 	{
 		name: "GetWorkPool", method: http.MethodGet, path: "/work_pools/pool",
-		okBody: `{"id": "wp-1"}`, bearerWithoutKey: true,
+		okBody: `{"id": "wp-1"}`,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.GetWorkPool(ctx, "pool")
 		},
@@ -160,7 +156,7 @@ var contractCalls = []contractCall{
 	},
 	{
 		name: "CreateWorkPool", method: http.MethodPost, path: "/work_pools/",
-		okBody: `{"id": "wp-1"}`, bearerWithoutKey: true,
+		okBody: `{"id": "wp-1"}`,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.CreateWorkPool(ctx, &WorkPoolSpec{Name: "pool"})
 		},
@@ -174,7 +170,6 @@ var contractCalls = []contractCall{
 	},
 	{
 		name: "DeleteWorkPool", method: http.MethodDelete, path: "/work_pools/pool",
-		bearerWithoutKey: true,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return noResult(c.DeleteWorkPool(ctx, "pool"))
 		},
@@ -182,7 +177,7 @@ var contractCalls = []contractCall{
 	},
 	{
 		name: "GetWorkerMetadata", method: http.MethodGet, path: "/collections/views/aggregate-worker-metadata",
-		okBody: `{}`, bearerWithoutKey: true,
+		okBody: `{}`,
 		call: func(ctx context.Context, c *Client) (any, error) {
 			return c.GetWorkerMetadata(ctx)
 		},
@@ -298,6 +293,25 @@ var _ = Describe("Client contract", func() {
 		}
 	}
 
+	It("path-escapes names", func() {
+		// spec.deployment.flowName can be any Prefect name, and Prefect names
+		// may contain spaces, '#', and '?'.
+		server, requests := serve(http.StatusOK, `{"id": "flow-1"}`)
+		client := NewClient(server.URL, "", logr.Discard())
+
+		_, err := client.GetFlowByName(ctx, "etl #2?")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = client.GetWorkPool(ctx, "my pool")
+		Expect(err).NotTo(HaveOccurred())
+
+		reqs := requests()
+		paths := make([]string, len(reqs))
+		for i, r := range reqs {
+			paths[i] = r.path
+		}
+		Expect(paths).To(Equal([]string{"/flows/name/etl%20%232%3F", "/work_pools/my%20pool"}))
+	})
+
 	for _, cc := range contractCalls {
 		Describe(cc.name, func() {
 			It("calls "+cc.method+" "+cc.path+" with the API key", func() {
@@ -318,18 +332,14 @@ var _ = Describe("Client contract", func() {
 				}
 			})
 
-			It("handles a client without an API key", func() {
+			It("sends no Authorization header without an API key", func() {
 				server, requests := serve(http.StatusOK, cc.okBody)
 
 				_, err := cc.call(ctx, NewClient(server.URL, "", logr.Discard()))
 				Expect(err).NotTo(HaveOccurred())
 
 				for _, r := range requests() {
-					if cc.bearerWithoutKey {
-						Expect(r.header.Values("Authorization")).To(ConsistOf("Bearer"))
-					} else {
-						Expect(r.header).NotTo(HaveKey("Authorization"))
-					}
+					Expect(r.header).NotTo(HaveKey("Authorization"))
 				}
 			})
 

@@ -17,12 +17,10 @@ limitations under the License.
 package prefect
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"net/http"
 	"time"
@@ -37,11 +35,6 @@ import (
 // ErrDeploymentNotFound is returned when a deployment no longer exists in Prefect
 // (e.g. deleted in the UI), so callers can fall back to recreating it.
 var ErrDeploymentNotFound = errors.New("deployment not found")
-
-// isSuccessStatusCode returns true if the HTTP status code indicates success (2xx range)
-func isSuccessStatusCode(statusCode int) bool {
-	return 200 <= statusCode && statusCode < 300
-}
 
 // PrefectClient defines the interface for interacting with the Prefect API
 type PrefectClient interface {
@@ -93,11 +86,6 @@ type PrefectClient interface {
 	DeleteAutomation(ctx context.Context, id string) error
 	// FindDeploymentByName resolves a deployment by its name (tenant-wide) to its ID
 	FindDeploymentByName(ctx context.Context, name string) (*Deployment, error)
-}
-
-// HTTPClient represents an HTTP client interface for testing
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
 }
 
 // Client implements the PrefectClient interface
@@ -335,83 +323,19 @@ type WorkPool struct {
 
 // CreateOrUpdateDeployment creates or updates a deployment using the Prefect API
 func (c *Client) CreateOrUpdateDeployment(ctx context.Context, deployment *DeploymentSpec) (*Deployment, error) {
-	url := fmt.Sprintf("%s/deployments/", c.BaseURL)
-	c.log.V(1).Info("Creating or updating deployment", "url", url, "deployment", deployment.Name)
-
-	jsonData, err := json.Marshal(deployment)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal deployment: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result Deployment
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.do(ctx, http.MethodPost, c.endpoint("/deployments/"), deployment, &result); err != nil {
+		return nil, err
 	}
-
-	c.log.V(1).Info("Deployment created or updated successfully", "deploymentId", result.ID)
 	return &result, nil
 }
 
 // GetDeployment retrieves a deployment by ID
 func (c *Client) GetDeployment(ctx context.Context, id string) (*Deployment, error) {
-	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.V(1).Info("Getting deployment", "url", url, "deploymentId", id)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result Deployment
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.do(ctx, http.MethodGet, c.endpoint("/deployments/%s", id), nil, &result); err != nil {
+		return nil, err
 	}
-
-	c.log.V(1).Info("Deployment retrieved successfully", "deploymentId", result.ID)
 	return &result, nil
 }
 
@@ -431,9 +355,6 @@ const DeploymentFieldConcurrencyLimit = "concurrencyLimit"
 // exclude_unset semantics, so clearing a field needs its explicit null —
 // clearFields names the fields to reset.
 func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *DeploymentSpec, clearFields []string) (*Deployment, error) {
-	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.V(1).Info("Updating deployment", "url", url, "deploymentId", id, "clearFields", clearFields)
-
 	raw, err := json.Marshal(deployment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal deployment updates: %w", err)
@@ -449,87 +370,25 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 			updateBody["concurrency_limit"] = nil
 		}
 	}
-	jsonData, err := json.Marshal(updateBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal deployment update body: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.Error(err, "failed to close response body")
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, ErrDeploymentNotFound
-	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	if resp.StatusCode == http.StatusNoContent || len(bytes.TrimSpace(body)) == 0 {
-		return c.GetDeployment(ctx, id)
-	}
 
 	var result Deployment
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	err = c.do(ctx, http.MethodPatch, c.endpoint("/deployments/%s", id), updateBody, &result)
+	if isNotFound(err) {
+		return nil, ErrDeploymentNotFound
 	}
-
-	c.log.V(1).Info("Deployment updated successfully", "deploymentId", id)
+	if err != nil {
+		return nil, err
+	}
+	// Prefect answers the PATCH with 204 and no body, so re-read the deployment.
+	if result.ID == "" {
+		return c.GetDeployment(ctx, id)
+	}
 	return &result, nil
 }
 
 // DeleteDeployment deletes a deployment
 func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
-	url := fmt.Sprintf("%s/deployments/%s", c.BaseURL, id)
-	c.log.V(1).Info("Deleting deployment", "url", url, "deploymentId", id)
-
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	c.log.V(1).Info("Deployment deleted successfully", "deploymentId", id)
-	return nil
+	return c.do(ctx, http.MethodDelete, c.endpoint("/deployments/%s", id), nil, nil)
 }
 
 type DeploymentScheduleUpdate struct {
@@ -539,324 +398,83 @@ type DeploymentScheduleUpdate struct {
 	Parameters       map[string]any `json:"parameters,omitempty"`
 }
 
-func (c *Client) scheduleSubResource(ctx context.Context, method, url string, jsonData []byte) error {
-	var bodyReader io.Reader
-	if jsonData != nil {
-		bodyReader = bytes.NewBuffer(jsonData)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	if jsonData != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-	return nil
-}
-
+// CreateDeploymentSchedules adds schedules to a deployment
 func (c *Client) CreateDeploymentSchedules(ctx context.Context, deploymentID string, schedules []DeploymentSchedule) error {
-	url := fmt.Sprintf("%s/deployments/%s/schedules", c.BaseURL, deploymentID)
-	jsonData, err := json.Marshal(schedules)
-	if err != nil {
-		return fmt.Errorf("failed to marshal schedules: %w", err)
-	}
-	return c.scheduleSubResource(ctx, "POST", url, jsonData)
+	return c.do(ctx, http.MethodPost, c.endpoint("/deployments/%s/schedules", deploymentID), schedules, nil)
 }
 
+// UpdateDeploymentSchedule updates one of a deployment's schedules
 func (c *Client) UpdateDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string, update DeploymentScheduleUpdate) error {
-	url := fmt.Sprintf("%s/deployments/%s/schedules/%s", c.BaseURL, deploymentID, scheduleID)
-	jsonData, err := json.Marshal(update)
-	if err != nil {
-		return fmt.Errorf("failed to marshal schedule update: %w", err)
-	}
-	return c.scheduleSubResource(ctx, "PATCH", url, jsonData)
+	return c.do(ctx, http.MethodPatch, c.endpoint("/deployments/%s/schedules/%s", deploymentID, scheduleID), update, nil)
 }
 
+// DeleteDeploymentSchedule deletes one of a deployment's schedules
 func (c *Client) DeleteDeploymentSchedule(ctx context.Context, deploymentID, scheduleID string) error {
-	url := fmt.Sprintf("%s/deployments/%s/schedules/%s", c.BaseURL, deploymentID, scheduleID)
-	return c.scheduleSubResource(ctx, "DELETE", url, nil)
+	return c.do(ctx, http.MethodDelete, c.endpoint("/deployments/%s/schedules/%s", deploymentID, scheduleID), nil, nil)
 }
 
 // CreateOrGetFlow creates a new flow or returns an existing one with the same name
 func (c *Client) CreateOrGetFlow(ctx context.Context, flow *FlowSpec) (*Flow, error) {
-	// Check if flow already exists
 	existingFlow, err := c.GetFlowByName(ctx, flow.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for existing flow: %w", err)
 	}
 	if existingFlow != nil {
-		c.log.V(1).Info("Flow already exists, returning existing flow", "flowName", flow.Name, "flowId", existingFlow.ID)
 		return existingFlow, nil
 	}
 
-	// If flow doesn't exist, create it
-	url := fmt.Sprintf("%s/flows/", c.BaseURL)
-	c.log.V(1).Info("Creating new flow", "url", url, "flowName", flow.Name)
-
-	jsonData, err := json.Marshal(flow)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal flow spec: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.Error(err, "failed to close response body")
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result Flow
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.do(ctx, http.MethodPost, c.endpoint("/flows/"), flow, &result); err != nil {
+		return nil, err
 	}
-
-	c.log.V(1).Info("Flow created successfully", "flowName", flow.Name, "flowId", result.ID)
 	return &result, nil
 }
 
-// GetFlowByName retrieves a flow by name
+// GetFlowByName retrieves a flow by name. It returns (nil, nil) when the flow
+// does not exist.
 func (c *Client) GetFlowByName(ctx context.Context, name string) (*Flow, error) {
-	url := fmt.Sprintf("%s/flows/name/%s", c.BaseURL, name)
-	c.log.V(1).Info("Getting flow by name", "url", url, "flowName", name)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.Error(err, "failed to close response body")
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil // Flow doesn't exist
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result Flow
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	c.log.V(1).Info("Flow retrieved successfully", "flowName", name, "flowId", result.ID)
-	return &result, nil
-}
-
-// GetWorkPool retrieves a deployment by ID
-func (c *Client) GetWorkPool(ctx context.Context, name string) (*WorkPool, error) {
-	url := fmt.Sprintf("%s/work_pools/%s", c.BaseURL, name)
-	c.log.V(1).Info("Getting work pool", "url", url, "name", name)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
+	err := c.do(ctx, http.MethodGet, c.endpoint("/flows/name/%s", name), nil, &result)
+	if isNotFound(err) {
 		return nil, nil
 	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	if err != nil {
+		return nil, err
 	}
-
-	var result WorkPool
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	c.log.V(1).Info("Work pool retrieved successfully", "workPool", result.ID)
 	return &result, nil
 }
 
-func (c *Client) CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*WorkPool, error) {
-	url := fmt.Sprintf("%s/work_pools/", c.BaseURL)
-	c.log.V(1).Info("Creating or updating work pool", "url", url, "workPool", workPool.Name)
-
-	jsonData, err := json.Marshal(workPool)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal work pool: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
+// GetWorkPool retrieves a work pool by name. It returns (nil, nil) when the
+// pool does not exist.
+func (c *Client) GetWorkPool(ctx context.Context, name string) (*WorkPool, error) {
 	var result WorkPool
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	err := c.do(ctx, http.MethodGet, c.endpoint("/work_pools/%s", name), nil, &result)
+	if isNotFound(err) {
+		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
 
-	c.log.V(1).Info("Work pool created successfully", "workPoolID", result.ID)
+// CreateWorkPool creates a work pool
+func (c *Client) CreateWorkPool(ctx context.Context, workPool *WorkPoolSpec) (*WorkPool, error) {
+	var result WorkPool
+	if err := c.do(ctx, http.MethodPost, c.endpoint("/work_pools/"), workPool, &result); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
 // UpdateWorkPool updates an existing work pool
 func (c *Client) UpdateWorkPool(ctx context.Context, name string, workPool *WorkPoolSpec) error {
-	url := fmt.Sprintf("%s/work_pools/%s", c.BaseURL, name)
-	c.log.V(1).Info("Updating work pool", "url", url, "name", name)
-
-	jsonData, err := json.Marshal(workPool)
-	if err != nil {
-		return fmt.Errorf("failed to marshal work pool updates: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.Error(err, "failed to close response body")
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	c.log.V(1).Info("Work pool updated successfully", "name", workPool.Name)
-	return nil
+	return c.do(ctx, http.MethodPatch, c.endpoint("/work_pools/%s", name), workPool, nil)
 }
 
-// DeleteWorkPool deletes a work pool by ID
+// DeleteWorkPool deletes a work pool by name
 func (c *Client) DeleteWorkPool(ctx context.Context, name string) error {
-	url := fmt.Sprintf("%s/work_pools/%s", c.BaseURL, name)
-	c.log.V(1).Info("Deleting work pool", "url", url, "workPoolName", name)
-
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	c.log.V(1).Info("Work pool deleted successfully", "workPoolName", name)
-	return nil
+	return c.do(ctx, http.MethodDelete, c.endpoint("/work_pools/%s", name), nil, nil)
 }
 
 // isRunningInCluster checks if the operator is running in-cluster
@@ -878,49 +496,19 @@ type WorkerMetadata struct {
 
 // GetWorkerMetadata retrieves aggregate metadata for all worker types
 func (c *Client) GetWorkerMetadata(ctx context.Context) (map[string]WorkerMetadata, error) {
-	url := fmt.Sprintf("%s/collections/views/aggregate-worker-metadata", c.BaseURL)
-	c.log.V(1).Info("Getting aggregate worker metadata", "url", url)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
+	var result map[string]map[string]WorkerMetadata
+	err := c.do(ctx, http.MethodGet, c.endpoint("/collections/views/aggregate-worker-metadata"), nil, &result)
+	if isNotFound(err) {
 		return nil, nil
 	}
-
-	if !isSuccessStatusCode(resp.StatusCode) {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	if err != nil {
+		return nil, err
 	}
 
-	var result map[string]map[string]WorkerMetadata
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	c.log.V(1).Info("Worker metadata retrieved successfully")
-
+	// The response is keyed by collection, then by worker type.
 	metadata := map[string]WorkerMetadata{}
-
 	for _, integration := range result {
 		maps.Copy(metadata, integration)
 	}
-
 	return metadata, nil
 }
