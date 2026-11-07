@@ -46,6 +46,12 @@ type PrefectServerReconciler struct {
 // sets. The operator keeps it, so that it doesn't undo a restart.
 const restartedAtAnnotation = "kubectl.kubernetes.io/restartedAt"
 
+// The paths of the PrefectServer's pod templates, as reported in errors.
+const (
+	deploymentTemplateField   = "spec.deploymentTemplate"
+	migrationJobTemplateField = "spec.migrationJobTemplate"
+)
+
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/finalizers,verbs=update
@@ -89,7 +95,11 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	desiredDeployment, desiredPVC, desiredMigrationJob, err := r.prefectServerDeployment(server)
 	if invalid := (*podtemplate.InvalidTemplateError)(nil); errs.As(err, &invalid) {
-		meta.SetStatusCondition(&server.Status.Conditions, conditions.InvalidPodTemplate(constants.Deployment, err))
+		object := constants.Deployment
+		if invalid.Field == migrationJobTemplateField {
+			object = constants.MigrationJob
+		}
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.InvalidPodTemplate(object, err))
 		r.Recorder.Eventf(server, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
 		return ctrl.Result{}, err
 	}
@@ -374,7 +384,10 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 		pvc = r.sqlitePersistentVolumeClaim(server)
 		deploymentSpec = r.sqliteDeploymentSpec(server, pvc)
 	} else if server.Spec.Postgres != nil {
-		migrationJob = r.postgresMigrationJob(server)
+		var err error
+		if migrationJob, err = r.postgresMigrationJob(server); err != nil {
+			return appsv1.Deployment{}, nil, nil, err
+		}
 		deploymentSpec = r.postgresDeploymentSpec(server)
 		deploymentSpec.Replicas = server.Replicas()
 	} else {
@@ -392,7 +405,7 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 		deploymentSpec.Template.Spec.Containers = append(deploymentSpec.Template.Spec.Containers, server.Spec.ExtraContainers...)
 	}
 
-	template, err := podtemplate.Apply(deploymentSpec.Template, server.Spec.DeploymentTemplate, "spec.deploymentTemplate", serverProtected(server, server.ServerLabels()))
+	template, err := podtemplate.Apply(deploymentSpec.Template, server.Spec.DeploymentTemplate, deploymentTemplateField, serverProtected(server, server.ServerLabels()))
 	if err != nil {
 		return appsv1.Deployment{}, nil, nil, err
 	}
@@ -658,7 +671,7 @@ func migrationJobAffinity(server *prefectiov1.PrefectServer) *corev1.Affinity {
 	return &corev1.Affinity{NodeAffinity: server.Spec.Affinity.NodeAffinity}
 }
 
-func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) *batchv1.Job {
+func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) (*batchv1.Job, error) {
 	jobSpec := batchv1.JobSpec{
 		TTLSecondsAfterFinished: new(int32(60 * 60)), // 1 hour
 		Template: corev1.PodTemplateSpec{
@@ -685,6 +698,12 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 		},
 	}
 
+	template, err := podtemplate.Apply(jobSpec.Template, server.Spec.MigrationJobTemplate, migrationJobTemplateField, serverProtected(server, server.MigrationJobLabels()))
+	if err != nil {
+		return nil, err
+	}
+	jobSpec.Template = template
+
 	// Generate hash based on the job spec
 	hashSuffix, _ := utils.Hash(jobSpec, 8) // Use the first 8 characters of the hash
 	return &batchv1.Job{
@@ -694,7 +713,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 			Labels:    server.MigrationJobLabels(),
 		},
 		Spec: jobSpec,
-	}
+	}, nil
 }
 
 func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.PrefectServer) (corev1.Service, error) {

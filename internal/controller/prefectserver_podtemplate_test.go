@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
@@ -113,6 +115,70 @@ var _ = Describe("PrefectServer pod templates", func() {
 		Expect(k8sClient.Update(ctx, server)).To(Succeed())
 		return reconcileServer()
 	}
+
+	migrationJobs := func() []batchv1.Job {
+		GinkgoHelper()
+		jobs := &batchv1.JobList{}
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(name.Namespace))).To(Succeed())
+		return jobs.Items
+	}
+
+	Describe("the migration Job", func() {
+		It("gets migrationJobTemplate and not deploymentTemplate", func() {
+			spec := *postgres.DeepCopy()
+			spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
+			createServer(spec)
+
+			jobs := migrationJobs()
+			Expect(jobs).To(HaveLen(1))
+			Expect(jobs[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(new(int64(1001))))
+			Expect(getDeployment().Spec.Template.Spec.SecurityContext.RunAsUser).To(BeNil())
+		})
+
+		It("doesn't get deploymentTemplate", func() {
+			spec := *postgres.DeepCopy()
+			spec.DeploymentTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
+			createServer(spec)
+
+			jobs := migrationJobs()
+			Expect(jobs).To(HaveLen(1))
+			Expect(jobs[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(BeNil())
+		})
+
+		It("starts a new migration Job when the template changes", func() {
+			createServer(*postgres.DeepCopy())
+			Expect(migrationJobs()).To(HaveLen(1))
+			first := migrationJobs()[0].Name
+
+			server := getServer()
+			server.Spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
+			Expect(k8sClient.Update(ctx, server)).To(Succeed())
+			Expect(reconcileServer()).To(Succeed())
+
+			jobs := migrationJobs()
+			names := make([]string, 0, len(jobs))
+			for _, job := range jobs {
+				names = append(names, job.Name)
+			}
+			Expect(names).To(HaveLen(2))
+			Expect(names).To(ContainElement(first))
+		})
+
+		It("reports an invalid migrationJobTemplate", func() {
+			createServer(*postgres.DeepCopy())
+
+			server := getServer()
+			server.Spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securtyContext":{}}}`)
+			Expect(k8sClient.Update(ctx, server)).To(Succeed())
+			Expect(reconcileServer()).To(MatchError(ContainSubstring("spec.migrationJobTemplate")))
+
+			cond := meta.FindStatusCondition(getServer().Status.Conditions, "MigrationJobReconciled")
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal("InvalidPodTemplate"))
+			Expect(recorder.Events).To(Receive(Equal("Warning InvalidPodTemplate " + cond.Message)))
+		})
+	})
 
 	DescribeTable("applies the template to the server pod",
 		func(spec prefectiov1.PrefectServerSpec) {
