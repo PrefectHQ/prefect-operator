@@ -5,6 +5,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -60,6 +61,18 @@ type PrefectWorkPoolSpec struct {
 
 	// Base job template for flow runs in the Work Pool
 	BaseJobTemplate *RawValueSource `json:"baseJobTemplate,omitempty"`
+
+	// DeploymentTemplate is a partial PodTemplateSpec applied to the worker pods
+	// as a Kubernetes strategic merge patch. It is applied after the other
+	// fields, so it wins over them. Containers are matched by name; the stable
+	// name of the worker container is "prefect-worker". The operator puts back
+	// any override of the fields it depends on: the selector labels, the
+	// "prefect-data" volume and its mounts, and the environment variables it
+	// derives from the other fields (settings are not among them).
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	DeploymentTemplate *runtime.RawExtension `json:"deploymentTemplate,omitempty"`
 }
 
 // PrefectWorkPoolStatus defines the observed state of PrefectWorkPool
@@ -200,6 +213,12 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 	}
 
 	return envVars
+}
+
+// DerivedEnvVarNames returns the names of the environment variables the
+// operator sets on the worker, leaving out its settings.
+func (s *PrefectWorkPool) DerivedEnvVarNames() []string {
+	return envVarNames(s.ToEnvVars())
 }
 
 func (s *PrefectWorkPool) HealthProbe() corev1.ProbeHandler {

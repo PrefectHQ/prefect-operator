@@ -697,3 +697,34 @@ var _ = Describe("PrefectServer.Replicas", func() {
 		Expect(*s.Replicas()).To(Equal(int32(3)))
 	})
 })
+
+var _ = Describe("PrefectServer.DerivedEnvVarNames", func() {
+	It("names the variables derived from the backend and Redis, not the settings", func() {
+		s := &PrefectServer{Spec: PrefectServerSpec{
+			Postgres: &PostgresConfiguration{
+				Host:     new("postgres.example.com"),
+				Port:     new(5432),
+				User:     new("prefect"),
+				Password: new("secret123"),
+				Database: new("prefect"),
+			},
+			Redis:    &RedisConfiguration{Host: new("redis.example.com")},
+			Settings: []corev1.EnvVar{{Name: "EXTRA", Value: "1"}},
+		}}
+
+		names := s.DerivedEnvVarNames()
+		Expect(names).To(ContainElements(EnvPrefectHome, EnvPrefectAPIDatabaseDriver, EnvPrefectRedisMessagingHost))
+		Expect(names).NotTo(ContainElement("EXTRA"))
+	})
+
+	It("names the ephemeral backend's variables", func() {
+		s := &PrefectServer{Spec: PrefectServerSpec{Ephemeral: &EphemeralConfiguration{}}}
+
+		Expect(s.DerivedEnvVarNames()).To(Equal([]string{
+			EnvPrefectHome,
+			EnvPrefectAPIDatabaseDriver,
+			EnvPrefectAPIDatabaseName,
+			EnvPrefectAPIDatabaseMigrateOnStart,
+		}))
+	})
+})

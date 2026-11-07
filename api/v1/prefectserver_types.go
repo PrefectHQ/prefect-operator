@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -80,6 +81,32 @@ type PrefectServerSpec struct {
 	// Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
 	// nodes with matching taints.
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// DeploymentTemplate is a partial PodTemplateSpec applied to the pods of the
+	// Prefect Server Deployment as a Kubernetes strategic merge patch. It is
+	// applied after the other fields, so it wins over them. Containers are
+	// matched by name; the stable names are "prefect-server" and, with the
+	// PostgreSQL backend, the init container "wait-for-database".
+	// The operator puts back any override of the fields it depends on: the
+	// selector labels, the "api" port, the "prefect-data" volume and its mounts,
+	// and the environment variables it derives from the other fields.
+	// It doesn't affect the migration Job; see MigrationJobTemplate.
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	DeploymentTemplate *runtime.RawExtension `json:"deploymentTemplate,omitempty"`
+
+	// MigrationJobTemplate is a partial PodTemplateSpec applied to the pods of
+	// the PostgreSQL migration Job as a Kubernetes strategic merge patch. It is
+	// applied after the other fields, so it wins over them. Containers are
+	// matched by name; the stable names are "prefect-server-migration" and the
+	// init container "wait-for-database". The operator puts back any override
+	// of the Job's labels and the environment variables it derives from the
+	// other fields. Changing it starts a new migration Job.
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	MigrationJobTemplate *runtime.RawExtension `json:"migrationJobTemplate,omitempty"`
 }
 
 // Replicas returns the desired server Deployment replica count, defaulting to 1.
@@ -435,6 +462,16 @@ func (s *PrefectServer) EntrypointArguments() []string {
 }
 
 func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
+	return append(s.derivedEnvVars(), s.Spec.Settings...)
+}
+
+// DerivedEnvVarNames returns the names of the environment variables the
+// operator derives from the server's spec, leaving out its settings.
+func (s *PrefectServer) DerivedEnvVarNames() []string {
+	return envVarNames(s.derivedEnvVars())
+}
+
+func (s *PrefectServer) derivedEnvVars() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{
 			Name:  EnvPrefectHome,
@@ -454,9 +491,15 @@ func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
 		envVars = append(envVars, s.Spec.Redis.ToEnvVars()...)
 	}
 
-	envVars = append(envVars, s.Spec.Settings...)
-
 	return envVars
+}
+
+func envVarNames(envVars []corev1.EnvVar) []string {
+	names := make([]string, 0, len(envVars))
+	for _, envVar := range envVars {
+		names = append(names, envVar.Name)
+	}
+	return names
 }
 
 func (s *PrefectServer) HealthProbe() corev1.ProbeHandler {

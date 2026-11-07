@@ -101,6 +101,21 @@ Only node affinity is applied to the migration Job.<br/>
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>deploymentTemplate</b></td>
+        <td>object</td>
+        <td>
+          DeploymentTemplate is a partial PodTemplateSpec applied to the pods of the
+Prefect Server Deployment as a Kubernetes strategic merge patch. It is
+applied after the other fields, so it wins over them. Containers are
+matched by name; the stable names are "prefect-server" and, with the
+PostgreSQL backend, the init container "wait-for-database".
+The operator puts back any override of the fields it depends on: the
+selector labels, the "api" port, the "prefect-data" volume and its mounts,
+and the environment variables it derives from the other fields.
+It doesn't affect the migration Job; see MigrationJobTemplate.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>ephemeral</b></td>
         <td>object</td>
         <td>
@@ -150,6 +165,19 @@ Note: Prefect does not accept "::" as a valid host value.<br/>
         <td>map[string]string</td>
         <td>
           MigrationJobLabels defines additional labels to add to the migration Job<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>migrationJobTemplate</b></td>
+        <td>object</td>
+        <td>
+          MigrationJobTemplate is a partial PodTemplateSpec applied to the pods of
+the PostgreSQL migration Job as a Kubernetes strategic merge patch. It is
+applied after the other fields, so it wins over them. Containers are
+matched by name; the stable names are "prefect-server-migration" and the
+init container "wait-for-database". The operator puts back any override
+of the Job's labels and the environment variables it derives from the
+other fields. Changing it starts a new migration Job.<br/>
         </td>
         <td>false</td>
       </tr><tr>

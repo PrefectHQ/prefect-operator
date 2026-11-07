@@ -105,6 +105,19 @@ PrefectWorkPoolSpec defines the desired state of PrefectWorkPool
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b>deploymentTemplate</b></td>
+        <td>object</td>
+        <td>
+          DeploymentTemplate is a partial PodTemplateSpec applied to the worker pods
+as a Kubernetes strategic merge patch. It is applied after the other
+fields, so it wins over them. Containers are matched by name; the stable
+name of the worker container is "prefect-worker". The operator puts back
+any override of the fields it depends on: the selector labels, the
+"prefect-data" volume and its mounts, and the environment variables it
+derives from the other fields (settings are not among them).<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b><a href="#prefectworkpoolspecextracontainersindex">extraContainers</a></b></td>
         <td>[]object</td>
         <td>
