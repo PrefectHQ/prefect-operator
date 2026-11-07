@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -25,6 +27,7 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
+	"github.com/PrefectHQ/prefect-operator/internal/podtemplate"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
 )
 
@@ -143,6 +146,13 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	objName := constants.Deployment
 
+	podTemplate, err := workerPodTemplate(&workPool)
+	if err != nil {
+		meta.SetStatusCondition(&workPool.Status.Conditions, conditions.InvalidPodTemplate(objName, err))
+		r.Recorder.Eventf(&workPool, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
+		return ctrl.Result{}, err
+	}
+
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: workPool.Namespace,
@@ -164,51 +174,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Selector: &metav1.LabelSelector{
 				MatchLabels: workPool.WorkerLabels(),
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: workPool.WorkerLabels(),
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: workPool.ServiceAccount(),
-					Affinity:           workPool.Spec.Affinity,
-					Tolerations:        workPool.Spec.Tolerations,
-					NodeSelector:       workPool.Spec.NodeSelector,
-					Volumes: []corev1.Volume{
-						{
-							Name: constants.PrefectDataVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-					},
-					Containers: append([]corev1.Container{
-						{
-							Name: "prefect-worker",
-
-							Image:           workPool.Image(),
-							ImagePullPolicy: corev1.PullIfNotPresent,
-
-							Args: workPool.EntrypointArguments(),
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      constants.PrefectDataVolumeName,
-									MountPath: constants.PrefectHomeMountPath,
-								},
-							},
-							Env: append(workPool.ToEnvVars(), workPool.Spec.Settings...),
-
-							Resources: workPool.Spec.Resources,
-
-							StartupProbe:   workPool.StartupProbe(),
-							ReadinessProbe: workPool.ReadinessProbe(),
-							LivenessProbe:  workPool.LivenessProbe(),
-
-							TerminationMessagePath:   constants.TerminationMessagePath,
-							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-						},
-					}, workPool.Spec.ExtraContainers...),
-				},
-			},
+			Template: podTemplate,
 		}
 
 		return nil
@@ -228,7 +194,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if result == controllerutil.OperationResultUpdated {
-		imageVersion := prefectiov1.VersionFromImage(deploy.Spec.Template.Spec.Containers[0].Image)
+		imageVersion := prefectiov1.VersionFromImage(podtemplate.FindContainer(&podTemplate.Spec, prefectiov1.ContainerNameWorker).Image)
 		readyWorkers := deploy.Status.ReadyReplicas
 		ready := readyWorkers > 0
 
@@ -246,6 +212,67 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Requeue on the resync interval so out-of-band drift in Prefect is corrected
 	// even without an incoming watch event.
 	return ctrl.Result{RequeueAfter: utils.NextResyncDelay(workPool.Status.LastSyncTime, r.resyncInterval(&workPool))}, nil
+}
+
+// workerPodTemplate builds the pod template of the worker Deployment and
+// applies the work pool's deploymentTemplate to it.
+func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplateSpec, error) {
+	base := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: workPool.WorkerLabels(),
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: workPool.ServiceAccount(),
+			Affinity:           workPool.Spec.Affinity,
+			Tolerations:        workPool.Spec.Tolerations,
+			NodeSelector:       workPool.Spec.NodeSelector,
+			Volumes: []corev1.Volume{
+				{
+					Name: constants.PrefectDataVolumeName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			Containers: append([]corev1.Container{
+				{
+					Name: prefectiov1.ContainerNameWorker,
+
+					Image:           workPool.Image(),
+					ImagePullPolicy: corev1.PullIfNotPresent,
+
+					Args: workPool.EntrypointArguments(),
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      constants.PrefectDataVolumeName,
+							MountPath: constants.PrefectHomeMountPath,
+						},
+					},
+					Env: append(workPool.ToEnvVars(), workPool.Spec.Settings...),
+
+					Resources: workPool.Spec.Resources,
+
+					StartupProbe:   workPool.StartupProbe(),
+					ReadinessProbe: workPool.ReadinessProbe(),
+					LivenessProbe:  workPool.LivenessProbe(),
+
+					TerminationMessagePath:   constants.TerminationMessagePath,
+					TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+				},
+			}, workPool.Spec.ExtraContainers...),
+		},
+	}
+
+	return podtemplate.Apply(base, workPool.Spec.DeploymentTemplate, "spec.deploymentTemplate", podtemplate.Protected{
+		Labels:  slices.Collect(maps.Keys(workPool.WorkerLabels())),
+		Volumes: []string{constants.PrefectDataVolumeName},
+		Containers: map[string]podtemplate.ProtectedContainer{
+			prefectiov1.ContainerNameWorker: {
+				VolumeMounts: []string{constants.PrefectDataVolumeName},
+				Env:          workPool.DerivedEnvVarNames(),
+			},
+		},
+	})
 }
 
 func (r *PrefectWorkPoolReconciler) needsSync(workPool *prefectiov1.PrefectWorkPool, currentSpecHash string, baseJobTemplateConfigMap *corev1.ConfigMap) bool {
