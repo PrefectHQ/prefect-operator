@@ -83,8 +83,9 @@ type PrefectServerSpec struct {
 	// nodes with matching taints.
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
-	// DeploymentTemplate is a partial PodTemplateSpec applied to the pods of the
-	// Prefect Server Deployment as a Kubernetes strategic merge patch. It is
+	// DeploymentTemplate is a partial pod template, with metadata and spec like a
+	// Deployment's spec.template, applied to the pod template of the Prefect
+	// Server Deployment as a Kubernetes strategic merge patch. It is
 	// applied after the other fields, so it wins over them. Containers are
 	// matched by name; the stable names are "prefect-server" and, with the
 	// PostgreSQL backend, the init container "wait-for-database".
@@ -97,8 +98,9 @@ type PrefectServerSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	DeploymentTemplate *runtime.RawExtension `json:"deploymentTemplate,omitempty"`
 
-	// MigrationJobTemplate is a partial PodTemplateSpec applied to the pods of
-	// the PostgreSQL migration Job as a Kubernetes strategic merge patch. It is
+	// MigrationJobTemplate is a partial pod template, with metadata and spec like
+	// a Job's spec.template, applied to the pod template of the PostgreSQL
+	// migration Job as a Kubernetes strategic merge patch. It is
 	// applied after the other fields, so it wins over them. Containers are
 	// matched by name; the stable names are "prefect-server-migration" and the
 	// init container "wait-for-database". The operator puts back any override

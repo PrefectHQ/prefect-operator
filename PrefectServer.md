@@ -104,8 +104,9 @@ Only node affinity is applied to the migration Job.<br/>
         <td><b>deploymentTemplate</b></td>
         <td>object</td>
         <td>
-          DeploymentTemplate is a partial PodTemplateSpec applied to the pods of the
-Prefect Server Deployment as a Kubernetes strategic merge patch. It is
+          DeploymentTemplate is a partial pod template, with metadata and spec like a
+Deployment's spec.template, applied to the pod template of the Prefect
+Server Deployment as a Kubernetes strategic merge patch. It is
 applied after the other fields, so it wins over them. Containers are
 matched by name; the stable names are "prefect-server" and, with the
 PostgreSQL backend, the init container "wait-for-database".
@@ -171,8 +172,9 @@ Note: Prefect does not accept "::" as a valid host value.<br/>
         <td><b>migrationJobTemplate</b></td>
         <td>object</td>
         <td>
-          MigrationJobTemplate is a partial PodTemplateSpec applied to the pods of
-the PostgreSQL migration Job as a Kubernetes strategic merge patch. It is
+          MigrationJobTemplate is a partial pod template, with metadata and spec like
+a Job's spec.template, applied to the pod template of the PostgreSQL
+migration Job as a Kubernetes strategic merge patch. It is
 applied after the other fields, so it wins over them. Containers are
 matched by name; the stable names are "prefect-server-migration" and the
 init container "wait-for-database". The operator puts back any override

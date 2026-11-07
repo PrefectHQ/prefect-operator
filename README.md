@@ -37,7 +37,8 @@ the operator builds with a pod template:
 | `PrefectServer`   | `migrationJobTemplate` | the PostgreSQL migration Job | `prefect-server-migration`, `wait-for-database` (init) |
 | `PrefectWorkPool` | `deploymentTemplate`   | the worker Deployment        | `prefect-worker`                               |
 
-A template is a partial `PodTemplateSpec` (`metadata` and `spec`), applied as a
+A template is a partial pod template, with `metadata` and `spec` like a
+Deployment's `spec.template`, applied as a
 [strategic merge patch](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#use-a-strategic-merge-patch-to-update-a-deployment).
 Lists of containers are matched by name, so you can change one setting of a
 container without restating the rest of it. The container names above are
