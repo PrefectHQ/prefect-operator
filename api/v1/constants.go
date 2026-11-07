@@ -44,4 +44,10 @@ const (
 	MigrateOnStartTrue     = "True"
 	LabelPrefectIOServer   = "prefect.io/server"
 	AppLabelPrefectServer  = "prefect-server"
+
+	// Container names. They are stable, because pod templates match containers by name.
+	ContainerNamePrefectServer   = AppLabelPrefectServer
+	ContainerNameWaitForDatabase = "wait-for-database"
+	ContainerNameMigration       = "prefect-server-migration"
+	ContainerNameWorker          = "prefect-worker"
 )

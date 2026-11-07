@@ -116,8 +116,9 @@ func main() {
 	recorder := mgr.GetEventRecorder("prefect-operator")
 
 	if err = (&controller.PrefectServerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: recorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PrefectServer")
 		os.Exit(1)

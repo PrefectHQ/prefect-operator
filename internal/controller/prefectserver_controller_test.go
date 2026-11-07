@@ -54,7 +54,8 @@ var _ = Describe("PrefectServer controller", func() {
 
 		It("uses the default image", func() {
 			deployment := controllerReconciler.postgresDeploymentSpec(server)
-			migrationJob := controllerReconciler.postgresMigrationJob(server)
+			migrationJob, err := controllerReconciler.postgresMigrationJob(server)
+			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deployment.Template.Spec.InitContainers).To(HaveLen(1))
 			Expect(deployment.Template.Spec.InitContainers[0].Image).To(Equal("postgres:16-alpine"))
@@ -66,7 +67,8 @@ var _ = Describe("PrefectServer controller", func() {
 			server.Spec.Postgres.WaitForDatabaseImage = "registry.example.com/postgres:16-alpine"
 
 			deployment := controllerReconciler.postgresDeploymentSpec(server)
-			migrationJob := controllerReconciler.postgresMigrationJob(server)
+			migrationJob, err := controllerReconciler.postgresMigrationJob(server)
+			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deployment.Template.Spec.InitContainers).To(HaveLen(1))
 			Expect(deployment.Template.Spec.InitContainers[0].Image).To(Equal("registry.example.com/postgres:16-alpine"))
@@ -2168,9 +2170,11 @@ var (
 func setMigrationJobStatus(ctx context.Context, server *prefectiov1.PrefectServer, status batchv1.JobStatus) *batchv1.Job {
 	GinkgoHelper()
 	job := &batchv1.Job{}
+	desired, err := (&PrefectServerReconciler{}).postgresMigrationJob(server)
+	Expect(err).NotTo(HaveOccurred())
 	key := types.NamespacedName{
 		Namespace: server.Namespace,
-		Name:      (&PrefectServerReconciler{}).postgresMigrationJob(server).Name,
+		Name:      desired.Name,
 	}
 	Expect(k8sClient.Get(ctx, key, job)).To(Succeed())
 	job.Status = *status.DeepCopy()

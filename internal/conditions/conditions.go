@@ -77,6 +77,16 @@ func Failed(object string, message string) metav1.Condition {
 	}
 }
 
+// InvalidPodTemplate reports that a user's pod template for object couldn't be applied.
+func InvalidPodTemplate(object string, err error) metav1.Condition {
+	return metav1.Condition{
+		Type:    fmt.Sprintf("%sReconciled", object),
+		Reason:  "InvalidPodTemplate",
+		Message: err.Error(),
+		Status:  metav1.ConditionFalse,
+	}
+}
+
 func Updated(object string) metav1.Condition {
 	return metav1.Condition{
 		Type:    fmt.Sprintf("%sReconciled", object),
