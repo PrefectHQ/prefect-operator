@@ -25,6 +25,72 @@ The [PrefectDeployment CRD](./PrefectDeployment.md)
 
 The [PrefectAutomation CRD](./PrefectAutomation.md)
 
+## Pod template overrides
+
+Most pod settings, such as resources, node selectors, tolerations and extra
+containers, have their own fields. For anything else, you can patch the pods
+the operator builds with a pod template:
+
+| Resource          | Field                  | Pods                         | Container names                                |
+|-------------------|------------------------|------------------------------|------------------------------------------------|
+| `PrefectServer`   | `deploymentTemplate`   | the server Deployment        | `prefect-server`, `wait-for-database` (init)   |
+| `PrefectServer`   | `migrationJobTemplate` | the PostgreSQL migration Job | `prefect-server-migration`, `wait-for-database` (init) |
+| `PrefectWorkPool` | `deploymentTemplate`   | the worker Deployment        | `prefect-worker`                               |
+
+A template is a partial `PodTemplateSpec` (`metadata` and `spec`), applied as a
+[strategic merge patch](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#use-a-strategic-merge-patch-to-update-a-deployment).
+Lists of containers are matched by name, so you can change one setting of a
+container without restating the rest of it. The container names above are
+stable. Patch directives such as `$patch: delete` work too.
+
+The operator applies the other fields first and the template last, so the
+template wins. The exception is the fields the operator depends on, which it
+puts back if a template overrides them:
+
+- the pod labels the Deployment selects on
+- the `api` port of the `prefect-server` container
+- the `prefect-data` volume and its mounts
+- the environment variables the operator derives from the resource, such as
+  the database settings and the worker's `PREFECT_API_URL`. Variables from
+  `settings` are not protected.
+
+For example, to run the server as a non-root user and give it more time before
+the first readiness check:
+
+```yaml
+apiVersion: prefect.io/v1
+kind: PrefectServer
+metadata:
+  name: prefect
+spec:
+  postgres:
+    # ...
+  deploymentTemplate:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: prefect-server
+          readinessProbe:
+            initialDelaySeconds: 30
+  migrationJobTemplate:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+```
+
+The migration Job's name comes from a hash of its spec, so changing
+`migrationJobTemplate` runs the migrations again. They are safe to run again.
+
+The template is stored as is, without a schema, so a misspelled field is only
+caught when the operator applies it. It then sets the resource's
+`DeploymentReconciled` (or `MigrationJobReconciled`) condition to `False` with
+the reason `InvalidPodTemplate`, emits a Warning event, and leaves the running
+pods as they are.
+
 ## Installing
 
 Install the operator with its Helm chart:
