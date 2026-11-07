@@ -165,6 +165,32 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 		Expect(getDeployment().Spec.Template.Spec.SecurityContext).To(SatisfyAny(BeNil(), Equal(&corev1.PodSecurityContext{})))
 	})
 
+	It("keeps pod template annotations other tools add", func() {
+		createWorkPool(nil)
+		deployment := getDeployment()
+		deployment.Spec.Template.Annotations = map[string]string{"kubectl.kubernetes.io/restartedAt": "2026-11-06T00:00:00Z"}
+		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+		generation := getDeployment().Generation
+
+		Expect(reconcileWorkPool()).To(Succeed())
+
+		deployment = getDeployment()
+		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("kubectl.kubernetes.io/restartedAt", "2026-11-06T00:00:00Z"))
+		Expect(deployment.Generation).To(Equal(generation))
+	})
+
+	It("removes an annotation deleted from the template, and only that one", func() {
+		createWorkPool(rawTemplate(`{"metadata":{"annotations":{"team":"data"}}}`))
+		deployment := getDeployment()
+		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("team", "data"))
+		deployment.Spec.Template.Annotations["other"] = "tool"
+		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+
+		Expect(setDeploymentTemplate(nil)).To(Succeed())
+
+		Expect(getDeployment().Spec.Template.Annotations).To(Equal(map[string]string{"other": "tool"}))
+	})
+
 	It("reports an invalid template", func() {
 		createWorkPool(nil)
 		resourceVersion := getDeployment().ResourceVersion

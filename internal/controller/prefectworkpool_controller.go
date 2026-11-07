@@ -166,6 +166,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return err
 		}
 
+		liveAnnotations := deploy.Spec.Template.Annotations
 		deploy.Spec = appsv1.DeploymentSpec{
 			Replicas: &workPool.Spec.Workers,
 			Strategy: appsv1.DeploymentStrategy{
@@ -174,8 +175,9 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Selector: &metav1.LabelSelector{
 				MatchLabels: workPool.WorkerLabels(),
 			},
-			Template: podTemplate,
+			Template: *podTemplate.DeepCopy(),
 		}
+		setPodTemplateAnnotations(deploy, liveAnnotations)
 
 		return nil
 	})

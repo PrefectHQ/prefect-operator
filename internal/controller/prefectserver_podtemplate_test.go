@@ -279,12 +279,40 @@ var _ = Describe("PrefectServer pod templates", func() {
 	It("keeps a kubectl rollout restart", func() {
 		createServer(*ephemeral.DeepCopy())
 		deployment := getDeployment()
-		deployment.Spec.Template.Annotations = map[string]string{restartedAtAnnotation: "2026-11-06T00:00:00Z"}
+		deployment.Spec.Template.Annotations = map[string]string{"kubectl.kubernetes.io/restartedAt": "2026-11-06T00:00:00Z"}
 		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
 
 		Expect(reconcileServer()).To(Succeed())
 
-		Expect(getDeployment().Spec.Template.Annotations).To(HaveKeyWithValue(restartedAtAnnotation, "2026-11-06T00:00:00Z"))
+		Expect(getDeployment().Spec.Template.Annotations).To(HaveKeyWithValue("kubectl.kubernetes.io/restartedAt", "2026-11-06T00:00:00Z"))
+	})
+
+	It("keeps pod template annotations other tools add", func() {
+		createServer(*ephemeral.DeepCopy())
+		deployment := getDeployment()
+		deployment.Spec.Template.Annotations = map[string]string{"reloader.stakater.com/last-reloaded-from": "config"}
+		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+		generation := getDeployment().Generation
+
+		Expect(reconcileServer()).To(Succeed())
+
+		deployment = getDeployment()
+		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("reloader.stakater.com/last-reloaded-from", "config"))
+		Expect(deployment.Generation).To(Equal(generation))
+	})
+
+	It("removes an annotation deleted from the template, and only that one", func() {
+		spec := *ephemeral.DeepCopy()
+		spec.DeploymentTemplate = rawTemplate(`{"metadata":{"annotations":{"team":"data"}}}`)
+		createServer(spec)
+		deployment := getDeployment()
+		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("team", "data"))
+		deployment.Spec.Template.Annotations["other"] = "tool"
+		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+
+		Expect(setDeploymentTemplate(nil)).To(Succeed())
+
+		Expect(getDeployment().Spec.Template.Annotations).To(Equal(map[string]string{"other": "tool"}))
 	})
 
 	It("reports an invalid template", func() {

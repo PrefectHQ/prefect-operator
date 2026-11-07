@@ -42,10 +42,6 @@ type PrefectServerReconciler struct {
 	Recorder events.EventRecorder
 }
 
-// restartedAtAnnotation is the pod template annotation `kubectl rollout restart`
-// sets. The operator keeps it, so that it doesn't undo a restart.
-const restartedAtAnnotation = "kubectl.kubernetes.io/restartedAt"
-
 // The paths of the PrefectServer's pod templates, as reported in errors.
 const (
 	deploymentTemplateField   = "spec.deploymentTemplate"
@@ -281,7 +277,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			return err
 		}
 
-		restartedAt, restarted := deploy.Spec.Template.Annotations[restartedAtAnnotation]
+		liveAnnotations := maps.Clone(deploy.Spec.Template.Annotations)
 
 		if err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride); err != nil {
 			return err
@@ -291,12 +287,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		// directly to ensure that anything removed from the server, or from its
 		// deploymentTemplate, is also removed here.
 		deploy.Spec.Template = *desiredDeployment.Spec.Template.DeepCopy()
-		if restarted {
-			if deploy.Spec.Template.Annotations == nil {
-				deploy.Spec.Template.Annotations = map[string]string{}
-			}
-			deploy.Spec.Template.Annotations[restartedAtAnnotation] = restartedAt
-		}
+		setPodTemplateAnnotations(deploy, liveAnnotations)
 
 		return nil
 	})

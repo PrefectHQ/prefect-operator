@@ -82,6 +82,12 @@ spec:
         runAsUser: 1001
 ```
 
+Pod template annotations that other tools add to a Deployment, such as the one
+`kubectl rollout restart` sets, are left alone. The operator records which
+annotations it set in the Deployment's `prefect.io/pod-template-annotations`
+annotation, so that it only removes those when they're deleted from the
+template.
+
 The migration Job's name comes from a hash of its spec, so changing
 `migrationJobTemplate` runs the migrations again. They are safe to run again.
 
