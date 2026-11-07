@@ -191,15 +191,37 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 		Expect(getDeployment().Spec.Template.Annotations).To(Equal(map[string]string{"other": "tool"}))
 	})
 
+	It("keeps pod template labels other tools add", func() {
+		createWorkPool(nil)
+		deployment := getDeployment()
+		deployment.Spec.Template.Labels["other"] = "tool"
+		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+		generation := getDeployment().Generation
+
+		Expect(reconcileWorkPool()).To(Succeed())
+
+		deployment = getDeployment()
+		Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("other", "tool"))
+		Expect(deployment.Generation).To(Equal(generation))
+	})
+
 	It("reports an invalid template", func() {
 		createWorkPool(nil)
 		resourceVersion := getDeployment().ResourceVersion
 
-		err := setDeploymentTemplate(rawTemplate(`{"spec":{"securtyContext":{}}}`))
-		Expect(err).To(MatchError(ContainSubstring("spec.deploymentTemplate")))
+		workPool := getWorkPool()
+		workPool.Spec.DeploymentTemplate = rawTemplate(`{"spec":{"securtyContext":{}}}`)
+		Expect(k8sClient.Update(ctx, workPool)).To(Succeed())
+
+		// A bad template isn't retried with error backoff, but the work pool
+		// keeps resyncing with Prefect on its usual interval.
+		result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 		cond := meta.FindStatusCondition(getWorkPool().Status.Conditions, "DeploymentReconciled")
 		Expect(cond).NotTo(BeNil())
+		Expect(cond.Message).To(ContainSubstring("spec.deploymentTemplate"))
 		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 		Expect(cond.Reason).To(Equal("InvalidPodTemplate"))
 		Expect(recorder.Events).To(Receive(Equal("Warning InvalidPodTemplate " + cond.Message)))

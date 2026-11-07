@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -171,7 +172,9 @@ var _ = Describe("PrefectServer pod templates", func() {
 			server := getServer()
 			server.Spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securtyContext":{}}}`)
 			Expect(k8sClient.Update(ctx, server)).To(Succeed())
-			Expect(reconcileServer()).To(MatchError(ContainSubstring("spec.migrationJobTemplate")))
+			err := reconcileServer()
+			Expect(err).To(MatchError(ContainSubstring("spec.migrationJobTemplate")))
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
 
 			cond := meta.FindStatusCondition(getServer().Status.Conditions, "MigrationJobReconciled")
 			Expect(cond).NotTo(BeNil())
@@ -269,11 +272,13 @@ var _ = Describe("PrefectServer pod templates", func() {
 		spec := *ephemeral.DeepCopy()
 		spec.DeploymentTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
 		createServer(spec)
-		generation := getDeployment().Generation
+		before := getDeployment()
 
 		Expect(reconcileServer()).To(Succeed())
 
-		Expect(getDeployment().Generation).To(Equal(generation))
+		after := getDeployment()
+		Expect(after.Generation).To(Equal(before.Generation))
+		Expect(after.ResourceVersion).To(Equal(before.ResourceVersion))
 	})
 
 	It("keeps a kubectl rollout restart", func() {
@@ -315,12 +320,31 @@ var _ = Describe("PrefectServer pod templates", func() {
 		Expect(getDeployment().Spec.Template.Annotations).To(Equal(map[string]string{"other": "tool"}))
 	})
 
+	It("keeps pod template labels other tools add, and removes only the ones it set", func() {
+		spec := *ephemeral.DeepCopy()
+		spec.DeploymentTemplate = rawTemplate(`{"metadata":{"labels":{"team":"data"}}}`)
+		server := createServer(spec)
+		deployment := getDeployment()
+		deployment.Spec.Template.Labels["other"] = "tool"
+		Expect(k8sClient.Update(ctx, deployment)).To(Succeed())
+
+		Expect(setDeploymentTemplate(nil)).To(Succeed())
+
+		labels := getDeployment().Spec.Template.Labels
+		Expect(labels).To(HaveKeyWithValue("other", "tool"))
+		Expect(labels).NotTo(HaveKey("team"))
+		for key, value := range server.ServerLabels() {
+			Expect(labels).To(HaveKeyWithValue(key, value))
+		}
+	})
+
 	It("reports an invalid template", func() {
 		createServer(*ephemeral.DeepCopy())
 		resourceVersion := getDeployment().ResourceVersion
 
 		err := setDeploymentTemplate(rawTemplate(`{"spec":{"securtyContext":{}}}`))
 		Expect(err).To(MatchError(ContainSubstring("spec.deploymentTemplate")))
+		Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue(), "a bad template shouldn't be retried until it changes")
 
 		cond := meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentReconciled")
 		Expect(cond).NotTo(BeNil())

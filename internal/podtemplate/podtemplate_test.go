@@ -172,6 +172,34 @@ var _ = Describe("Apply", func() {
 		Expect(server(result).Env).To(Equal(append(withSettings.Spec.Containers[0].Env, corev1.EnvVar{Name: "EXTRA", Value: "1"})))
 	})
 
+	It("lets the template override an env var that a setting duplicates", func() {
+		withSetting := base()
+		withSetting.Spec.Containers[0].Env = []corev1.EnvVar{
+			{Name: "A", Value: "derived"},
+			{Name: "B", Value: "b"},
+			{Name: "A", Value: "setting"},
+		}
+
+		result, err := Apply(withSetting, &runtime.RawExtension{
+			Raw: []byte(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"A","value":"tmpl"}]}]}}`),
+		}, field, Protected{})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(server(result).Env).To(Equal([]corev1.EnvVar{
+			{Name: "A", Value: "tmpl"},
+			{Name: "B", Value: "b"},
+			{Name: "A", Value: "tmpl"},
+		}))
+	})
+
+	It("rejects a template that adds a container with a name already in use", func() {
+		_, err := apply(`{"spec":{"initContainers":[{"name":"prefect-server","image":"busybox"}]}}`)
+
+		var invalid *InvalidTemplateError
+		Expect(errors.As(err, &invalid)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring(`"prefect-server"`))
+	})
+
 	It("puts back a deleted protected container", func() {
 		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","$patch":"delete"}]}}`)
 

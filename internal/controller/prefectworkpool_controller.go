@@ -150,7 +150,9 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err != nil {
 		meta.SetStatusCondition(&workPool.Status.Conditions, conditions.InvalidPodTemplate(objName, err))
 		r.Recorder.Eventf(&workPool, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
-		return ctrl.Result{}, err
+		// Retrying won't help until the user fixes the template, which triggers
+		// a new reconcile, but keep resyncing the work pool with Prefect.
+		return ctrl.Result{RequeueAfter: utils.NextResyncDelay(workPool.Status.LastSyncTime, r.resyncInterval(&workPool))}, nil
 	}
 
 	deploy := &appsv1.Deployment{
@@ -166,6 +168,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return err
 		}
 
+		liveLabels := deploy.Spec.Template.Labels
 		liveAnnotations := deploy.Spec.Template.Annotations
 		deploy.Spec = appsv1.DeploymentSpec{
 			Replicas: &workPool.Spec.Workers,
@@ -177,7 +180,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			},
 			Template: *podTemplate.DeepCopy(),
 		}
-		setPodTemplateAnnotations(deploy, liveAnnotations)
+		setPodTemplateMetadata(deploy, liveLabels, liveAnnotations)
 
 		return nil
 	})
@@ -265,7 +268,7 @@ func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplat
 		},
 	}
 
-	return podtemplate.Apply(base, workPool.Spec.DeploymentTemplate, "spec.deploymentTemplate", podtemplate.Protected{
+	return podtemplate.Apply(base, workPool.Spec.DeploymentTemplate, deploymentTemplateField, podtemplate.Protected{
 		Labels:  slices.Collect(maps.Keys(workPool.WorkerLabels())),
 		Volumes: []string{constants.PrefectDataVolumeName},
 		Containers: map[string]podtemplate.ProtectedContainer{

@@ -83,11 +83,11 @@ spec:
         runAsUser: 1001
 ```
 
-Pod template annotations that other tools add to a Deployment, such as the one
-`kubectl rollout restart` sets, are left alone. The operator records which
-annotations it set in the Deployment's `prefect.io/pod-template-annotations`
-annotation, so that it only removes those when they're deleted from the
-template.
+Pod template labels and annotations that other tools add to a Deployment, such
+as the annotation `kubectl rollout restart` sets, are left alone. The operator
+records which ones it set in the Deployment's `prefect.io/pod-template-labels`
+and `prefect.io/pod-template-annotations` annotations, so that it only removes
+those when they're deleted from the template.
 
 The migration Job's name comes from a hash of its spec, so changing
 `migrationJobTemplate` runs the migrations again. They are safe to run again.
@@ -96,7 +96,8 @@ The template is stored as is, without a schema, so a misspelled field is only
 caught when the operator applies it. It then sets the resource's
 `DeploymentReconciled` (or `MigrationJobReconciled`) condition to `False` with
 the reason `InvalidPodTemplate`, emits a Warning event, and leaves the running
-pods as they are.
+pods as they are. It tries again when the template changes. A template that
+adds a container with the name of an existing one is rejected the same way.
 
 ## Installing
 

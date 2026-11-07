@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
@@ -97,7 +98,9 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		meta.SetStatusCondition(&server.Status.Conditions, conditions.InvalidPodTemplate(object, err))
 		r.Recorder.Eventf(server, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
-		return ctrl.Result{}, err
+		// Retrying won't help until the user fixes the template, and that
+		// change triggers a new reconcile.
+		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
 	if err != nil {
 		return ctrl.Result{}, err
@@ -277,6 +280,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			return err
 		}
 
+		liveLabels := maps.Clone(deploy.Spec.Template.Labels)
 		liveAnnotations := maps.Clone(deploy.Spec.Template.Annotations)
 
 		if err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride); err != nil {
@@ -287,7 +291,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		// directly to ensure that anything removed from the server, or from its
 		// deploymentTemplate, is also removed here.
 		deploy.Spec.Template = *desiredDeployment.Spec.Template.DeepCopy()
-		setPodTemplateAnnotations(deploy, liveAnnotations)
+		setPodTemplateMetadata(deploy, liveLabels, liveAnnotations)
 
 		return nil
 	})
@@ -630,6 +634,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 // operator depends on, which a user's pod template can't override. labels are
 // the pod template labels of the Deployment or the Job.
 func serverProtected(server *prefectiov1.PrefectServer, labels map[string]string) podtemplate.Protected {
+	derivedEnv := server.DerivedEnvVarNames()
 	protected := podtemplate.Protected{
 		Labels:  slices.Collect(maps.Keys(labels)),
 		Volumes: []string{constants.PrefectDataVolumeName},
@@ -637,10 +642,10 @@ func serverProtected(server *prefectiov1.PrefectServer, labels map[string]string
 			prefectiov1.ContainerNamePrefectServer: {
 				Ports:        []string{constants.APIPortName},
 				VolumeMounts: []string{constants.PrefectDataVolumeName},
-				Env:          server.DerivedEnvVarNames(),
+				Env:          derivedEnv,
 			},
 			prefectiov1.ContainerNameMigration: {
-				Env: server.DerivedEnvVarNames(),
+				Env: derivedEnv,
 			},
 		},
 	}

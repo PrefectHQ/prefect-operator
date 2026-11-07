@@ -88,20 +88,87 @@ func Apply(base corev1.PodTemplateSpec, template *runtime.RawExtension, field st
 		return invalid(err)
 	}
 
+	if err := checkContainerNames(&merged.Spec); err != nil {
+		return invalid(err)
+	}
+
+	var patched templateEnv
+	if err := json.Unmarshal(template.Raw, &patched); err != nil {
+		return invalid(err)
+	}
+
 	keepEnvOrder(merged.Spec.InitContainers, base.Spec.InitContainers)
 	keepEnvOrder(merged.Spec.Containers, base.Spec.Containers)
+	overrideDuplicateEnv(merged.Spec.InitContainers, patched.Spec.InitContainers)
+	overrideDuplicateEnv(merged.Spec.Containers, patched.Spec.Containers)
 	restore(&merged, &base, protected)
 	return merged, nil
 }
 
 // FindContainer returns the container named name in spec.Containers, or nil.
 func FindContainer(spec *corev1.PodSpec, name string) *corev1.Container {
-	for i := range spec.Containers {
-		if spec.Containers[i].Name == name {
-			return &spec.Containers[i]
-		}
+	if i := findIn(spec.Containers, name); i >= 0 {
+		return &spec.Containers[i]
 	}
 	return nil
+}
+
+// checkContainerNames reports a container name used more than once, such as an
+// init container a template adds with the name of one of the operator's
+// containers. Kubernetes would reject the pod template.
+func checkContainerNames(spec *corev1.PodSpec) error {
+	seen := map[string]bool{}
+	for _, c := range slices.Concat(spec.InitContainers, spec.Containers) {
+		if seen[c.Name] {
+			return fmt.Errorf("container name %q is used more than once", c.Name)
+		}
+		seen[c.Name] = true
+	}
+	return nil
+}
+
+// templateEnv holds the environment variable names a template sets, per container.
+type templateEnv struct {
+	Spec struct {
+		InitContainers []templateContainer `json:"initContainers"`
+		Containers     []templateContainer `json:"containers"`
+	} `json:"spec"`
+}
+
+type templateContainer struct {
+	Name string `json:"name"`
+	Env  []struct {
+		Name  string `json:"name"`
+		Patch string `json:"$patch"`
+	} `json:"env"`
+}
+
+// overrideDuplicateEnv gives every entry of a variable the template sets the
+// template's value. A setting with the same name as a variable the operator
+// sets lists the name twice, and a strategic merge patch changes only the first
+// entry, while Kubernetes uses the last one, so the template wouldn't win.
+func overrideDuplicateEnv(merged []corev1.Container, patched []templateContainer) {
+	for _, p := range patched {
+		m := findIn(merged, p.Name)
+		if m < 0 {
+			continue
+		}
+		env := merged[m].Env
+		for _, e := range p.Env {
+			if e.Patch != "" {
+				continue
+			}
+			first := slices.IndexFunc(env, func(v corev1.EnvVar) bool { return v.Name == e.Name })
+			if first < 0 {
+				continue
+			}
+			for i := first + 1; i < len(env); i++ {
+				if env[i].Name == e.Name {
+					env[i] = *env[first].DeepCopy()
+				}
+			}
+		}
+	}
 }
 
 // keepEnvOrder puts the environment variables of each merged container back in
