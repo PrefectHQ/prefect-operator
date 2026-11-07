@@ -2,6 +2,7 @@ package v1
 
 import (
 	"maps"
+	"slices"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -466,9 +467,10 @@ func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
 }
 
 // DerivedEnvVarNames returns the names of the environment variables the
-// operator derives from the server's spec, leaving out its settings.
+// operator derives from the server's spec, leaving out its settings and any
+// variable the settings override.
 func (s *PrefectServer) DerivedEnvVarNames() []string {
-	return envVarNames(s.derivedEnvVars())
+	return envVarNames(s.derivedEnvVars(), s.Spec.Settings)
 }
 
 func (s *PrefectServer) derivedEnvVars() []corev1.EnvVar {
@@ -494,10 +496,19 @@ func (s *PrefectServer) derivedEnvVars() []corev1.EnvVar {
 	return envVars
 }
 
-func envVarNames(envVars []corev1.EnvVar) []string {
+// envVarNames returns the names of envVars that settings doesn't override.
+// A setting with the same name comes later in the container's environment, so
+// it already wins, and leaving it out keeps it in place among the other
+// settings that may reference each other.
+func envVarNames(envVars, settings []corev1.EnvVar) []string {
 	names := make([]string, 0, len(envVars))
 	for _, envVar := range envVars {
-		names = append(names, envVar.Name)
+		overridden := slices.ContainsFunc(settings, func(setting corev1.EnvVar) bool {
+			return setting.Name == envVar.Name
+		})
+		if !overridden {
+			names = append(names, envVar.Name)
+		}
 	}
 	return names
 }

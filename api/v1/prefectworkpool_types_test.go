@@ -142,6 +142,14 @@ var _ = Describe("PrefectWorkPool.DerivedEnvVarNames", func() {
 		}))
 	})
 
+	It("leaves out variables the settings override", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Settings: []corev1.EnvVar{{Name: "PREFECT_API_URL", Value: "https://prefect.example.com/api"}},
+		}}
+
+		Expect(s.DerivedEnvVarNames()).To(Equal([]string{EnvPrefectHome, "PREFECT_WORKER_WEBSERVER_PORT"}))
+	})
+
 	It("includes the API key when one is set", func() {
 		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
 			Server: PrefectServerReference{APIKey: &APIKeySpec{Value: new("key")}},

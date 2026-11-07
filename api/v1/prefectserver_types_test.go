@@ -717,6 +717,16 @@ var _ = Describe("PrefectServer.DerivedEnvVarNames", func() {
 		Expect(names).NotTo(ContainElement("EXTRA"))
 	})
 
+	It("leaves out variables the settings override", func() {
+		s := &PrefectServer{Spec: PrefectServerSpec{
+			Ephemeral: &EphemeralConfiguration{},
+			Settings:  []corev1.EnvVar{{Name: EnvPrefectAPIDatabaseName, Value: "/data/prefect.db"}},
+		}}
+
+		Expect(s.DerivedEnvVarNames()).NotTo(ContainElement(EnvPrefectAPIDatabaseName))
+		Expect(s.DerivedEnvVarNames()).To(ContainElement(EnvPrefectHome))
+	})
+
 	It("names the ephemeral backend's variables", func() {
 		s := &PrefectServer{Spec: PrefectServerSpec{Ephemeral: &EphemeralConfiguration{}}}
 

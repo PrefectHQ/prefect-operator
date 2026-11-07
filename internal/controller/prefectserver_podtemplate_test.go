@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -244,6 +245,24 @@ var _ = Describe("PrefectServer pod templates", func() {
 			Name:  prefectiov1.EnvPrefectHome,
 			Value: "/tmp",
 		}))
+	})
+
+	It("keeps settings in order when the template touches a protected env var", func() {
+		spec := *ephemeral.DeepCopy()
+		spec.Settings = []corev1.EnvVar{
+			{Name: "DB_PASSWORD", Value: "secret"},
+			{Name: prefectiov1.EnvPrefectAPIDatabaseName, Value: "/data/$(DB_PASSWORD).db"},
+		}
+		spec.DeploymentTemplate = rawTemplate(`{"spec":{"containers":[{"name":"prefect-server","env":[
+			{"name":"PREFECT_HOME","value":"/tmp"}
+		]}]}}`)
+		createServer(spec)
+
+		env := serverContainer(getDeployment()).Env
+		password := slices.IndexFunc(env, func(e corev1.EnvVar) bool { return e.Name == "DB_PASSWORD" })
+		reference := slices.IndexFunc(env, func(e corev1.EnvVar) bool { return e.Value == "/data/$(DB_PASSWORD).db" })
+		Expect(password).To(BeNumerically(">=", 0))
+		Expect(reference).To(BeNumerically(">", password))
 	})
 
 	It("doesn't roll out on a no-op reconcile", func() {

@@ -155,6 +155,23 @@ var _ = Describe("Apply", func() {
 		Expect(db).To(Equal([]string{"sqlite", "override"}))
 	})
 
+	It("keeps the base's env order when the template touches env", func() {
+		withSettings := base()
+		withSettings.Spec.Containers[0].Env = []corev1.EnvVar{
+			{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"},
+			{Name: "NAME", Value: "derived"},
+			{Name: "PW", Value: "secret"},
+			{Name: "NAME", Value: "$(PW)"},
+		}
+
+		result, err := Apply(withSettings, &runtime.RawExtension{
+			Raw: []byte(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"EXTRA","value":"1"}]}]}}`),
+		}, field, Protected{})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(server(result).Env).To(Equal(append(withSettings.Spec.Containers[0].Env, corev1.EnvVar{Name: "EXTRA", Value: "1"})))
+	})
+
 	It("puts back a deleted protected container", func() {
 		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","$patch":"delete"}]}}`)
 

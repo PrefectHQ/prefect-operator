@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -127,6 +128,32 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 			Name:  "PREFECT_API_URL",
 			Value: "http://evil",
 		}))
+	})
+
+	It("keeps settings in order when the template touches a protected env var", func() {
+		workPool := &prefectiov1.PrefectWorkPool{
+			ObjectMeta: metav1.ObjectMeta{Namespace: name.Namespace, Name: name.Name},
+			Spec: prefectiov1.PrefectWorkPoolSpec{
+				Type:    "kubernetes",
+				Workers: 1,
+				Settings: []corev1.EnvVar{
+					{Name: "API_HOST", Value: "prefect.example.com"},
+					{Name: "PREFECT_API_URL", Value: "https://$(API_HOST)/api"},
+				},
+				DeploymentTemplate: rawTemplate(`{"spec":{"containers":[{"name":"prefect-worker","env":[
+					{"name":"PREFECT_HOME","value":"/tmp"}
+				]}]}}`),
+			},
+		}
+		Expect(k8sClient.Create(ctx, workPool)).To(Succeed())
+		Expect(reconcileWorkPool()).To(Succeed())
+		Expect(reconcileWorkPool()).To(Succeed())
+
+		env := workerContainer(getDeployment()).Env
+		host := slices.IndexFunc(env, func(e corev1.EnvVar) bool { return e.Name == "API_HOST" })
+		reference := slices.IndexFunc(env, func(e corev1.EnvVar) bool { return e.Value == "https://$(API_HOST)/api" })
+		Expect(host).To(BeNumerically(">=", 0))
+		Expect(reference).To(BeNumerically(">", host))
 	})
 
 	It("removes an override deleted from the template", func() {

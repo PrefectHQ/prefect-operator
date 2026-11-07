@@ -88,6 +88,8 @@ func Apply(base corev1.PodTemplateSpec, template *runtime.RawExtension, field st
 		return invalid(err)
 	}
 
+	keepEnvOrder(merged.Spec.InitContainers, base.Spec.InitContainers)
+	keepEnvOrder(merged.Spec.Containers, base.Spec.Containers)
 	restore(&merged, &base, protected)
 	return merged, nil
 }
@@ -100,6 +102,32 @@ func FindContainer(spec *corev1.PodSpec, name string) *corev1.Container {
 		}
 	}
 	return nil
+}
+
+// keepEnvOrder puts the environment variables of each merged container back in
+// the order of the matching base container. A strategic merge patch groups
+// variables that share a name, such as a setting that overrides a variable the
+// operator sets, which can move a variable ahead of one it references with
+// $(NAME). Variables the template added go after the base's, in their order.
+func keepEnvOrder(merged, base []corev1.Container) {
+	for i := range merged {
+		b := findIn(base, merged[i].Name)
+		if b < 0 {
+			continue
+		}
+
+		remaining := slices.Clone(merged[i].Env)
+		ordered := make([]corev1.EnvVar, 0, len(remaining))
+		for _, want := range base[b].Env {
+			at := slices.IndexFunc(remaining, func(env corev1.EnvVar) bool { return env.Name == want.Name })
+			if at < 0 {
+				continue
+			}
+			ordered = append(ordered, remaining[at])
+			remaining = slices.Delete(remaining, at, at+1)
+		}
+		merged[i].Env = append(ordered, remaining...)
+	}
 }
 
 func restore(merged, base *corev1.PodTemplateSpec, protected Protected) {

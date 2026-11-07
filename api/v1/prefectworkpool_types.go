@@ -216,9 +216,10 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 }
 
 // DerivedEnvVarNames returns the names of the environment variables the
-// operator sets on the worker, leaving out its settings.
+// operator sets on the worker, leaving out its settings and any variable the
+// settings override.
 func (s *PrefectWorkPool) DerivedEnvVarNames() []string {
-	return envVarNames(s.ToEnvVars())
+	return envVarNames(s.ToEnvVars(), s.Spec.Settings)
 }
 
 func (s *PrefectWorkPool) HealthProbe() corev1.ProbeHandler {
