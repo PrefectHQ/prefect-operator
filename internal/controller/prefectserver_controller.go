@@ -2,7 +2,10 @@ package controller
 
 import (
 	"context"
+	errs "errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"dario.cat/mergo"
@@ -15,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -23,6 +27,7 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/conditions"
 	"github.com/PrefectHQ/prefect-operator/internal/constants"
+	"github.com/PrefectHQ/prefect-operator/internal/podtemplate"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
 	"github.com/go-logr/logr"
 )
@@ -31,7 +36,15 @@ import (
 type PrefectServerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// Recorder emits Kubernetes events on the PrefectServers this controller
+	// reconciles.
+	Recorder events.EventRecorder
 }
+
+// restartedAtAnnotation is the pod template annotation `kubectl rollout restart`
+// sets. The operator keeps it, so that it doesn't undo a restart.
+const restartedAtAnnotation = "kubectl.kubernetes.io/restartedAt"
 
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/status,verbs=get;update;patch
@@ -39,6 +52,7 @@ type PrefectServerReconciler struct {
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -74,6 +88,11 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.checkSharedState(server)
 
 	desiredDeployment, desiredPVC, desiredMigrationJob, err := r.prefectServerDeployment(server)
+	if invalid := (*podtemplate.InvalidTemplateError)(nil); errs.As(err, &invalid) {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.InvalidPodTemplate(constants.Deployment, err))
+		r.Recorder.Eventf(server, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
+		return ctrl.Result{}, err
+	}
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -252,16 +271,22 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 			return err
 		}
 
+		restartedAt, restarted := deploy.Spec.Template.Annotations[restartedAtAnnotation]
+
 		if err := mergo.Merge(deploy, desiredDeployment, mergo.WithOverride); err != nil {
 			return err
 		}
 
-		// mergo skips empty values and merges maps, so assign these directly to
-		// ensure that constraints removed from the server are also removed here.
-		desiredPodSpec := desiredDeployment.Spec.Template.Spec
-		deploy.Spec.Template.Spec.NodeSelector = desiredPodSpec.NodeSelector
-		deploy.Spec.Template.Spec.Tolerations = desiredPodSpec.Tolerations
-		deploy.Spec.Template.Spec.Affinity = desiredPodSpec.Affinity
+		// mergo skips empty values and merges maps, so assign the pod template
+		// directly to ensure that anything removed from the server, or from its
+		// deploymentTemplate, is also removed here.
+		deploy.Spec.Template = *desiredDeployment.Spec.Template.DeepCopy()
+		if restarted {
+			if deploy.Spec.Template.Annotations == nil {
+				deploy.Spec.Template.Annotations = map[string]string{}
+			}
+			deploy.Spec.Template.Annotations[restartedAtAnnotation] = restartedAt
+		}
 
 		return nil
 	})
@@ -277,7 +302,7 @@ func (r *PrefectServerReconciler) reconcileDeployment(ctx context.Context, serve
 		return &ctrl.Result{}, err
 	}
 
-	serverContainer := desiredDeployment.Spec.Template.Spec.Containers[0]
+	serverContainer := podtemplate.FindContainer(&desiredDeployment.Spec.Template.Spec, prefectiov1.ContainerNamePrefectServer)
 
 	switch result {
 	case controllerutil.OperationResultCreated:
@@ -367,6 +392,12 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 		deploymentSpec.Template.Spec.Containers = append(deploymentSpec.Template.Spec.Containers, server.Spec.ExtraContainers...)
 	}
 
+	template, err := podtemplate.Apply(deploymentSpec.Template, server.Spec.DeploymentTemplate, "spec.deploymentTemplate", serverProtected(server, server.ServerLabels()))
+	if err != nil {
+		return appsv1.Deployment{}, nil, nil, err
+	}
+	deploymentSpec.Template = template
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
@@ -421,7 +452,7 @@ func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.Pr
 				},
 				Containers: []corev1.Container{
 					{
-						Name: prefectiov1.AppLabelPrefectServer,
+						Name: prefectiov1.ContainerNamePrefectServer,
 
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -505,7 +536,7 @@ func (r *PrefectServerReconciler) sqliteDeploymentSpec(server *prefectiov1.Prefe
 				},
 				Containers: []corev1.Container{
 					{
-						Name: prefectiov1.AppLabelPrefectServer,
+						Name: prefectiov1.ContainerNamePrefectServer,
 
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -561,7 +592,7 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 				},
 				Containers: []corev1.Container{
 					{
-						Name: prefectiov1.AppLabelPrefectServer,
+						Name: prefectiov1.ContainerNamePrefectServer,
 
 						Image:           server.Image(),
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -591,6 +622,32 @@ func (r *PrefectServerReconciler) postgresDeploymentSpec(server *prefectiov1.Pre
 	}
 }
 
+// serverProtected returns the parts of the server's pod templates that the
+// operator depends on, which a user's pod template can't override. labels are
+// the pod template labels of the Deployment or the Job.
+func serverProtected(server *prefectiov1.PrefectServer, labels map[string]string) podtemplate.Protected {
+	protected := podtemplate.Protected{
+		Labels:  slices.Collect(maps.Keys(labels)),
+		Volumes: []string{constants.PrefectDataVolumeName},
+		Containers: map[string]podtemplate.ProtectedContainer{
+			prefectiov1.ContainerNamePrefectServer: {
+				Ports:        []string{constants.APIPortName},
+				VolumeMounts: []string{constants.PrefectDataVolumeName},
+				Env:          server.DerivedEnvVarNames(),
+			},
+			prefectiov1.ContainerNameMigration: {
+				Env: server.DerivedEnvVarNames(),
+			},
+		},
+	}
+	if server.Spec.Postgres != nil {
+		protected.Containers[prefectiov1.ContainerNameWaitForDatabase] = podtemplate.ProtectedContainer{
+			Env: []string{server.Spec.Postgres.HostEnvVar().Name, server.Spec.Postgres.UserEnvVar().Name},
+		}
+	}
+	return protected
+}
+
 // migrationJobAffinity returns the node affinity of the server, if any. Pod affinity terms are
 // left out because they usually target the server's own pods, which aren't created or updated
 // until the migration Job finishes, so requiring them could leave the Job unschedulable.
@@ -617,7 +674,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 				},
 				Containers: []corev1.Container{
 					{
-						Name:    "prefect-server-migration",
+						Name:    prefectiov1.ContainerNameMigration,
 						Image:   server.Image(),
 						Command: []string{prefectiov1.PrefectCLI, prefectiov1.ServerSubcommand, "database", "upgrade", "--yes"},
 						Env:     server.ToEnvVars(),
@@ -681,7 +738,7 @@ func (r *PrefectServerReconciler) initContainerWaitForPostgres(server *prefectio
 	}
 
 	return corev1.Container{
-		Name:            "wait-for-database",
+		Name:            prefectiov1.ContainerNameWaitForDatabase,
 		Image:           image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command: []string{
