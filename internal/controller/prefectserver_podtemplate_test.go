@@ -182,6 +182,28 @@ var _ = Describe("PrefectServer pod templates", func() {
 			Expect(cond.Reason).To(Equal("InvalidPodTemplate"))
 			Expect(recorder.Events).To(Receive(Equal("Warning InvalidPodTemplate " + cond.Message)))
 		})
+
+		It("reports overrides of protected fields", func() {
+			spec := *postgres.DeepCopy()
+			spec.MigrationJobTemplate = rawTemplate(`{"spec":{"containers":[{"name":"prefect-server-migration","env":[
+				{"name":"PREFECT_API_DATABASE_USER","value":"other"}
+			]}]}}`)
+			server := createServer(spec)
+
+			cond := meta.FindStatusCondition(server.Status.Conditions, "MigrationJobTemplateApplied")
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("ProtectedFieldsIgnored"))
+			Expect(cond.Message).To(ContainSubstring("spec.containers[prefect-server-migration].env[PREFECT_API_DATABASE_USER]"))
+			Expect(recorder.Events).To(Receive(HavePrefix("Warning ProtectedFieldsIgnored spec.migrationJobTemplate ")))
+		})
+
+		It("isn't reported without a PostgreSQL backend, which has no migration Job", func() {
+			spec := *ephemeral.DeepCopy()
+			spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
+			server := createServer(spec)
+
+			Expect(meta.FindStatusCondition(server.Status.Conditions, "MigrationJobTemplateApplied")).To(BeNil())
+		})
 	})
 
 	DescribeTable("applies the template to the server pod",
@@ -248,6 +270,33 @@ var _ = Describe("PrefectServer pod templates", func() {
 			Name:  prefectiov1.EnvPrefectHome,
 			Value: "/tmp",
 		}))
+	})
+
+	It("reports overrides of protected fields once", func() {
+		spec := *ephemeral.DeepCopy()
+		spec.DeploymentTemplate = rawTemplate(`{
+			"metadata":{"labels":{"app":"x"}},
+			"spec":{"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_HOME","value":"/tmp"}]}]}
+		}`)
+		server := createServer(spec)
+
+		cond := meta.FindStatusCondition(server.Status.Conditions, "DeploymentTemplateApplied")
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal("ProtectedFieldsIgnored"))
+		Expect(cond.Message).To(HaveSuffix("metadata.labels[app], spec.containers[prefect-server].env[PREFECT_HOME]"))
+		Expect(recorder.Events).To(Receive(HavePrefix("Warning ProtectedFieldsIgnored spec.deploymentTemplate ")))
+
+		Expect(reconcileServer()).To(Succeed())
+		Expect(recorder.Events).NotTo(Receive())
+
+		Expect(setDeploymentTemplate(rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`))).To(Succeed())
+		cond = meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentTemplateApplied")
+		Expect(cond.Reason).To(Equal("TemplateApplied"))
+		Expect(recorder.Events).NotTo(Receive())
+
+		Expect(setDeploymentTemplate(nil)).To(Succeed())
+		Expect(meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentTemplateApplied")).To(BeNil())
 	})
 
 	It("keeps settings in order when the template touches a protected env var", func() {

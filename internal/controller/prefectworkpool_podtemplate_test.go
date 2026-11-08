@@ -113,6 +113,12 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 		Expect(probe.FailureThreshold).To(Equal(int32(10)))
 		Expect(probe.PeriodSeconds).To(Equal(workPool.LivenessProbe().PeriodSeconds))
 		Expect(probe.HTTPGet).To(Equal(workPool.LivenessProbe().HTTPGet))
+
+		cond := meta.FindStatusCondition(workPool.Status.Conditions, "DeploymentTemplateApplied")
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal("TemplateApplied"))
+		Expect(recorder.Events).NotTo(Receive())
 	})
 
 	It("ignores overrides of protected fields", func() {
@@ -128,6 +134,26 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 			Name:  "PREFECT_API_URL",
 			Value: "http://evil",
 		}))
+	})
+
+	It("reports overrides of protected fields once", func() {
+		workPool := createWorkPool(rawTemplate(`{"spec":{"containers":[{"name":"prefect-worker","env":[
+			{"name":"PREFECT_API_URL","value":"http://evil"}
+		]}]}}`))
+
+		cond := meta.FindStatusCondition(workPool.Status.Conditions, "DeploymentTemplateApplied")
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal("ProtectedFieldsIgnored"))
+		Expect(cond.Message).To(ContainSubstring("spec.containers[prefect-worker].env[PREFECT_API_URL]"))
+		Expect(recorder.Events).To(Receive(And(
+			HavePrefix("Warning ProtectedFieldsIgnored spec.deploymentTemplate "),
+			ContainSubstring("spec.containers[prefect-worker].env[PREFECT_API_URL]"),
+		)))
+
+		Expect(reconcileWorkPool()).To(Succeed())
+
+		Expect(recorder.Events).NotTo(Receive())
 	})
 
 	It("keeps settings in order when the template touches a protected env var", func() {
@@ -163,6 +189,7 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 		Expect(setDeploymentTemplate(nil)).To(Succeed())
 
 		Expect(getDeployment().Spec.Template.Spec.SecurityContext).To(SatisfyAny(BeNil(), Equal(&corev1.PodSecurityContext{})))
+		Expect(meta.FindStatusCondition(getWorkPool().Status.Conditions, "DeploymentTemplateApplied")).To(BeNil())
 	})
 
 	It("keeps pod template annotations other tools add", func() {

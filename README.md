@@ -77,6 +77,13 @@ puts back if a template overrides them:
   the database settings and the worker's `PREFECT_API_URL`. Variables from
   `settings` are not protected.
 
+The resource's `DeploymentTemplateApplied` (or `MigrationJobTemplateApplied`)
+condition shows whether this happened. Its reason is `ProtectedFieldsIgnored`,
+and its message lists the fields that kept the operator's values, such as
+`spec.containers[prefect-worker].env[PREFECT_API_URL]`. The operator also emits
+a Warning event when that list changes. Otherwise the reason is
+`TemplateApplied`. The condition is removed when there is no template.
+
 For example, to run the server as a non-root user and give it more time before
 the first readiness check:
 

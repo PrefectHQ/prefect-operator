@@ -90,7 +90,7 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// running on per-replica in-memory state — see checkSharedState.
 	r.checkSharedState(server)
 
-	desiredDeployment, desiredPVC, desiredMigrationJob, err := r.prefectServerDeployment(server)
+	desiredDeployment, desiredPVC, desiredMigrationJob, ignored, err := r.prefectServerDeployment(server)
 	if invalid := (*podtemplate.InvalidTemplateError)(nil); errs.As(err, &invalid) {
 		object := constants.Deployment
 		if invalid.Field == migrationJobTemplateField {
@@ -105,6 +105,13 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	reportPodTemplate(r.Recorder, server, &server.Status.Conditions, constants.Deployment, deploymentTemplateField, server.Spec.DeploymentTemplate, ignored.deployment)
+	var migrationJobTemplate *runtime.RawExtension
+	if desiredMigrationJob != nil {
+		migrationJobTemplate = server.Spec.MigrationJobTemplate
+	}
+	reportPodTemplate(r.Recorder, server, &server.Status.Conditions, constants.MigrationJob, migrationJobTemplateField, migrationJobTemplate, ignored.migrationJob)
 
 	desiredService, err := r.prefectServerService(server)
 	if err != nil {
@@ -370,18 +377,26 @@ func jobCondition(job *batchv1.Job, conditionType batchv1.JobConditionType) *bat
 	return nil
 }
 
-func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job, error) {
+// ignoredFields lists the protected fields that the server's pod templates
+// tried to override.
+type ignoredFields struct {
+	deployment   []string
+	migrationJob []string
+}
+
+func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.PrefectServer) (appsv1.Deployment, *corev1.PersistentVolumeClaim, *batchv1.Job, ignoredFields, error) {
 	var pvc *corev1.PersistentVolumeClaim
 	var migrationJob *batchv1.Job
 	var deploymentSpec appsv1.DeploymentSpec
+	var ignored ignoredFields
 
 	if server.Spec.SQLite != nil {
 		pvc = r.sqlitePersistentVolumeClaim(server)
 		deploymentSpec = r.sqliteDeploymentSpec(server, pvc)
 	} else if server.Spec.Postgres != nil {
 		var err error
-		if migrationJob, err = r.postgresMigrationJob(server); err != nil {
-			return appsv1.Deployment{}, nil, nil, err
+		if migrationJob, ignored.migrationJob, err = r.postgresMigrationJob(server); err != nil {
+			return appsv1.Deployment{}, nil, nil, ignoredFields{}, err
 		}
 		deploymentSpec = r.postgresDeploymentSpec(server)
 		deploymentSpec.Replicas = server.Replicas()
@@ -400,10 +415,11 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 		deploymentSpec.Template.Spec.Containers = append(deploymentSpec.Template.Spec.Containers, server.Spec.ExtraContainers...)
 	}
 
-	template, err := podtemplate.Apply(deploymentSpec.Template, server.Spec.DeploymentTemplate, deploymentTemplateField, serverProtected(server, server.ServerLabels()))
+	template, deploymentIgnored, err := podtemplate.Apply(deploymentSpec.Template, server.Spec.DeploymentTemplate, deploymentTemplateField, serverProtected(server, server.ServerLabels()))
 	if err != nil {
-		return appsv1.Deployment{}, nil, nil, err
+		return appsv1.Deployment{}, nil, nil, ignoredFields{}, err
 	}
+	ignored.deployment = deploymentIgnored
 	deploymentSpec.Template = template
 
 	dep := &appsv1.Deployment{
@@ -417,22 +433,22 @@ func (r *PrefectServerReconciler) prefectServerDeployment(server *prefectiov1.Pr
 
 	// Set PrefectServer instance as the owner and controller
 	if r.Scheme == nil {
-		return appsv1.Deployment{}, nil, nil, fmt.Errorf("scheme is nil, cannot set controller reference for deployment")
+		return appsv1.Deployment{}, nil, nil, ignoredFields{}, fmt.Errorf("scheme is nil, cannot set controller reference for deployment")
 	}
 	if err := ctrl.SetControllerReference(server, dep, r.Scheme); err != nil {
-		return appsv1.Deployment{}, nil, nil, fmt.Errorf("failed to set controller reference for deployment: %w", err)
+		return appsv1.Deployment{}, nil, nil, ignoredFields{}, fmt.Errorf("failed to set controller reference for deployment: %w", err)
 	}
 	if pvc != nil {
 		if err := ctrl.SetControllerReference(server, pvc, r.Scheme); err != nil {
-			return appsv1.Deployment{}, nil, nil, fmt.Errorf("failed to set controller reference for PVC: %w", err)
+			return appsv1.Deployment{}, nil, nil, ignoredFields{}, fmt.Errorf("failed to set controller reference for PVC: %w", err)
 		}
 	}
 	if migrationJob != nil {
 		if err := ctrl.SetControllerReference(server, migrationJob, r.Scheme); err != nil {
-			return appsv1.Deployment{}, nil, nil, fmt.Errorf("failed to set controller reference for migration job: %w", err)
+			return appsv1.Deployment{}, nil, nil, ignoredFields{}, fmt.Errorf("failed to set controller reference for migration job: %w", err)
 		}
 	}
-	return *dep, pvc, migrationJob, nil
+	return *dep, pvc, migrationJob, ignored, nil
 }
 
 func (r *PrefectServerReconciler) ephemeralDeploymentSpec(server *prefectiov1.PrefectServer) appsv1.DeploymentSpec {
@@ -667,7 +683,9 @@ func migrationJobAffinity(server *prefectiov1.PrefectServer) *corev1.Affinity {
 	return &corev1.Affinity{NodeAffinity: server.Spec.Affinity.NodeAffinity}
 }
 
-func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) (*batchv1.Job, error) {
+// postgresMigrationJob builds the migration Job. It also returns the protected
+// fields its migrationJobTemplate tried to override.
+func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.PrefectServer) (*batchv1.Job, []string, error) {
 	jobSpec := batchv1.JobSpec{
 		TTLSecondsAfterFinished: new(int32(60 * 60)), // 1 hour
 		Template: corev1.PodTemplateSpec{
@@ -694,9 +712,9 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 		},
 	}
 
-	template, err := podtemplate.Apply(jobSpec.Template, server.Spec.MigrationJobTemplate, migrationJobTemplateField, serverProtected(server, server.MigrationJobLabels()))
+	template, ignored, err := podtemplate.Apply(jobSpec.Template, server.Spec.MigrationJobTemplate, migrationJobTemplateField, serverProtected(server, server.MigrationJobLabels()))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	jobSpec.Template = template
 
@@ -709,7 +727,7 @@ func (r *PrefectServerReconciler) postgresMigrationJob(server *prefectiov1.Prefe
 			Labels:    server.MigrationJobLabels(),
 		},
 		Spec: jobSpec,
-	}, nil
+	}, ignored, nil
 }
 
 func (r *PrefectServerReconciler) prefectServerService(server *prefectiov1.PrefectServer) (corev1.Service, error) {
