@@ -10,8 +10,8 @@
 package podtemplate
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	sigsjson "sigs.k8s.io/json"
 )
 
 // Protected names the parts of a pod template the operator always restores
@@ -81,11 +82,15 @@ func Apply(base corev1.PodTemplateSpec, template *runtime.RawExtension, field st
 		return invalid(err)
 	}
 
+	// Decode strictly, as the API server does: an unknown field, or a field
+	// name in the wrong case, is an error rather than silently dropped.
 	var merged corev1.PodTemplateSpec
-	decoder := json.NewDecoder(bytes.NewReader(mergedJSON))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&merged); err != nil {
+	strictErrs, err := sigsjson.UnmarshalStrict(mergedJSON, &merged)
+	if err != nil {
 		return invalid(err)
+	}
+	if len(strictErrs) > 0 {
+		return invalid(errors.Join(strictErrs...))
 	}
 
 	if err := checkContainerNames(&merged.Spec); err != nil {

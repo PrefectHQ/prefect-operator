@@ -219,6 +219,25 @@ var _ = Describe("Apply", func() {
 		Expect(result.Spec.Containers).To(HaveLen(1))
 	})
 
+	It("swaps a probe handler with $patch: replace", func() {
+		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","readinessProbe":{
+			"$patch":"replace","tcpSocket":{"port":4200},"periodSeconds":5
+		}}]}}`)
+
+		probe := server(result).ReadinessProbe
+		Expect(probe.HTTPGet).To(BeNil())
+		Expect(probe.TCPSocket).NotTo(BeNil())
+		Expect(probe.PeriodSeconds).To(Equal(int32(5)))
+	})
+
+	It("rejects field names in the wrong case", func() {
+		_, err := apply(`{"spec":{"serviceaccountname":"other-sa"}}`)
+
+		var invalid *InvalidTemplateError
+		Expect(errors.As(err, &invalid)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("serviceaccountname"))
+	})
+
 	It("rejects unknown fields", func() {
 		_, err := apply(`{"spec":{"securtyContext":{}}}`)
 

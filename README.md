@@ -44,6 +44,28 @@ Lists of containers are matched by name, so you can change one setting of a
 container without restating the rest of it. The container names above are
 stable. Patch directives such as `$patch: delete` work too.
 
+A patch merges into what the operator built, so a probe you patch keeps the
+operator's handler. To swap the handler, for example from `httpGet` to
+`tcpSocket`, replace the whole probe with `$patch: replace`. Setting
+`httpGet: null` instead only works with `kubectl apply --server-side`, because
+a plain `kubectl apply` drops the `null`.
+
+```yaml
+deploymentTemplate:
+  spec:
+    containers:
+      - name: prefect-server
+        readinessProbe:
+          $patch: replace
+          tcpSocket:
+            port: 4200
+          periodSeconds: 10
+```
+
+Lists of strings such as `args` and `command` are replaced, not merged. On
+`prefect-worker`, overriding `args` replaces the whole list, including
+`--pool <name>`, so include every argument the worker needs.
+
 The operator applies the other fields first and the template last, so the
 template wins. The exception is the fields the operator depends on, which it
 puts back if a template overrides them:
