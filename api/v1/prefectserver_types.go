@@ -2,11 +2,13 @@ package v1
 
 import (
 	"maps"
+	"slices"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -80,6 +82,34 @@ type PrefectServerSpec struct {
 	// Tolerations allow the Prefect Server Deployment and migration Job pods to be scheduled onto
 	// nodes with matching taints.
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// DeploymentTemplate is a partial pod template, with metadata and spec like a
+	// Deployment's spec.template, applied to the pod template of the Prefect
+	// Server Deployment as a Kubernetes strategic merge patch. It is
+	// applied after the other fields, so it wins over them. Containers are
+	// matched by name; the stable names are "prefect-server" and, with the
+	// PostgreSQL backend, the init container "wait-for-database".
+	// The operator puts back any override of the fields it depends on: the
+	// selector labels, the "api" port, the "prefect-data" volume and its mounts,
+	// and the environment variables it derives from the other fields.
+	// It doesn't affect the migration Job; see MigrationJobTemplate.
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	DeploymentTemplate *runtime.RawExtension `json:"deploymentTemplate,omitempty"`
+
+	// MigrationJobTemplate is a partial pod template, with metadata and spec like
+	// a Job's spec.template, applied to the pod template of the PostgreSQL
+	// migration Job as a Kubernetes strategic merge patch. It is
+	// applied after the other fields, so it wins over them. Containers are
+	// matched by name; the stable names are "prefect-server-migration" and the
+	// init container "wait-for-database". The operator puts back any override
+	// of the Job's labels and the environment variables it derives from the
+	// other fields. Changing it starts a new migration Job.
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	MigrationJobTemplate *runtime.RawExtension `json:"migrationJobTemplate,omitempty"`
 }
 
 // Replicas returns the desired server Deployment replica count, defaulting to 1.
@@ -435,6 +465,17 @@ func (s *PrefectServer) EntrypointArguments() []string {
 }
 
 func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
+	return append(s.derivedEnvVars(), s.Spec.Settings...)
+}
+
+// DerivedEnvVarNames returns the names of the environment variables the
+// operator derives from the server's spec, leaving out its settings and any
+// variable the settings override.
+func (s *PrefectServer) DerivedEnvVarNames() []string {
+	return envVarNames(s.derivedEnvVars(), s.Spec.Settings)
+}
+
+func (s *PrefectServer) derivedEnvVars() []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
 		{
 			Name:  EnvPrefectHome,
@@ -454,9 +495,24 @@ func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
 		envVars = append(envVars, s.Spec.Redis.ToEnvVars()...)
 	}
 
-	envVars = append(envVars, s.Spec.Settings...)
-
 	return envVars
+}
+
+// envVarNames returns the names of envVars that settings doesn't override.
+// A setting with the same name comes later in the container's environment, so
+// it already wins, and leaving it out keeps it in place among the other
+// settings that may reference each other.
+func envVarNames(envVars, settings []corev1.EnvVar) []string {
+	names := make([]string, 0, len(envVars))
+	for _, envVar := range envVars {
+		overridden := slices.ContainsFunc(settings, func(setting corev1.EnvVar) bool {
+			return setting.Name == envVar.Name
+		})
+		if !overridden {
+			names = append(names, envVar.Name)
+		}
+	}
+	return names
 }
 
 func (s *PrefectServer) HealthProbe() corev1.ProbeHandler {

@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -125,5 +126,35 @@ var _ = Describe("PrefectWorkPool type", func() {
 					"Work pool %s should use pool name %s", tc.name, tc.expectedPool)
 			}
 		})
+	})
+})
+
+var _ = Describe("PrefectWorkPool.DerivedEnvVarNames", func() {
+	It("names the variables the operator sets on the worker", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Settings: []corev1.EnvVar{{Name: "EXTRA", Value: "1"}},
+		}}
+
+		Expect(s.DerivedEnvVarNames()).To(Equal([]string{
+			EnvPrefectHome,
+			"PREFECT_API_URL",
+			"PREFECT_WORKER_WEBSERVER_PORT",
+		}))
+	})
+
+	It("leaves out variables the settings override", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Settings: []corev1.EnvVar{{Name: "PREFECT_API_URL", Value: "https://prefect.example.com/api"}},
+		}}
+
+		Expect(s.DerivedEnvVarNames()).To(Equal([]string{EnvPrefectHome, "PREFECT_WORKER_WEBSERVER_PORT"}))
+	})
+
+	It("includes the API key when one is set", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Server: PrefectServerReference{APIKey: &APIKeySpec{Value: new("key")}},
+		}}
+
+		Expect(s.DerivedEnvVarNames()).To(ContainElement("PREFECT_API_KEY"))
 	})
 })

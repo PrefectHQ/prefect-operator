@@ -13,3 +13,10 @@ spec:
     name: prefect-ephemeral
   workers: 3
   # serviceAccountName: prefect-worker  # Optional: custom ServiceAccount for worker pods
+  # A strategic merge patch over the worker pods. Containers are matched by name.
+  deploymentTemplate:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001

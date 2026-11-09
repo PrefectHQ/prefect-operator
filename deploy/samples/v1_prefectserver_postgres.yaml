@@ -104,3 +104,21 @@ spec:
       configMapKeyRef:
         name: database-config
         key: database
+  # Pod templates are strategic merge patches over the pods the operator
+  # builds. Containers are matched by name.
+  deploymentTemplate:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: prefect-server
+          readinessProbe:
+            initialDelaySeconds: 10
+  migrationJobTemplate:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
