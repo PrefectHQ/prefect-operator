@@ -61,13 +61,19 @@ func protected() Protected {
 }
 
 func apply(template string) (corev1.PodTemplateSpec, error) {
-	return Apply(base(), &runtime.RawExtension{Raw: []byte(template)}, field, protected())
+	result, _, err := Apply(base(), &runtime.RawExtension{Raw: []byte(template)}, field, protected())
+	return result, err
 }
 
 func mustApply(template string) corev1.PodTemplateSpec {
-	result, err := apply(template)
-	Expect(err).NotTo(HaveOccurred())
+	result, _ := mustApplyIgnored(template)
 	return result
+}
+
+func mustApplyIgnored(template string) (corev1.PodTemplateSpec, []string) {
+	result, ignored, err := Apply(base(), &runtime.RawExtension{Raw: []byte(template)}, field, protected())
+	Expect(err).NotTo(HaveOccurred())
+	return result, ignored
 }
 
 func server(template corev1.PodTemplateSpec) *corev1.Container {
@@ -78,15 +84,17 @@ func server(template corev1.PodTemplateSpec) *corev1.Container {
 
 var _ = Describe("Apply", func() {
 	It("returns the base unchanged for a nil template", func() {
-		result, err := Apply(base(), nil, field, protected())
+		result, ignored, err := Apply(base(), nil, field, protected())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal(base()))
+		Expect(ignored).To(BeEmpty())
 	})
 
 	It("returns the base unchanged for an empty template", func() {
-		result, err := Apply(base(), &runtime.RawExtension{}, field, protected())
+		result, ignored, err := Apply(base(), &runtime.RawExtension{}, field, protected())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal(base()))
+		Expect(ignored).To(BeEmpty())
 	})
 
 	It("overrides one probe field without restating the container", func() {
@@ -114,33 +122,68 @@ var _ = Describe("Apply", func() {
 		Expect(result.Annotations).To(Equal(map[string]string{"a": "b"}))
 	})
 
+	It("reports no ignored fields when the template only touches unprotected ones", func() {
+		_, ignored := mustApplyIgnored(`{"metadata":{"labels":{"team":"data"}},"spec":{"securityContext":{"runAsNonRoot":true},
+			"containers":[{"name":"prefect-server","env":[{"name":"EXTRA","value":"1"}],"readinessProbe":{"periodSeconds":5}}]}}`)
+
+		Expect(ignored).To(BeEmpty())
+	})
+
+	It("doesn't report a protected field set to the operator's own value", func() {
+		_, ignored := mustApplyIgnored(`{"metadata":{"labels":{"app":"prefect-server"}},
+			"spec":{"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_HOME","value":"/var/lib/prefect/"}]}]}}`)
+
+		Expect(ignored).To(BeEmpty())
+	})
+
+	It("reports every ignored field, sorted", func() {
+		_, ignored := mustApplyIgnored(`{"metadata":{"labels":{"app":"other"}},"spec":{
+			"volumes":[{"name":"prefect-data","hostPath":{"path":"/tmp"},"emptyDir":null}],
+			"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_HOME","value":"/tmp"}],"ports":[{"name":"api","containerPort":8000}]}]}}`)
+
+		Expect(ignored).To(Equal([]string{
+			"metadata.labels[app]",
+			"spec.containers[prefect-server].env[PREFECT_HOME]",
+			"spec.containers[prefect-server].ports[api]",
+			"spec.volumes[prefect-data]",
+		}))
+	})
+
 	It("ignores an override of a protected label", func() {
-		result := mustApply(`{"metadata":{"labels":{"app":"other"}}}`)
+		result, ignored := mustApplyIgnored(`{"metadata":{"labels":{"app":"other"}}}`)
 
 		Expect(result.Labels).To(HaveKeyWithValue("app", "prefect-server"))
+		Expect(ignored).To(Equal([]string{"metadata.labels[app]"}))
 	})
 
 	It("ignores an override of the protected port", func() {
-		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","ports":[{"name":"api","containerPort":8000}]}]}}`)
+		result, ignored := mustApplyIgnored(`{"spec":{"containers":[{"name":"prefect-server","ports":[{"name":"api","containerPort":8000}]}]}}`)
 
 		Expect(server(result).Ports).To(Equal(base().Spec.Containers[0].Ports))
+		Expect(ignored).To(Equal([]string{"spec.containers[prefect-server].ports[api]"}))
 	})
 
 	It("ignores a replaced protected volume", func() {
-		result := mustApply(`{"spec":{"volumes":[{"name":"prefect-data","hostPath":{"path":"/tmp"},"emptyDir":null}]}}`)
+		result, ignored := mustApplyIgnored(`{"spec":{"volumes":[{"name":"prefect-data","hostPath":{"path":"/tmp"},"emptyDir":null}]}}`)
 
 		Expect(result.Spec.Volumes).To(Equal(base().Spec.Volumes))
+		Expect(ignored).To(Equal([]string{"spec.volumes[prefect-data]"}))
 	})
 
 	It("doesn't leave two mounts at a protected path", func() {
-		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","volumeMounts":[{"name":"other","mountPath":"/var/lib/prefect/"}]}]}}`)
+		result, ignored := mustApplyIgnored(`{"spec":{"containers":[{"name":"prefect-server","volumeMounts":[{"name":"other","mountPath":"/var/lib/prefect/"}]}]}}`)
 
 		Expect(server(result).VolumeMounts).To(Equal(base().Spec.Containers[0].VolumeMounts))
+		Expect(ignored).To(Equal([]string{
+			"spec.containers[prefect-server].volumeMounts[other]",
+			"spec.containers[prefect-server].volumeMounts[prefect-data]",
+		}))
 	})
 
 	It("ignores overrides of protected env vars but keeps other env", func() {
-		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_HOME","value":"/tmp"},{"name":"EXTRA","value":"1"}]}]}}`)
+		result, ignored := mustApplyIgnored(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_HOME","value":"/tmp"},{"name":"EXTRA","value":"1"}]}]}}`)
 
+		Expect(ignored).To(Equal([]string{"spec.containers[prefect-server].env[PREFECT_HOME]"}))
 		env := server(result).Env
 		Expect(env).To(ContainElement(corev1.EnvVar{Name: "EXTRA", Value: "1"}))
 		Expect(env).To(ContainElement(corev1.EnvVar{Name: "PREFECT_HOME", Value: "/var/lib/prefect/"}))
@@ -164,7 +207,7 @@ var _ = Describe("Apply", func() {
 			{Name: "NAME", Value: "$(PW)"},
 		}
 
-		result, err := Apply(withSettings, &runtime.RawExtension{
+		result, _, err := Apply(withSettings, &runtime.RawExtension{
 			Raw: []byte(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"EXTRA","value":"1"}]}]}}`),
 		}, field, Protected{})
 		Expect(err).NotTo(HaveOccurred())
@@ -180,7 +223,7 @@ var _ = Describe("Apply", func() {
 			{Name: "A", Value: "setting"},
 		}
 
-		result, err := Apply(withSetting, &runtime.RawExtension{
+		result, _, err := Apply(withSetting, &runtime.RawExtension{
 			Raw: []byte(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"A","value":"tmpl"}]}]}}`),
 		}, field, Protected{})
 		Expect(err).NotTo(HaveOccurred())
@@ -201,16 +244,17 @@ var _ = Describe("Apply", func() {
 	})
 
 	It("puts back a deleted protected container", func() {
-		result := mustApply(`{"spec":{"containers":[{"name":"prefect-server","$patch":"delete"}]}}`)
+		result, ignored := mustApplyIgnored(`{"spec":{"containers":[{"name":"prefect-server","$patch":"delete"}]}}`)
 
 		Expect(*server(result)).To(Equal(base().Spec.Containers[0]))
+		Expect(ignored).To(Equal([]string{"spec.containers[prefect-server]"}))
 	})
 
 	It("supports $patch: delete on an unprotected container", func() {
 		withSidecar := base()
 		withSidecar.Spec.Containers = append(withSidecar.Spec.Containers, corev1.Container{Name: "sidecar", Image: "busybox"})
 
-		result, err := Apply(withSidecar, &runtime.RawExtension{
+		result, _, err := Apply(withSidecar, &runtime.RawExtension{
 			Raw: []byte(`{"spec":{"containers":[{"name":"sidecar","$patch":"delete"}]}}`),
 		}, field, protected())
 		Expect(err).NotTo(HaveOccurred())

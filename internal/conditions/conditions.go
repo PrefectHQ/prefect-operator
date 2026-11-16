@@ -2,6 +2,7 @@ package conditions
 
 import (
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -84,6 +85,26 @@ func InvalidPodTemplate(object string, err error) metav1.Condition {
 		Reason:  "InvalidPodTemplate",
 		Message: err.Error(),
 		Status:  metav1.ConditionFalse,
+	}
+}
+
+// TemplateApplied reports that the user's pod template at field was applied to
+// object. ignored lists the protected fields the template tried to override,
+// which kept the operator's values.
+func TemplateApplied(object, field string, ignored []string) metav1.Condition {
+	if len(ignored) == 0 {
+		return metav1.Condition{
+			Type:    fmt.Sprintf("%sTemplateApplied", object),
+			Reason:  "TemplateApplied",
+			Message: fmt.Sprintf("%s was applied", field),
+			Status:  metav1.ConditionTrue,
+		}
+	}
+	return metav1.Condition{
+		Type:    fmt.Sprintf("%sTemplateApplied", object),
+		Reason:  "ProtectedFieldsIgnored",
+		Message: fmt.Sprintf("%s was applied, except for protected fields the operator keeps its own values for: %s", field, strings.Join(ignored, ", ")),
+		Status:  metav1.ConditionTrue,
 	}
 }
 

@@ -146,14 +146,16 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	objName := constants.Deployment
 
-	podTemplate, err := workerPodTemplate(&workPool)
+	podTemplate, ignored, err := workerPodTemplate(&workPool)
 	if err != nil {
+		meta.RemoveStatusCondition(&workPool.Status.Conditions, "DeploymentTemplateApplied")
 		meta.SetStatusCondition(&workPool.Status.Conditions, conditions.InvalidPodTemplate(objName, err))
 		r.Recorder.Eventf(&workPool, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
 		// Retrying won't help until the user fixes the template, which triggers
 		// a new reconcile, but keep resyncing the work pool with Prefect.
 		return ctrl.Result{RequeueAfter: utils.NextResyncDelay(workPool.Status.LastSyncTime, r.resyncInterval(&workPool))}, nil
 	}
+	reportPodTemplate(r.Recorder, &workPool, &workPool.Status.Conditions, objName, deploymentTemplateField, workPool.Spec.DeploymentTemplate, ignored)
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -220,8 +222,9 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // workerPodTemplate builds the pod template of the worker Deployment and
-// applies the work pool's deploymentTemplate to it.
-func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplateSpec, error) {
+// applies the work pool's deploymentTemplate to it. It also returns the
+// protected fields the template tried to override.
+func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplateSpec, []string, error) {
 	base := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: workPool.WorkerLabels(),

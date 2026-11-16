@@ -54,7 +54,7 @@ var _ = Describe("PrefectServer controller", func() {
 
 		It("uses the default image", func() {
 			deployment := controllerReconciler.postgresDeploymentSpec(server)
-			migrationJob, err := controllerReconciler.postgresMigrationJob(server)
+			migrationJob, _, err := controllerReconciler.postgresMigrationJob(server)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deployment.Template.Spec.InitContainers).To(HaveLen(1))
@@ -67,7 +67,7 @@ var _ = Describe("PrefectServer controller", func() {
 			server.Spec.Postgres.WaitForDatabaseImage = "registry.example.com/postgres:16-alpine"
 
 			deployment := controllerReconciler.postgresDeploymentSpec(server)
-			migrationJob, err := controllerReconciler.postgresMigrationJob(server)
+			migrationJob, _, err := controllerReconciler.postgresMigrationJob(server)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deployment.Template.Spec.InitContainers).To(HaveLen(1))
@@ -1402,7 +1402,7 @@ var _ = Describe("PrefectServer controller", func() {
 				migrateAndReconcile(ctx, prefectserver)
 				Expect(k8sClient.Get(ctx, name, prefectserver)).To(Succeed())
 
-				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1656,7 +1656,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				migrateAndReconcile(ctx, prefectserver)
 
-				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				migrateJob = &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -1785,7 +1785,7 @@ var _ = Describe("PrefectServer controller", func() {
 			}
 
 			It("should create new migration Job with the new setting", func() {
-				_, _, desiredMigrationJob, _ := controllerReconciler.prefectServerDeployment(prefectserver)
+				_, _, desiredMigrationJob, _, _ := controllerReconciler.prefectServerDeployment(prefectserver)
 				job := &batchv1.Job{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -2056,7 +2056,7 @@ var _ = Describe("PrefectServer controller", func() {
 
 			// This test verifies that when the helper functions are called with an invalid scheme,
 			// errors are now properly handled and returned
-			_, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
+			_, _, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("scheme is nil, cannot set controller reference"))
 
@@ -2080,7 +2080,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Scheme: nil, // This will cause SetControllerReference to fail
 			}
 
-			_, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
+			_, _, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
 
 			// Verify that SetControllerReference error is now properly handled
 			Expect(err).To(HaveOccurred())
@@ -2098,7 +2098,7 @@ var _ = Describe("PrefectServer controller", func() {
 				Scheme: nil, // This will cause SetControllerReference to fail
 			}
 
-			_, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
+			_, _, _, _, err := badReconciler.prefectServerDeployment(prefectserver)
 
 			// Verify that SetControllerReference error is now properly handled
 			Expect(err).To(HaveOccurred())
@@ -2170,7 +2170,7 @@ var (
 func setMigrationJobStatus(ctx context.Context, server *prefectiov1.PrefectServer, status batchv1.JobStatus) *batchv1.Job {
 	GinkgoHelper()
 	job := &batchv1.Job{}
-	desired, err := (&PrefectServerReconciler{}).postgresMigrationJob(server)
+	desired, _, err := (&PrefectServerReconciler{}).postgresMigrationJob(server)
 	Expect(err).NotTo(HaveOccurred())
 	key := types.NamespacedName{
 		Namespace: server.Namespace,
