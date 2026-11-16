@@ -92,6 +92,9 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	desiredDeployment, desiredPVC, desiredMigrationJob, ignored, err := r.prefectServerDeployment(server)
 	if invalid := (*podtemplate.InvalidTemplateError)(nil); errs.As(err, &invalid) {
+		// Rendering stopped before either desired template could be reported.
+		meta.RemoveStatusCondition(&server.Status.Conditions, "DeploymentTemplateApplied")
+		meta.RemoveStatusCondition(&server.Status.Conditions, "MigrationJobTemplateApplied")
 		object := constants.Deployment
 		if invalid.Field == migrationJobTemplateField {
 			object = constants.MigrationJob

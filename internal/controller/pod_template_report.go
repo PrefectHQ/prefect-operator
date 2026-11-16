@@ -14,7 +14,8 @@ import (
 )
 
 // reportPodTemplate sets the <object>TemplateApplied condition of obj for
-// template, its pod template at field, or removes the condition if template is
+// template, its desired rendered pod template at field, before Kubernetes writes
+// or migration completion. It removes the condition if template is
 // nil or empty, as when it isn't used. ignored lists the protected fields the template tried to override. A
 // Warning event is emitted only when the condition changes, so a template
 // that keeps trying to override the same fields doesn't emit one on every

@@ -167,7 +167,12 @@ var _ = Describe("PrefectServer pod templates", func() {
 		})
 
 		It("reports an invalid migrationJobTemplate", func() {
-			createServer(*postgres.DeepCopy())
+			spec := *postgres.DeepCopy()
+			spec.DeploymentTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
+			spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securityContext":{"runAsUser":1001}}}`)
+			createServer(spec)
+			Expect(meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentTemplateApplied")).NotTo(BeNil())
+			Expect(meta.FindStatusCondition(getServer().Status.Conditions, "MigrationJobTemplateApplied")).NotTo(BeNil())
 
 			server := getServer()
 			server.Spec.MigrationJobTemplate = rawTemplate(`{"spec":{"securtyContext":{}}}`)
@@ -181,6 +186,8 @@ var _ = Describe("PrefectServer pod templates", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(cond.Reason).To(Equal("InvalidPodTemplate"))
 			Expect(recorder.Events).To(Receive(Equal("Warning InvalidPodTemplate " + cond.Message)))
+			Expect(meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentTemplateApplied")).To(BeNil())
+			Expect(meta.FindStatusCondition(getServer().Status.Conditions, "MigrationJobTemplateApplied")).To(BeNil())
 		})
 
 		It("reports overrides of protected fields", func() {
@@ -387,8 +394,12 @@ var _ = Describe("PrefectServer pod templates", func() {
 		}
 	})
 
-	It("reports an invalid template", func() {
-		createServer(*ephemeral.DeepCopy())
+	It("clears stale template status when a valid template becomes invalid", func() {
+		spec := *ephemeral.DeepCopy()
+		spec.DeploymentTemplate = rawTemplate(`{"metadata":{"labels":{"app":"override"}}}`)
+		server := createServer(spec)
+		Expect(meta.FindStatusCondition(server.Status.Conditions, "DeploymentTemplateApplied").Reason).To(Equal("ProtectedFieldsIgnored"))
+		Expect(recorder.Events).To(Receive())
 		resourceVersion := getDeployment().ResourceVersion
 
 		err := setDeploymentTemplate(rawTemplate(`{"spec":{"securtyContext":{}}}`))
@@ -401,5 +412,9 @@ var _ = Describe("PrefectServer pod templates", func() {
 		Expect(cond.Reason).To(Equal("InvalidPodTemplate"))
 		Expect(recorder.Events).To(Receive(Equal("Warning InvalidPodTemplate " + cond.Message)))
 		Expect(getDeployment().ResourceVersion).To(Equal(resourceVersion))
+		Expect(meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentTemplateApplied")).To(BeNil())
+
+		Expect(setDeploymentTemplate(rawTemplate(`{"spec":{"securityContext":{"runAsNonRoot":true}}}`))).To(Succeed())
+		Expect(meta.FindStatusCondition(getServer().Status.Conditions, "DeploymentTemplateApplied").Reason).To(Equal("TemplateApplied"))
 	})
 })

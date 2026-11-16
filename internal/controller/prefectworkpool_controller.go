@@ -148,6 +148,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	podTemplate, ignored, err := workerPodTemplate(&workPool)
 	if err != nil {
+		meta.RemoveStatusCondition(&workPool.Status.Conditions, "DeploymentTemplateApplied")
 		meta.SetStatusCondition(&workPool.Status.Conditions, conditions.InvalidPodTemplate(objName, err))
 		r.Recorder.Eventf(&workPool, nil, corev1.EventTypeWarning, "InvalidPodTemplate", eventActionSync, "%v", err)
 		// Retrying won't help until the user fixes the template, which triggers

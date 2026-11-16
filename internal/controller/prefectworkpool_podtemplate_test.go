@@ -232,11 +232,13 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 		Expect(deployment.Generation).To(Equal(generation))
 	})
 
-	It("reports an invalid template", func() {
-		createWorkPool(nil)
+	It("clears stale template status when a valid template becomes invalid", func() {
+		workPool := createWorkPool(rawTemplate(`{"spec":{"containers":[{"name":"prefect-worker","env":[{"name":"PREFECT_API_URL","value":"http://override"}]}]}}`))
+		Expect(meta.FindStatusCondition(workPool.Status.Conditions, "DeploymentTemplateApplied").Reason).To(Equal("ProtectedFieldsIgnored"))
+		Expect(recorder.Events).To(Receive())
 		resourceVersion := getDeployment().ResourceVersion
 
-		workPool := getWorkPool()
+		workPool = getWorkPool()
 		workPool.Spec.DeploymentTemplate = rawTemplate(`{"spec":{"securtyContext":{}}}`)
 		Expect(k8sClient.Update(ctx, workPool)).To(Succeed())
 
@@ -253,6 +255,10 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 		Expect(cond.Reason).To(Equal("InvalidPodTemplate"))
 		Expect(recorder.Events).To(Receive(Equal("Warning InvalidPodTemplate " + cond.Message)))
 		Expect(getDeployment().ResourceVersion).To(Equal(resourceVersion))
+		Expect(meta.FindStatusCondition(getWorkPool().Status.Conditions, "DeploymentTemplateApplied")).To(BeNil())
+
+		Expect(setDeploymentTemplate(rawTemplate(`{"spec":{"securityContext":{"runAsNonRoot":true}}}`))).To(Succeed())
+		Expect(meta.FindStatusCondition(getWorkPool().Status.Conditions, "DeploymentTemplateApplied").Reason).To(Equal("TemplateApplied"))
 	})
 
 	It("reports the version from the prefect-worker container", func() {
