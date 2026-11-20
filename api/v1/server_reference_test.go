@@ -56,7 +56,6 @@ var _ = Describe("PrefectServerReference", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-secret",
 					Namespace: namespace,
-					Labels:    map[string]string{LabelAPIKey: "true"},
 				},
 				Data: map[string][]byte{
 					"api-key": []byte("secret-api-key-value"),
@@ -79,42 +78,6 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiKey).To(Equal("secret-api-key-value"))
 		})
-
-		DescribeTable("Should refuse a Secret without the prefect.io/api-key=true label",
-			func(labels map[string]string) {
-				secret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "unlabeled-secret",
-						Namespace: namespace,
-						Labels:    labels,
-					},
-					Data: map[string][]byte{
-						"api-key": []byte("secret-api-key-value"),
-					},
-				}
-				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-
-				serverRef := &PrefectServerReference{
-					APIKey: &APIKeySpec{
-						ValueFrom: &corev1.EnvVarSource{
-							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "unlabeled-secret"},
-								Key:                  "api-key",
-							},
-						},
-					},
-				}
-
-				apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
-				Expect(err).To(MatchError(ContainSubstring("secret unlabeled-secret does not have the label prefect.io/api-key=true")))
-				Expect(apiKey).To(BeEmpty())
-			},
-			Entry("no labels", nil),
-			Entry("other labels only", map[string]string{"app": "prefect"}),
-			Entry("label set to false", map[string]string{LabelAPIKey: "false"}),
-			Entry("label set to an empty string", map[string]string{LabelAPIKey: ""}),
-			Entry("label value in another case", map[string]string{LabelAPIKey: "True"}),
-		)
 
 		It("Should retrieve API key from ConfigMap when ValueFrom.ConfigMapKeyRef is set", func() {
 			configMap := &corev1.ConfigMap{
@@ -185,7 +148,6 @@ var _ = Describe("PrefectServerReference", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-secret",
 					Namespace: namespace,
-					Labels:    map[string]string{LabelAPIKey: "true"},
 				},
 				Data: map[string][]byte{
 					"wrong-key": []byte("some-value"),
@@ -426,7 +388,6 @@ var _ = Describe("PrefectServerReference", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "prefect-api-secret",
 					Namespace: namespace,
-					Labels:    map[string]string{LabelAPIKey: "true"},
 				},
 				Data: map[string][]byte{
 					"api-key": []byte("test-api-key-value"),

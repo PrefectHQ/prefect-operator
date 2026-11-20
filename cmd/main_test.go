@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -16,19 +15,11 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 )
-
-func TestMain(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Manager Suite")
-}
 
 // These tests run as a user bound to the ClusterRole that the chart renders
 // from files/role.yaml, with a manager built from managerOptions. They fail
@@ -42,27 +33,14 @@ var _ = Describe("Reading an API key Secret with the operator's RBAC", Ordered, 
 
 	var (
 		ctx         context.Context
-		adminClient client.Client
 		operatorCfg *rest.Config
 		serverRef   *prefectiov1.PrefectServerReference
 	)
 
 	BeforeAll(func() {
-		logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 		ctx = context.Background()
 
-		if os.Getenv("KUBEBUILDER_ASSETS") == "" {
-			Fail("KUBEBUILDER_ASSETS is not set. Run `make test`, or set it the way the Makefile's test target does.")
-		}
-		testEnv := &envtest.Environment{}
-		cfg, err := testEnv.Start()
-		Expect(err).NotTo(HaveOccurred())
-		DeferCleanup(testEnv.Stop)
-
-		adminClient, err = client.New(cfg, client.Options{Scheme: scheme})
-		Expect(err).NotTo(HaveOccurred())
-
-		raw, err := os.ReadFile(filepath.Join("..", "deploy", "charts", "prefect-operator", "files", "role.yaml"))
+		raw, err := os.ReadFile(filepath.Join(chartFiles, "role.yaml"))
 		Expect(err).NotTo(HaveOccurred())
 		role := &rbacv1.ClusterRole{}
 		Expect(yaml.Unmarshal(raw, role)).To(Succeed())
@@ -73,16 +51,13 @@ var _ = Describe("Reading an API key Secret with the operator's RBAC", Ordered, 
 			Subjects:   []rbacv1.Subject{{APIGroup: rbacv1.GroupName, Kind: rbacv1.UserKind, Name: userName}},
 		})).To(Succeed())
 
-		user, err := testEnv.AddUser(envtest.User{Name: userName}, cfg)
-		Expect(err).NotTo(HaveOccurred())
-		operatorCfg = user.Config()
+		operatorCfg = addUser(userName)
 
 		Expect(adminClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}})).To(Succeed())
 		Expect(adminClient.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "prefect-api-key",
 				Namespace: namespaceName,
-				Labels:    map[string]string{prefectiov1.LabelAPIKey: "true"},
 			},
 			Data: map[string][]byte{"api-key": []byte("test-api-key-value")},
 		})).To(Succeed())

@@ -1,0 +1,30 @@
+{{- /*
+Renders each ValidatingAdmissionPolicy in files/admission-policies/ with a
+binding that denies the requests it rejects. Policies are cluster-scoped, so
+their names start with the release's full name.
+*/}}
+{{- if .Values.admissionPolicy.enabled }}
+{{- range $path, $_ := .Files.Glob "files/admission-policies/*.yaml" }}
+{{- $policy := $.Files.Get $path | fromYaml }}
+{{- $name := printf "%s-%s" (include "common.names.fullname" $) (required (printf "%s must set metadata.name" $path) $policy.metadata.name) }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $name }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" $.Values.commonLabels "context" $ ) | nindent 4 }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $.Values.commonAnnotations "context" $ ) | nindent 4 }}
+spec:
+  {{- $policy.spec | toYaml | nindent 2 }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $name }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" $.Values.commonLabels "context" $ ) | nindent 4 }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $.Values.commonAnnotations "context" $ ) | nindent 4 }}
+spec:
+  policyName: {{ $name }}
+  validationActions: [Deny]
+{{- end }}
+{{- end }}

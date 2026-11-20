@@ -2729,8 +2729,8 @@ spec:
                       valueFrom:
                         description: |-
                           ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-                          in the resource's namespace. A Secret must have the label
-                          prefect.io/api-key: "true", or the operator does not read it.
+                          in the resource's namespace. The chart's admission policy lets you name
+                          only a Secret or ConfigMap that your own RBAC lets you get.
                         properties:
                           configMapKeyRef:
                             description: Selects a key of a ConfigMap.

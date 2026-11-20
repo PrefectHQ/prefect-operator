@@ -282,8 +282,8 @@ APIKey is the API key to use to connect to a remote Prefect Server
         <td>object</td>
         <td>
           ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-in the resource's namespace. A Secret must have the label
-prefect.io/api-key: "true", or the operator does not read it.<br/>
+in the resource's namespace. The chart's admission policy lets you name
+only a Secret or ConfigMap that your own RBAC lets you get.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -296,8 +296,8 @@ prefect.io/api-key: "true", or the operator does not read it.<br/>
 
 
 ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-in the resource's namespace. A Secret must have the label
-prefect.io/api-key: "true", or the operator does not read it.
+in the resource's namespace. The chart's admission policy lets you name
+only a Secret or ConfigMap that your own RBAC lets you get.
 
 <table>
     <thead>

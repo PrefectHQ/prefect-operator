@@ -1,0 +1,26 @@
+# The operator creates a Deployment from each PrefectServer and PrefectWorkPool.
+# Its pod template comes from the spec: extraContainers, settings,
+# serviceAccountName and deploymentTemplate. This policy lets a request create
+# or change one only if the requester may create Deployments in its namespace.
+# Requests that leave the spec unchanged, such as the operator adding its
+# finalizer, are not checked.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workload-permissions
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["prefect.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["prefectservers", "prefectworkpools"]
+  validations:
+    - expression: >-
+        (request.operation == 'UPDATE' && object.?spec == oldObject.?spec) ||
+        authorizer.group('apps').resource('deployments').namespace(request.namespace).check('create').allowed()
+      messageExpression: >-
+        'the operator creates a Deployment from each ' + request.kind.kind +
+        ', so writing its spec requires permission to create Deployments in namespace ' + request.namespace
+      reason: Forbidden
