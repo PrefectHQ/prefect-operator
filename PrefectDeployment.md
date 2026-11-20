@@ -539,7 +539,9 @@ APIKey is the API key to use to connect to a remote Prefect Server
         <td><b><a href="#prefectdeploymentspecserverapikeyvaluefrom">valueFrom</a></b></td>
         <td>object</td>
         <td>
-          ValueFrom is a reference to a secret containing the API key<br/>
+          ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
+in the resource's namespace. A Secret must have the label
+prefect.io/api-key: "true", or the operator does not read it.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -551,7 +553,9 @@ APIKey is the API key to use to connect to a remote Prefect Server
 
 
 
-ValueFrom is a reference to a secret containing the API key
+ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
+in the resource's namespace. A Secret must have the label
+prefect.io/api-key: "true", or the operator does not read it.
 
 <table>
     <thead>

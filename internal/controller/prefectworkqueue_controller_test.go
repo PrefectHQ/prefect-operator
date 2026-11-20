@@ -67,7 +67,7 @@ var _ = Describe("PrefectWorkQueue controller", func() {
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
 		apiKeySecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "prefect-api-key", Namespace: namespaceName},
+			ObjectMeta: metav1.ObjectMeta{Name: "prefect-api-key", Namespace: namespaceName, Labels: map[string]string{prefectiov1.LabelAPIKey: "true"}},
 			Data:       map[string][]byte{"api-key": []byte("test-api-key-value")},
 		}
 		Expect(k8sClient.Create(ctx, apiKeySecret)).To(Succeed())

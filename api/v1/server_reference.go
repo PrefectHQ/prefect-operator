@@ -31,12 +31,20 @@ type PrefectServerReference struct {
 	WorkspaceID *string `json:"workspaceId,omitempty"`
 }
 
+// LabelAPIKey is the label a Secret must have, set to "true", before the
+// operator reads an API key from it. The operator sends the key to the server
+// that the resource names, so the label lets only someone who can update the
+// Secret allow that.
+const LabelAPIKey = "prefect.io/api-key"
+
 // APIKeySpec is the API key to use to connect to a remote Prefect Server
 type APIKeySpec struct {
 	// Value is the literal value of the API key
 	Value *string `json:"value,omitempty"`
 
-	// ValueFrom is a reference to a secret containing the API key
+	// ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
+	// in the resource's namespace. A Secret must have the label
+	// prefect.io/api-key: "true", or the operator does not read it.
 	ValueFrom *corev1.EnvVarSource `json:"valueFrom,omitempty"`
 }
 
@@ -81,7 +89,13 @@ func (s *PrefectServerReference) IsPrefectCloud() bool {
 	return s.AccountID != nil && *s.AccountID != "" && s.WorkspaceID != nil && *s.WorkspaceID != ""
 }
 
-// GetAPIKey retrieves the API key from the configured source
+// The operator reads API key Secrets by name only. Its client does not cache
+// Secrets, so it needs no list or watch.
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get
+
+// GetAPIKey returns the API key from the configured source. It returns an
+// error if the Secret or ConfigMap, or the key in it, does not exist, or if
+// the Secret does not have the LabelAPIKey label set to "true".
 func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
 	if s.APIKey == nil {
 		return "", nil
@@ -102,6 +116,10 @@ func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client
 
 			if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
 				return "", fmt.Errorf("failed to get secret %s: %w", secretRef.Name, err)
+			}
+
+			if secret.Labels[LabelAPIKey] != "true" {
+				return "", fmt.Errorf("secret %s does not have the label %s=true, which the operator requires before it reads an API key from a Secret", secretRef.Name, LabelAPIKey)
 			}
 
 			value, exists := secret.Data[secretRef.Key]

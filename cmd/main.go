@@ -16,6 +16,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -44,6 +46,7 @@ func main() {
 	var probeAddr string
 	var enableHTTP2 bool
 	var defaultResyncInterval time.Duration
+	var reconcileTimeout time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -54,6 +57,9 @@ func main() {
 	flag.DurationVar(&defaultResyncInterval, "default-resync-interval", 5*time.Minute,
 		"How often to re-check each Prefect resource against the Prefect API to correct "+
 			"out-of-band drift, unless a resource sets its own spec.interval.")
+	flag.DurationVar(&reconcileTimeout, "reconcile-timeout", 2*time.Minute,
+		"How long one reconcile may run before its context is canceled and it is retried. "+
+			"0 means no limit.")
 	// Without --zap-* flags, logs are JSON at info level. `make run` passes
 	// --zap-devel for console output at debug level.
 	opts := zap.Options{}
@@ -105,6 +111,12 @@ func main() {
 		LeaderElectionReleaseOnCancel: true,
 		Cache: cache.Options{
 			DefaultNamespaces: getWatchNamespaces(),
+		},
+		Client: client.Options{
+			Cache: &client.CacheOptions{DisableFor: prefect.UncachedObjects()},
+		},
+		Controller: config.Controller{
+			ReconciliationTimeout: reconcileTimeout,
 		},
 	})
 	if err != nil {
