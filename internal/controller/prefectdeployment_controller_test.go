@@ -69,6 +69,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "prefect-api-key",
 				Namespace: namespaceName,
+				Labels:    map[string]string{prefectiov1.LabelAPIKey: "true"},
 			},
 			Data: map[string][]byte{
 				"api-key": []byte("test-api-key-value"),
@@ -606,6 +607,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "secret-wrong-key",
 					Namespace: namespaceName,
+					Labels:    map[string]string{prefectiov1.LabelAPIKey: "true"},
 				},
 				Data: map[string][]byte{
 					"wrong-key": []byte("some-value"),
@@ -927,6 +929,34 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
 			Expect(prefectDeployment.Status.Ready).To(BeTrue())
 			Expect(prefectAPI.Calls(createDeploymentRoute)).To(Equal(1))
+		})
+
+		It("Should not send the API key from a Secret without the prefect.io/api-key label", func() {
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespaceName, Name: "prefect-api-key"}, secret)).To(Succeed())
+			delete(secret.Labels, prefectiov1.LabelAPIKey)
+			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
+
+			prefectDeployment.Spec.Server.RemoteAPIURL = new(prefectAPI.URL)
+			prefectDeployment.Spec.Server.AccountID = nil
+			prefectDeployment.Spec.Server.WorkspaceID = nil
+			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient)
+
+			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+			By("Finalizer pass")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).To(MatchError(ContainSubstring("does not have the label prefect.io/api-key=true")))
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.Ready).To(BeFalse())
+			cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("PrefectClientError"))
+			Expect(cond.Message).To(ContainSubstring("prefect.io/api-key=true"))
+			Expect(prefectAPI.Calls(readWorkPoolRoute)).To(BeZero())
 		})
 	})
 

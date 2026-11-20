@@ -11,6 +11,7 @@ import (
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/portforward"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -104,8 +105,18 @@ func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerR
 // points to. namespace is the namespace of the resource that holds serverRef.
 type ClientFactory func(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, namespace string) (*Client, error)
 
+// UncachedObjects returns the kinds that a ClientFactory's Kubernetes client
+// must read from the API server instead of its cache. Pass it as
+// client.CacheOptions.DisableFor. The operator has get on Secrets but not
+// list or watch, so a cached Secret read would start an informer that the API
+// server refuses, and the read would block until its context ends.
+func UncachedObjects() []client.Object {
+	return []client.Object{&corev1.Secret{}}
+}
+
 // NewClientFactory returns a ClientFactory that reads API keys through
-// k8sClient and logs with the logger in the context.
+// k8sClient and logs with the logger in the context. k8sClient must not cache
+// the kinds in UncachedObjects.
 func NewClientFactory(k8sClient client.Client) ClientFactory {
 	return func(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, namespace string) (*Client, error) {
 		return NewClientFromK8s(ctx, serverRef, k8sClient, namespace, log.FromContext(ctx))

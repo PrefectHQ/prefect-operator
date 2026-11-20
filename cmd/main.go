@@ -16,6 +16,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -44,6 +46,7 @@ func main() {
 	var probeAddr string
 	var enableHTTP2 bool
 	var defaultResyncInterval time.Duration
+	var reconcileTimeout time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -54,6 +57,9 @@ func main() {
 	flag.DurationVar(&defaultResyncInterval, "default-resync-interval", 5*time.Minute,
 		"How often to re-check each Prefect resource against the Prefect API to correct "+
 			"out-of-band drift, unless a resource sets its own spec.interval.")
+	flag.DurationVar(&reconcileTimeout, "reconcile-timeout", 2*time.Minute,
+		"How long one reconcile may run before its context is canceled and it is retried. "+
+			"0 means no limit.")
 	// Without --zap-* flags, logs are JSON at info level. `make run` passes
 	// --zap-devel for console output at debug level.
 	opts := zap.Options{}
@@ -82,31 +88,28 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress: metricsAddr,
-			TLSOpts:     tlsOpts,
-		},
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "fd9f6399.prefect.io",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		LeaderElectionReleaseOnCancel: true,
-		Cache: cache.Options{
-			DefaultNamespaces: getWatchNamespaces(),
-		},
-	})
+	mgrOpts := managerOptions(reconcileTimeout)
+	mgrOpts.Metrics = metricsserver.Options{
+		BindAddress: metricsAddr,
+		TLSOpts:     tlsOpts,
+	}
+	mgrOpts.WebhookServer = webhookServer
+	mgrOpts.HealthProbeBindAddress = probeAddr
+	mgrOpts.LeaderElection = enableLeaderElection
+	mgrOpts.LeaderElectionID = "fd9f6399.prefect.io"
+	// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+	// when the Manager ends. This requires the binary to immediately end when the
+	// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+	// speeds up voluntary leader transitions as the new leader don't have to wait
+	// LeaseDuration time first.
+	//
+	// In the default scaffold provided, the program ends immediately after
+	// the manager stops, so would be fine to enable this option. However,
+	// if you are doing or is intended to do any operation such as perform cleanups
+	// after the manager stops then its usage might be unsafe.
+	mgrOpts.LeaderElectionReleaseOnCancel = true
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -183,6 +186,25 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+// managerOptions returns the manager options that control how the operator
+// reads Kubernetes objects. The client reads the kinds in
+// prefect.UncachedObjects from the API server, because the operator's RBAC
+// grants get on them but not list or watch.
+func managerOptions(reconcileTimeout time.Duration) ctrl.Options {
+	return ctrl.Options{
+		Scheme: scheme,
+		Cache: cache.Options{
+			DefaultNamespaces: getWatchNamespaces(),
+		},
+		Client: client.Options{
+			Cache: &client.CacheOptions{DisableFor: prefect.UncachedObjects()},
+		},
+		Controller: config.Controller{
+			ReconciliationTimeout: reconcileTimeout,
+		},
 	}
 }
 

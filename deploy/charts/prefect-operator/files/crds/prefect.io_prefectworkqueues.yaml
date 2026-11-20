@@ -136,8 +136,10 @@ spec:
                         description: Value is the literal value of the API key
                         type: string
                       valueFrom:
-                        description: ValueFrom is a reference to a secret containing
-                          the API key
+                        description: |-
+                          ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
+                          in the resource's namespace. A Secret must have the label
+                          prefect.io/api-key: "true", or the operator does not read it.
                         properties:
                           configMapKeyRef:
                             description: Selects a key of a ConfigMap.
