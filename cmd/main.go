@@ -88,37 +88,28 @@ func main() {
 		TLSOpts: tlsOpts,
 	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress: metricsAddr,
-			TLSOpts:     tlsOpts,
-		},
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "fd9f6399.prefect.io",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		LeaderElectionReleaseOnCancel: true,
-		Cache: cache.Options{
-			DefaultNamespaces: getWatchNamespaces(),
-		},
-		Client: client.Options{
-			Cache: &client.CacheOptions{DisableFor: prefect.UncachedObjects()},
-		},
-		Controller: config.Controller{
-			ReconciliationTimeout: reconcileTimeout,
-		},
-	})
+	mgrOpts := managerOptions(reconcileTimeout)
+	mgrOpts.Metrics = metricsserver.Options{
+		BindAddress: metricsAddr,
+		TLSOpts:     tlsOpts,
+	}
+	mgrOpts.WebhookServer = webhookServer
+	mgrOpts.HealthProbeBindAddress = probeAddr
+	mgrOpts.LeaderElection = enableLeaderElection
+	mgrOpts.LeaderElectionID = "fd9f6399.prefect.io"
+	// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+	// when the Manager ends. This requires the binary to immediately end when the
+	// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+	// speeds up voluntary leader transitions as the new leader don't have to wait
+	// LeaseDuration time first.
+	//
+	// In the default scaffold provided, the program ends immediately after
+	// the manager stops, so would be fine to enable this option. However,
+	// if you are doing or is intended to do any operation such as perform cleanups
+	// after the manager stops then its usage might be unsafe.
+	mgrOpts.LeaderElectionReleaseOnCancel = true
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -195,6 +186,25 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+// managerOptions returns the manager options that control how the operator
+// reads Kubernetes objects. The client reads the kinds in
+// prefect.UncachedObjects from the API server, because the operator's RBAC
+// grants get on them but not list or watch.
+func managerOptions(reconcileTimeout time.Duration) ctrl.Options {
+	return ctrl.Options{
+		Scheme: scheme,
+		Cache: cache.Options{
+			DefaultNamespaces: getWatchNamespaces(),
+		},
+		Client: client.Options{
+			Cache: &client.CacheOptions{DisableFor: prefect.UncachedObjects()},
+		},
+		Controller: config.Controller{
+			ReconciliationTimeout: reconcileTimeout,
+		},
 	}
 }
 
