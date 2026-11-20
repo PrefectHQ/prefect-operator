@@ -133,6 +133,32 @@ the reason `InvalidPodTemplate`, emits a Warning event, and leaves the running
 pods as they are. It tries again when the template changes. A template that
 adds a container with the name of an existing one is rejected the same way.
 
+## API keys from Secrets and ConfigMaps
+
+A resource can read its Prefect API key from a Secret or ConfigMap with
+`spec.server.apiKey.valueFrom`. The Secret or ConfigMap must have the annotation
+`prefect.io/allowed-api-urls`, a comma-separated list of the Prefect API URLs
+that the key may be used for. The operator refuses a key without the annotation,
+or for a server whose API URL doesn't match an entry:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prefect-api-key
+  annotations:
+    prefect.io/allowed-api-urls: https://api.prefect.cloud/api/accounts/<account-id>/workspaces/<workspace-id>
+stringData:
+  api-key: pnu_...
+```
+
+An entry matches when its scheme and host, including any port, equal the API
+URL's, and its path is the API URL's path or a parent of it. For a remote server,
+the API URL is `remoteApiUrl` with `/api` appended if it's missing, followed by
+`/accounts/<accountId>/workspaces/<workspaceId>` when both are set. For an
+in-cluster server, it's `http://<name>.<namespace>.svc:4200/api`. The resource's
+`Synced` condition names the annotation when the operator refuses a key.
+
 ## Permissions for writing Prefect resources
 
 The operator uses its own service account to create Deployments and read API
@@ -142,7 +168,7 @@ resource also requires the RBAC for what the operator then does with it:
 | Resource | The requester also needs |
 | --- | --- |
 | `PrefectServer`, `PrefectWorkPool` | `create` on `deployments` in the resource's namespace. The operator builds a Deployment from the spec, including `extraContainers`, `settings`, `serviceAccountName` and `deploymentTemplate`. |
-| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | `get` on the Secret or ConfigMap that `spec.server.apiKey.valueFrom` names. The operator sends that API key to the server that `spec.server` names. |
+| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | `get` on the Secret or ConfigMap that `spec.server.apiKey.valueFrom` names. |
 
 The chart's editor roles grant only the Prefect resources, so grant these
 permissions alongside them. The policies don't check a request that leaves the
@@ -150,8 +176,11 @@ spec unchanged, or for the second row `spec.server`, such as the operator adding
 its finalizer. They check new requests only, so resources that already exist
 aren't checked until someone changes them.
 
-The policies need Kubernetes 1.30 or later. Set `admissionPolicy.enabled: false`
-to leave them out.
+The policies need Kubernetes 1.30 or later, and `admissionPolicy.enabled`
+controls whether the chart installs them. Without them, anyone who can write a
+`PrefectServer` or `PrefectWorkPool` can run any container, with any service
+account, in its namespace. The `prefect.io/allowed-api-urls` annotation applies
+either way.
 
 A `PrefectDeployment` runs flow code on the work pool's workers. Its
 `jobVariables` fill in the work pool's base job template, so the template

@@ -42,8 +42,10 @@ func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference,
 	// Create a base client first to check if we're running in cluster
 	baseClient := NewClient("", apiKey, log)
 
-	// Determine if we need port-forwarding
-	needsPortForwarding := !baseClient.isRunningInCluster() && serverRef.IsInCluster()
+	// GetAPIURL prefers RemoteAPIURL over Name, and GetAPIKey checks the API
+	// key's allowed URLs against GetAPIURL, so a reference with both must not
+	// port-forward to the server that Name names.
+	needsPortForwarding := !baseClient.isRunningInCluster() && serverRef.IsInCluster() && !serverRef.IsRemote()
 
 	// Set the base URL based on whether we need port-forwarding
 	var baseURL string

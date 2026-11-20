@@ -878,6 +878,21 @@ var _ = Describe("Prefect HTTP Client", func() {
 					Expect(client).NotTo(BeNil())
 					Expect(client.BaseURL).To(Equal("https://api.prefect.cloud/api"))
 				})
+
+				It("should send requests to the remote API URL when Name is also set", func() {
+					serverRef = &prefectiov1.PrefectServerReference{
+						RemoteAPIURL: new("https://api.prefect.cloud"),
+						Name:         testServerName,
+						Namespace:    "prefect-system",
+					}
+
+					client, err := NewClientFromServerReference(serverRef, "test-key", "test-namespace", logger)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client.BaseURL).To(Equal(serverRef.GetAPIURL("test-namespace")))
+					Expect(client.BaseURL).To(Equal("https://api.prefect.cloud/api"))
+					Expect(client.PortForwardClient).To(BeNil())
+				})
 			})
 
 			Context("URL generation for different scenarios", func() {

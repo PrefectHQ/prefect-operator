@@ -54,8 +54,9 @@ var _ = Describe("PrefectServerReference", func() {
 		It("Should retrieve API key from Secret when ValueFrom.SecretKeyRef is set", func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-secret",
-					Namespace: namespace,
+					Name:        "test-secret",
+					Namespace:   namespace,
+					Annotations: map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string][]byte{
 					"api-key": []byte("secret-api-key-value"),
@@ -64,6 +65,7 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -82,8 +84,9 @@ var _ = Describe("PrefectServerReference", func() {
 		It("Should retrieve API key from ConfigMap when ValueFrom.ConfigMapKeyRef is set", func() {
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-configmap",
-					Namespace: namespace,
+					Name:        "test-configmap",
+					Namespace:   namespace,
+					Annotations: map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string]string{
 					"api-key": "configmap-api-key-value",
@@ -92,6 +95,7 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
 
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -109,6 +113,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should return error when Secret does not exist", func() {
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -127,6 +132,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should return error when ConfigMap does not exist", func() {
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -146,8 +152,9 @@ var _ = Describe("PrefectServerReference", func() {
 		It("Should return error when key does not exist in Secret", func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-secret",
-					Namespace: namespace,
+					Name:        "test-secret",
+					Namespace:   namespace,
+					Annotations: map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string][]byte{
 					"wrong-key": []byte("some-value"),
@@ -156,6 +163,7 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -175,8 +183,9 @@ var _ = Describe("PrefectServerReference", func() {
 		It("Should return error when key does not exist in ConfigMap", func() {
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-configmap",
-					Namespace: namespace,
+					Name:        "test-configmap",
+					Namespace:   namespace,
+					Annotations: map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string]string{
 					"wrong-key": "some-value",
@@ -185,6 +194,7 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
 
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -203,6 +213,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 		It("Should return empty string when ValueFrom is set but no SecretKeyRef or ConfigMapKeyRef", func() {
 			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{},
 				},
@@ -212,6 +223,98 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiKey).To(Equal(""))
 		})
+	})
+
+	Context("Checking where an API key may be used", func() {
+		newServerRef := func(apiURL string, valueFrom *corev1.EnvVarSource) *PrefectServerReference {
+			return &PrefectServerReference{RemoteAPIURL: new(apiURL), APIKey: &APIKeySpec{ValueFrom: valueFrom}}
+		}
+		secretRef := &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "api-key-secret"}, Key: "api-key",
+		}}
+		configMapRef := &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "api-key-config"}, Key: "api-key",
+		}}
+
+		createKeyObjects := func(annotations map[string]string) {
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "api-key-secret", Namespace: namespace, Annotations: annotations},
+				Data:       map[string][]byte{"api-key": []byte("secret-api-key-value")},
+			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "api-key-config", Namespace: namespace, Annotations: annotations},
+				Data:       map[string]string{"api-key": "configmap-api-key-value"},
+			})).To(Succeed())
+		}
+
+		It("Should refuse a Secret or ConfigMap without the annotation", func() {
+			createKeyObjects(map[string]string{"other": "annotation"})
+
+			_, err := newServerRef("https://api.prefect.cloud", secretRef).GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(
+				"secret api-key-secret does not have the annotation prefect.io/allowed-api-urls, " +
+					"which must list the Prefect API URLs that its API key may be used for"))
+			_, err = newServerRef("https://api.prefect.cloud", configMapRef).GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(ContainSubstring("configmap api-key-config does not have the annotation")))
+		})
+
+		It("Should refuse an API URL that the annotation doesn't allow", func() {
+			createKeyObjects(map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud"})
+
+			apiKey, err := newServerRef("https://prefect.example.com", secretRef).GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(
+				`secret api-key-secret does not allow its API key to be used for "https://prefect.example.com/api": ` +
+					`its annotation prefect.io/allowed-api-urls is "https://api.prefect.cloud"`))
+			Expect(apiKey).To(BeEmpty())
+			_, err = newServerRef("https://prefect.example.com", configMapRef).GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(ContainSubstring("configmap api-key-config does not allow its API key")))
+		})
+
+		It("Should check the API URL with the account and workspace", func() {
+			createKeyObjects(map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud/api/accounts/a"})
+			serverRef := newServerRef("https://api.prefect.cloud", secretRef)
+			serverRef.AccountID = new("a")
+			serverRef.WorkspaceID = new("w")
+
+			Expect(serverRef.GetAPIKey(ctx, k8sClient, namespace)).To(Equal("secret-api-key-value"))
+			serverRef.AccountID = new("b")
+			_, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(ContainSubstring("does not allow its API key")))
+		})
+
+		It("Should check an in-cluster server's service URL", func() {
+			createKeyObjects(map[string]string{AnnotationAllowedAPIURLs: "http://prefect.prefect-system.svc:4200"})
+			serverRef := &PrefectServerReference{Name: "prefect", Namespace: "prefect-system", APIKey: &APIKeySpec{ValueFrom: secretRef}}
+
+			Expect(serverRef.GetAPIKey(ctx, k8sClient, namespace)).To(Equal("secret-api-key-value"))
+			serverRef.Name = "other"
+			_, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(ContainSubstring("does not allow its API key")))
+		})
+
+		DescribeTable("APIURLAllowed",
+			func(allowed, apiURL string, want bool) {
+				Expect(APIURLAllowed(allowed, apiURL)).To(Equal(want))
+			},
+			Entry("the same URL", "https://api.prefect.cloud/api", "https://api.prefect.cloud/api", true),
+			Entry("a host without a path", "https://api.prefect.cloud", "https://api.prefect.cloud/api/accounts/a", true),
+			Entry("a parent path", "https://api.prefect.cloud/api/accounts/a", "https://api.prefect.cloud/api/accounts/a/workspaces/w", true),
+			Entry("a trailing slash", "https://api.prefect.cloud/api/accounts/a/", "https://api.prefect.cloud/api/accounts/a/workspaces/w", true),
+			Entry("scheme and host in another case", "HTTPS://API.Prefect.Cloud", "https://api.prefect.cloud/api", true),
+			Entry("the second of several entries", "https://a.example.com, https://api.prefect.cloud", "https://api.prefect.cloud/api", true),
+			Entry("a path that only shares a prefix", "https://api.prefect.cloud/api/accounts/a", "https://api.prefect.cloud/api/accounts/ab", false),
+			Entry("a dot-dot segment that leaves the path", "https://api.prefect.cloud/api/accounts/a", "https://api.prefect.cloud/api/accounts/a/../b", false),
+			Entry("an encoded dot-dot segment", "https://api.prefect.cloud/api/accounts/a", "https://api.prefect.cloud/api/accounts/a/%2e%2e/b", false),
+			Entry("a host with the allowed host as a prefix", "https://api.prefect.cloud", "https://api.prefect.cloud.example.com/api", false),
+			Entry("a host with the allowed host as a suffix", "https://prefect.cloud", "https://api.prefect.cloud/api", false),
+			Entry("user information before the host", "https://api.prefect.cloud", "https://api.prefect.cloud@example.com/api", false),
+			Entry("another scheme", "https://api.prefect.cloud", "http://api.prefect.cloud/api", false),
+			Entry("another port", "https://api.prefect.cloud", "https://api.prefect.cloud:8443/api", false),
+			Entry("an entry with a query", "https://api.prefect.cloud?x=1", "https://api.prefect.cloud/api", false),
+			Entry("an entry without a scheme", "api.prefect.cloud", "https://api.prefect.cloud/api", false),
+			Entry("an empty annotation", "", "https://api.prefect.cloud/api", false),
+			Entry("an empty API URL", "https://api.prefect.cloud", "", false),
+		)
 	})
 
 	Context("GetAPIURL method", func() {
@@ -386,8 +489,9 @@ var _ = Describe("PrefectServerReference", func() {
 			// Create a Secret for API key
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "prefect-api-secret",
-					Namespace: namespace,
+					Name:        "prefect-api-secret",
+					Namespace:   namespace,
+					Annotations: map[string]string{AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string][]byte{
 					"api-key": []byte("test-api-key-value"),

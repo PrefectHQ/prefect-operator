@@ -56,13 +56,15 @@ var _ = Describe("Reading an API key Secret with the operator's RBAC", Ordered, 
 		Expect(adminClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}})).To(Succeed())
 		Expect(adminClient.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "prefect-api-key",
-				Namespace: namespaceName,
+				Name:        "prefect-api-key",
+				Namespace:   namespaceName,
+				Annotations: map[string]string{prefectiov1.AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 			},
 			Data: map[string][]byte{"api-key": []byte("test-api-key-value")},
 		})).To(Succeed())
 
 		serverRef = &prefectiov1.PrefectServerReference{
+			RemoteAPIURL: new("https://api.prefect.cloud"),
 			APIKey: &prefectiov1.APIKeySpec{
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{

@@ -2,6 +2,10 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: the-api-key-secret
+  annotations:
+    # The Prefect API URLs that this key may be used for, comma-separated. Use
+    # the URL with your account and workspace to allow only that workspace.
+    prefect.io/allowed-api-urls: https://api.prefect.cloud/api/accounts/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/workspaces/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 type: Opaque
 stringData:
   the-api-key: pnu_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

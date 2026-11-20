@@ -3,6 +3,8 @@ package v1
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -37,8 +39,10 @@ type APIKeySpec struct {
 	Value *string `json:"value,omitempty"`
 
 	// ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-	// in the resource's namespace. The chart's admission policy lets you name
-	// only a Secret or ConfigMap that your own RBAC lets you get.
+	// in the resource's namespace. The Secret or ConfigMap must have the
+	// annotation prefect.io/allowed-api-urls, a comma-separated list of the
+	// Prefect API URLs that the key may be used for. The chart's admission
+	// policy also requires that you may get the Secret or ConfigMap.
 	ValueFrom *corev1.EnvVarSource `json:"valueFrom,omitempty"`
 }
 
@@ -83,12 +87,20 @@ func (s *PrefectServerReference) IsPrefectCloud() bool {
 	return s.AccountID != nil && *s.AccountID != "" && s.WorkspaceID != nil && *s.WorkspaceID != ""
 }
 
+// AnnotationAllowedAPIURLs is the annotation that a Secret or ConfigMap must
+// have before the operator reads an API key from it. Its value is a
+// comma-separated list of Prefect API URLs. The operator uses the key only for
+// a server whose API URL matches one of them: see APIURLAllowed.
+const AnnotationAllowedAPIURLs = "prefect.io/allowed-api-urls"
+
 // The operator reads API key Secrets by name only. Its client does not cache
 // Secrets, so it needs no list or watch.
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get
 
-// GetAPIKey returns the API key from the configured source. It returns an
-// error if the Secret or ConfigMap, or the key in it, does not exist.
+// GetAPIKey returns the API key from the configured source. namespace is the
+// namespace of the resource that holds s. It returns an error if the Secret or
+// ConfigMap, or the key in it, does not exist, or if the object's
+// AnnotationAllowedAPIURLs annotation does not allow s's API URL.
 func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
 	if s.APIKey == nil {
 		return "", nil
@@ -98,47 +110,100 @@ func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client
 		return *s.APIKey.Value, nil
 	}
 
-	if s.APIKey.ValueFrom != nil {
-		if s.APIKey.ValueFrom.SecretKeyRef != nil {
-			secretRef := s.APIKey.ValueFrom.SecretKeyRef
-			secret := &corev1.Secret{}
-			secretKey := types.NamespacedName{
-				Name:      secretRef.Name,
-				Namespace: namespace,
-			}
+	if s.APIKey.ValueFrom == nil {
+		return "", nil
+	}
 
-			if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
-				return "", fmt.Errorf("failed to get secret %s: %w", secretRef.Name, err)
-			}
+	apiURL := s.GetAPIURL(namespace)
 
-			value, exists := secret.Data[secretRef.Key]
-			if !exists {
-				return "", fmt.Errorf("key %s not found in secret %s", secretRef.Key, secretRef.Name)
-			}
-
-			return string(value), nil
+	if ref := s.APIKey.ValueFrom.SecretKeyRef; ref != nil {
+		secret := &corev1.Secret{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
+			return "", fmt.Errorf("failed to get secret %s: %w", ref.Name, err)
 		}
-
-		if s.APIKey.ValueFrom.ConfigMapKeyRef != nil {
-			configMapRef := s.APIKey.ValueFrom.ConfigMapKeyRef
-			configMap := &corev1.ConfigMap{}
-			configMapKey := types.NamespacedName{
-				Name:      configMapRef.Name,
-				Namespace: namespace,
-			}
-
-			if err := k8sClient.Get(ctx, configMapKey, configMap); err != nil {
-				return "", fmt.Errorf("failed to get configmap %s: %w", configMapRef.Name, err)
-			}
-
-			value, exists := configMap.Data[configMapRef.Key]
-			if !exists {
-				return "", fmt.Errorf("key %s not found in configmap %s", configMapRef.Key, configMapRef.Name)
-			}
-
-			return value, nil
+		if err := checkAllowedAPIURL("secret", ref.Name, secret.Annotations, apiURL); err != nil {
+			return "", err
 		}
+		value, exists := secret.Data[ref.Key]
+		if !exists {
+			return "", fmt.Errorf("key %s not found in secret %s", ref.Key, ref.Name)
+		}
+		return string(value), nil
+	}
+
+	if ref := s.APIKey.ValueFrom.ConfigMapKeyRef; ref != nil {
+		configMap := &corev1.ConfigMap{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, configMap); err != nil {
+			return "", fmt.Errorf("failed to get configmap %s: %w", ref.Name, err)
+		}
+		if err := checkAllowedAPIURL("configmap", ref.Name, configMap.Annotations, apiURL); err != nil {
+			return "", err
+		}
+		value, exists := configMap.Data[ref.Key]
+		if !exists {
+			return "", fmt.Errorf("key %s not found in configmap %s", ref.Key, ref.Name)
+		}
+		return value, nil
 	}
 
 	return "", nil
+}
+
+// checkAllowedAPIURL returns an error unless the AnnotationAllowedAPIURLs
+// annotation in annotations allows apiURL. kind and name name the object that
+// has the annotations, for the error message.
+func checkAllowedAPIURL(kind, name string, annotations map[string]string, apiURL string) error {
+	allowed, ok := annotations[AnnotationAllowedAPIURLs]
+	if !ok {
+		return fmt.Errorf("%s %s does not have the annotation %s, which must list the Prefect API URLs that its API key may be used for",
+			kind, name, AnnotationAllowedAPIURLs)
+	}
+	if !APIURLAllowed(allowed, apiURL) {
+		return fmt.Errorf("%s %s does not allow its API key to be used for %q: its annotation %s is %q",
+			kind, name, apiURL, AnnotationAllowedAPIURLs, allowed)
+	}
+	return nil
+}
+
+// APIURLAllowed reports whether apiURL matches an entry in allowed, a
+// comma-separated list of URLs. An entry matches when its scheme and host,
+// including any port, equal apiURL's, and its path is apiURL's path or a parent
+// of it. Paths are compared after resolving "." and ".." segments, so
+// "https://api.prefect.cloud/api/accounts/a" matches
+// "https://api.prefect.cloud/api/accounts/a/workspaces/w" but not
+// "https://api.prefect.cloud/api/accounts/ab" or
+// "https://api.prefect.cloud/api/accounts/a/../b". An entry with user
+// information, a query or a fragment matches nothing.
+func APIURLAllowed(allowed, apiURL string) bool {
+	target, ok := parseAPIURL(apiURL)
+	if !ok {
+		return false
+	}
+	for entry := range strings.SplitSeq(allowed, ",") {
+		want, ok := parseAPIURL(strings.TrimSpace(entry))
+		if !ok || want.Scheme != target.Scheme || want.Host != target.Host {
+			continue
+		}
+		if want.Path == "/" || want.Path == target.Path || strings.HasPrefix(target.Path, want.Path+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// parseAPIURL parses an absolute http or https URL, with its scheme and host in
+// lower case and its path cleaned. It returns false for any other URL, or one
+// with user information, a query or a fragment.
+func parseAPIURL(raw string) (*url.URL, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return nil, false
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, false
+	}
+	u.Path = path.Clean("/" + u.Path)
+	return u, true
 }
