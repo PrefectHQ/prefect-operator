@@ -62,14 +62,19 @@ func (s *PrefectServerReference) GetAPIURL(fallbackNamespace string) string {
 
 	// For in-cluster servers, construct the service URL
 	if s.Name != "" {
-		serverNamespace := s.Namespace
-		if serverNamespace == "" {
-			serverNamespace = fallbackNamespace
-		}
-		return "http://" + s.Name + "." + serverNamespace + ".svc:4200/api"
+		return "http://" + s.Name + "." + s.ServerNamespace(fallbackNamespace) + ".svc:4200/api"
 	}
 
 	return ""
+}
+
+// ServerNamespace returns the namespace of the in-cluster server that s
+// names: Namespace, or fallbackNamespace when Namespace is empty.
+func (s *PrefectServerReference) ServerNamespace(fallbackNamespace string) string {
+	if s.Namespace == "" {
+		return fallbackNamespace
+	}
+	return s.Namespace
 }
 
 // IsRemote returns true if this references a remote Prefect server

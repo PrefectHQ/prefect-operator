@@ -318,6 +318,7 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 		log.Error(err, "Failed to create Prefect client", "workPool", name)
 		return r.syncFailed(workPool, "PrefectClientError", err)
 	}
+	defer prefectClient.Close()
 
 	prefectWorkPool, err := prefectClient.GetWorkPool(ctx, name)
 	if err != nil {
@@ -435,6 +436,7 @@ func (r *PrefectWorkPoolReconciler) handleDeletion(ctx context.Context, workPool
 			if err != nil {
 				return fmt.Errorf("creating Prefect client: %w", err)
 			}
+			defer prefectClient.Close()
 			return prefectClient.DeleteWorkPool(ctx, workPool.Name)
 		}
 	}

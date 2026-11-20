@@ -853,7 +853,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(serverRefWithRemote, "test-key", "fallback-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), serverRefWithRemote, "test-key", "fallback-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -872,7 +872,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), serverRef, "test-key", "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -886,12 +886,12 @@ var _ = Describe("Prefect HTTP Client", func() {
 						Namespace:    "prefect-system",
 					}
 
-					client, err := NewClientFromServerReference(serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), serverRef, "test-key", "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client.BaseURL).To(Equal(serverRef.GetAPIURL("test-namespace")))
 					Expect(client.BaseURL).To(Equal("https://api.prefect.cloud/api"))
-					Expect(client.PortForwardClient).To(BeNil())
+					Expect(client.portForward).To(BeNil())
 				})
 			})
 

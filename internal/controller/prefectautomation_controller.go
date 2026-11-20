@@ -141,6 +141,7 @@ func (r *PrefectAutomationReconciler) syncWithPrefect(ctx context.Context, autom
 		r.notSynced(ctx, automation, "PrefectClientError", err.Error())
 		return ctrl.Result{}, err
 	}
+	defer prefectClient.Close()
 
 	// Resolve any deploymentName references to deployment IDs. If a referenced
 	// deployment doesn't exist yet (e.g. its PrefectDeployment hasn't reconciled),
@@ -254,6 +255,7 @@ func (r *PrefectAutomationReconciler) handleDeletion(ctx context.Context, automa
 			if err != nil {
 				return fmt.Errorf("creating Prefect client: %w", err)
 			}
+			defer prefectClient.Close()
 			return prefectClient.DeleteAutomation(ctx, *id)
 		}
 	}
