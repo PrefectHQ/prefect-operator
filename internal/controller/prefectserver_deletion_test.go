@@ -183,6 +183,41 @@ var _ = Describe("PrefectServer deletion", func() {
 		Expect(serverGone()).To(BeTrue())
 	})
 
+	It("doesn't wait when the server's namespace is being deleted", func() {
+		reconcileServer()
+		other := newNamespace("server-deletion-other")
+		workPool(namespace, "local", prefectiov1.PrefectServerReference{Name: server.Name})
+		remote := workPool(other, "remote", prefectiov1.PrefectServerReference{Name: server.Name, Namespace: namespace})
+
+		Expect(k8sClient.Delete(ctx, server)).To(Succeed())
+		reconcileServer()
+		Expect(serverGone()).To(BeFalse())
+
+		// A namespace in envtest stays in Terminating, because no controller
+		// deletes its contents.
+		Expect(k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}})).To(Succeed())
+		Expect(reconcileServer()).To(Equal(reconcile.Result{}))
+		Expect(serverGone()).To(BeTrue())
+
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(remote), remote)).To(Succeed())
+		Expect(remote.DeletionTimestamp).To(BeNil())
+	})
+
+	It("keeps waiting when a dependent's namespace is being deleted", func() {
+		reconcileServer()
+		other := newNamespace("server-deletion-other")
+		remote := workPool(other, "remote", prefectiov1.PrefectServerReference{Name: server.Name, Namespace: namespace})
+
+		Expect(k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: other}})).To(Succeed())
+		Expect(k8sClient.Delete(ctx, server)).To(Succeed())
+		reconcileServer()
+		Expect(serverGone()).To(BeFalse())
+
+		finishDeleting(remote, PrefectWorkPoolFinalizer)
+		reconcileServer()
+		Expect(serverGone()).To(BeTrue())
+	})
+
 	It("doesn't wait for a resource that also sets remoteApiUrl", func() {
 		reconcileServer()
 		pool := workPool(namespace, "remote", prefectiov1.PrefectServerReference{

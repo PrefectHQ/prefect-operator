@@ -14,6 +14,7 @@ In every namespace it watches, it can:
 - create and delete Jobs
 - read ConfigMaps, and read Secrets by name
 - read Pods
+- read Namespaces by name, to check whether one is being deleted
 - create Events
 - manage the five Prefect custom resources and their status
 

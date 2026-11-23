@@ -115,6 +115,10 @@ func (r *PrefectServerReconciler) serverDependents(ctx context.Context, server *
 // only for dependents that are being deleted would race with a command like
 // `kubectl delete -f server.yaml -f work-pool.yaml`, which can delete the
 // server before the work pool has a deletion timestamp.
+//
+// The server doesn't wait in a terminating namespace. Kubernetes deletes its
+// Deployment and Service there whether or not it has a finalizer, so waiting
+// would only hold up the namespace's deletion.
 func (r *PrefectServerReconciler) handleDeletion(ctx context.Context, server *prefectiov1.PrefectServer) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(server, PrefectServerFinalizer) {
 		return ctrl.Result{}, nil
@@ -125,6 +129,11 @@ func (r *PrefectServerReconciler) handleDeletion(ctx context.Context, server *pr
 		return ctrl.Result{}, err
 	}
 	if len(dependents) == 0 {
+		return finalize(ctx, r.Client, r.Recorder, server, PrefectServerFinalizer, nil)
+	}
+
+	if namespaceTerminating(ctx, r.Client, server.Namespace) {
+		log.FromContext(ctx).Info("Not waiting for resources that use the server, because its namespace is being deleted", "dependents", dependents)
 		return finalize(ctx, r.Client, r.Recorder, server, PrefectServerFinalizer, nil)
 	}
 

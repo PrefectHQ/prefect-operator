@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -153,5 +154,153 @@ var _ = Describe("finalize", func() {
 
 		controllerutil.RemoveFinalizer(obj, finalizer)
 		Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+	})
+
+	Context("in a terminating namespace", func() {
+		var namespace *corev1.Namespace
+
+		// queueDeleting creates a PrefectWorkQueue with server and the
+		// finalizer, deletes its namespace and then the queue, and returns
+		// the queue as read back.
+		queueDeleting := func(server prefectiov1.PrefectServerReference) *prefectiov1.PrefectWorkQueue {
+			queue := &prefectiov1.PrefectWorkQueue{
+				ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace, Finalizers: []string{finalizer}},
+				Spec:       prefectiov1.PrefectWorkQueueSpec{Server: server, Name: "default", WorkPoolName: "pool"},
+			}
+			Expect(k8sClient.Create(ctx, queue)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, namespace)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, queue)).To(Succeed())
+			Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
+			return queue
+		}
+
+		failingDelete := func(context.Context) error {
+			calls++
+			return errors.New("no such host")
+		}
+
+		expectQueueGone := func() {
+			err := k8sClient.Get(ctx, name, &prefectiov1.PrefectWorkQueue{})
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the PrefectWorkQueue to be deleted, got %v", err)
+		}
+
+		secretRef := func(secretName string) *corev1.SecretKeySelector {
+			return &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secretName}, Key: "key"}
+		}
+
+		BeforeEach(func() {
+			namespace = &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name.Namespace}, namespace)).To(Succeed())
+		})
+
+		It("removes the finalizer after one failed delete when the server's Service is gone", func() {
+			queue := queueDeleting(prefectiov1.PrefectServerReference{Name: "prefect"})
+
+			result, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.IsZero()).To(BeTrue())
+			Expect(calls).To(Equal(1))
+			Expect(recorder.Events).To(Receive(Equal(fmt.Sprintf(
+				"Warning DeleteFailed Failed to delete from Prefect, and Service %s/prefect was deleted with its namespace, "+
+					"so it may still exist there: no such host", name.Namespace))))
+			expectQueueGone()
+		})
+
+		It("removes the finalizer after one failed delete when the API key Secret is gone", func() {
+			queue := queueDeleting(prefectiov1.PrefectServerReference{
+				RemoteAPIURL: new("https://prefect.example.com"),
+				APIKey:       &prefectiov1.APIKeySpec{ValueFrom: &corev1.EnvVarSource{SecretKeyRef: secretRef("api-key")}},
+			})
+
+			_, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(recorder.Events).To(Receive(ContainSubstring(
+				fmt.Sprintf("and Secret %s/api-key was deleted with its namespace", name.Namespace))))
+			expectQueueGone()
+		})
+
+		It("removes the finalizer after one failed delete when the auth Secret is gone", func() {
+			queue := queueDeleting(prefectiov1.PrefectServerReference{
+				RemoteAPIURL: new("https://prefect.example.com"),
+				Auth:         &prefectiov1.ServerAuth{SecretKeyRef: *secretRef("auth")},
+			})
+
+			_, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(recorder.Events).To(Receive(ContainSubstring(
+				fmt.Sprintf("and Secret %s/auth was deleted with its namespace", name.Namespace))))
+			expectQueueGone()
+		})
+
+		It("keeps retrying while the Secret and Service it needs exist", func() {
+			Expect(k8sClient.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "auth", Namespace: name.Namespace}})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "prefect", Namespace: name.Namespace},
+				Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 4200}}},
+			})).To(Succeed())
+			queue := queueDeleting(prefectiov1.PrefectServerReference{
+				Name: "prefect",
+				Auth: &prefectiov1.ServerAuth{SecretKeyRef: *secretRef("auth")},
+			})
+
+			result, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+			Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
+			Expect(queue.Finalizers).To(ConsistOf(finalizer))
+
+			controllerutil.RemoveFinalizer(queue, finalizer)
+			Expect(k8sClient.Update(ctx, queue)).To(Succeed())
+		})
+
+		It("keeps retrying when the server's namespace isn't terminating", func() {
+			otherNamespace := fmt.Sprintf("finalize-server-ns-%d", time.Now().UnixNano())
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherNamespace}})).To(Succeed())
+			queue := queueDeleting(prefectiov1.PrefectServerReference{Name: "prefect", Namespace: otherNamespace})
+
+			result, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+			Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
+			Expect(queue.Finalizers).To(ConsistOf(finalizer))
+
+			controllerutil.RemoveFinalizer(queue, finalizer)
+			Expect(k8sClient.Update(ctx, queue)).To(Succeed())
+		})
+	})
+
+	It("keeps retrying when the namespace isn't terminating, even if the Secret is gone", func() {
+		queue := &prefectiov1.PrefectWorkQueue{
+			ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace, Finalizers: []string{finalizer}},
+			Spec: prefectiov1.PrefectWorkQueueSpec{
+				Server: prefectiov1.PrefectServerReference{
+					RemoteAPIURL: new("https://prefect.example.com"),
+					APIKey: &prefectiov1.APIKeySpec{ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "api-key"}, Key: "key"}}},
+				},
+				Name:         "default",
+				WorkPoolName: "pool",
+			},
+		}
+		Expect(k8sClient.Create(ctx, queue)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, queue)).To(Succeed())
+		Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
+
+		result, err := finalize(ctx, k8sClient, recorder, queue, finalizer, func(context.Context) error {
+			return errors.New("secret not found")
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+		Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
+		Expect(queue.Finalizers).To(ConsistOf(finalizer))
+
+		controllerutil.RemoveFinalizer(queue, finalizer)
+		Expect(k8sClient.Update(ctx, queue)).To(Succeed())
 	})
 })

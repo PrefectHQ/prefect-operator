@@ -23,8 +23,10 @@ kubectl get events --field-selector reason=DeleteFailed
 ```
 
 The operator gives up and removes the finalizer one hour after the deletion
-started. To remove it sooner, and leave the object in Prefect, see
-[Deletion](../../concepts/how-it-works/#deletion).
+started. When the resource's namespace is being deleted and the Secret,
+ConfigMap, or server Service that the delete needs is gone, it gives up after
+the first failed delete. To remove the finalizer sooner, and leave the object
+in Prefect, see [Deletion](../../concepts/how-it-works/#deletion).
 
 If the operator isn't running, nothing removes the finalizer. Start the
 operator again, or remove the finalizer by hand.

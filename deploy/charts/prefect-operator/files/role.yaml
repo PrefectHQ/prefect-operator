@@ -16,6 +16,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   - services
   verbs:
@@ -26,12 +33,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
 - apiGroups:
   - ""
   - events.k8s.io

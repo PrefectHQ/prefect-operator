@@ -182,6 +182,14 @@ If the delete in Prefect fails, the operator keeps the finalizer, records a
 resource's deletion timestamp, it removes the finalizer anyway. The event then
 says that the object may still exist in Prefect.
 
+In a namespace that is being deleted, the operator doesn't wait an hour when
+the delete needs an object that the namespace's deletion already removed: the
+Secret or ConfigMap with the API key or auth string, or the Service of the
+in-cluster server. Nothing can create that object again, so after the first
+failed delete the operator removes the finalizer. Kubernetes doesn't accept
+events in a namespace that is being deleted, so the operator's log is the only
+record. It names the missing object in its `deleted` field.
+
 To remove a resource without touching Prefect, remove its finalizer:
 
 ```sh
@@ -205,6 +213,17 @@ that URL. The server's Deployment and Service keep running, so those resources
 can still delete their objects from it. When the last one is gone, the
 operator removes the finalizer, and garbage collection deletes the Deployment
 and Service.
+
+Deleting the server's namespace doesn't keep the server running. Kubernetes
+deletes the namespace's Deployments, Services, and Secrets directly, so the
+operator removes the server's finalizer without waiting. A resource that hasn't
+deleted its object from the server by then can't reach it. The operator removes
+the finalizer of a resource in that namespace, as described in
+[Deletion](#deletion), and its object stays in the server's database. A resource
+in another namespace isn't deleted, and fails to sync. If you delete it after
+the server's namespace is gone, it stays in `Terminating` for up to an hour. With an ephemeral or SQLite server, the
+database is deleted with the namespace. With PostgreSQL, delete the resources
+before the namespace to remove their objects from Prefect.
 
 If you delete only the server, it waits until you delete the others, with no
 time limit. `kubectl delete` blocks until then, unless you pass

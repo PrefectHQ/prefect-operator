@@ -238,7 +238,7 @@ func clusterConfig() (*rest.Config, portforward.Kubectl, error) {
 
 // managerOptions returns the manager options that control how the operator
 // reads Kubernetes objects. The client reads the kinds in
-// prefect.UncachedObjects from the API server, because the operator's RBAC
+// controller.UncachedObjects from the API server, because the operator's RBAC
 // grants get on them but not list or watch.
 func managerOptions(reconcileTimeout time.Duration) ctrl.Options {
 	return ctrl.Options{
@@ -247,7 +247,7 @@ func managerOptions(reconcileTimeout time.Duration) ctrl.Options {
 			DefaultNamespaces: getWatchNamespaces(),
 		},
 		Client: client.Options{
-			Cache: &client.CacheOptions{DisableFor: prefect.UncachedObjects()},
+			Cache: &client.CacheOptions{DisableFor: controller.UncachedObjects()},
 		},
 		Controller: config.Controller{
 			ReconciliationTimeout: reconcileTimeout,
