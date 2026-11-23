@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // readyTimeout is how long Start waits for kubectl to report its local port
@@ -37,20 +39,59 @@ type Forward struct {
 	err    error
 }
 
+// Kubectl holds the kubeconfig and context that every port-forward passes
+// to kubectl. Without them, kubectl would use whatever context is current in
+// the kubeconfig when the forward starts, which can be a different cluster
+// from the one the operator watches.
+type Kubectl struct {
+	// Kubeconfig is passed as --kubeconfig. When it is empty, kubectl reads
+	// $KUBECONFIG or ~/.kube/config, as the operator does.
+	Kubeconfig string
+	// Context is passed as --context. Start refuses to run without it.
+	Context string
+}
+
+// PinCurrentContext returns a Kubectl for the context that is current now in
+// the kubeconfig at kubeconfigPath, or in the default kubeconfig when
+// kubeconfigPath is empty. It returns an error if the kubeconfig names no
+// current context.
+func PinCurrentContext(kubeconfigPath string) (Kubectl, error) {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if kubeconfigPath != "" {
+		rules = &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}
+	}
+	raw, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{}).RawConfig()
+	if err != nil {
+		return Kubectl{}, fmt.Errorf("reading the kubeconfig: %w", err)
+	}
+	if raw.CurrentContext == "" {
+		return Kubectl{}, errors.New("the kubeconfig has no current context")
+	}
+	return Kubectl{Kubeconfig: kubeconfigPath, Context: raw.CurrentContext}, nil
+}
+
 // Start runs kubectl port-forward from 127.0.0.1 to remotePort of the Service
 // named service in namespace. kubectl picks a free local port, so concurrent
 // forwards never share one. Start returns once an HTTP request through the
 // forward gets a response. The forward stops when ctx ends or Close is called.
-// namespace must not be empty: kubectl would use its context's namespace.
-func Start(ctx context.Context, namespace, service string, remotePort int) (*Forward, error) {
+// k.Context and namespace must not be empty, because kubectl would fill them
+// in from the kubeconfig's current context.
+func (k Kubectl) Start(ctx context.Context, namespace, service string, remotePort int) (*Forward, error) {
+	if k.Context == "" {
+		return nil, errors.New("port-forward needs a kubeconfig context")
+	}
 	if namespace == "" {
 		return nil, errors.New("port-forward needs a namespace")
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(ctx, "kubectl", "port-forward",
-		"--namespace", namespace, "--address", "127.0.0.1",
+	args := []string{"port-forward", "--context", k.Context}
+	if k.Kubeconfig != "" {
+		args = append(args, "--kubeconfig", k.Kubeconfig)
+	}
+	args = append(args, "--namespace", namespace, "--address", "127.0.0.1",
 		"svc/"+service, fmt.Sprintf(":%d", remotePort))
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	// kubectl prints a line for every connection, so stdout is read until
 	// kubectl exits. WaitDelay stops Wait from blocking on the pipe if a
 	// child process holds it open after kubectl exits.

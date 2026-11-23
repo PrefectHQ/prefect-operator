@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/portforward"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
@@ -927,7 +928,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			prefectDeployment.Spec.Server.RemoteAPIURL = new(prefectAPI.URL)
 			prefectDeployment.Spec.Server.AccountID = nil
 			prefectDeployment.Spec.Server.WorkspaceID = nil
-			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient)
+			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient, portforward.Kubectl{})
 			allowAPIKeyFor(prefectAPI.URL)
 
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
@@ -945,7 +946,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 			prefectDeployment.Spec.Server.RemoteAPIURL = new(prefectAPI.URL)
 			prefectDeployment.Spec.Server.AccountID = nil
 			prefectDeployment.Spec.Server.WorkspaceID = nil
-			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient)
+			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient, portforward.Kubectl{})
 
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 			By("Finalizer pass")

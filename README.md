@@ -224,6 +224,8 @@ make install run
 
 Installing CRDs needs cluster-wide permissions. If `make install` fails with RBAC errors, use an account with cluster-admin.
 
+The operator reaches in-cluster Prefect servers through `kubectl port-forward`. It uses the kube context that was current when it started, so switching contexts afterwards doesn't move it to another cluster. Restart it to pick up a new context.
+
 In another shell, apply a sample resource from [deploy/samples](deploy/samples/):
 
 ```sh

@@ -51,9 +51,9 @@ func refuseRedirect(req *http.Request, _ []*http.Request) error {
 // NewClientFromServerReference creates a Client for the server that serverRef
 // points to. fallbackNamespace is the namespace of the resource that holds
 // serverRef. When the operator runs outside the cluster and serverRef names an
-// in-cluster server, it starts a kubectl port-forward to that server, which
-// runs until ctx ends or the Client is closed.
-func NewClientFromServerReference(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
+// in-cluster server, it starts a port-forward to that server with kubectl,
+// which runs until ctx ends or the Client is closed.
+func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
 	// GetAPIURL prefers RemoteAPIURL over Name, and GetAPIKey checks the API
 	// key's allowed URLs against GetAPIURL, so a reference with both must not
 	// port-forward to the server that Name names.
@@ -67,7 +67,7 @@ func NewClientFromServerReference(ctx context.Context, serverRef *prefectiov1.Pr
 	// The forward must reach the Service in the namespace that GetAPIURL
 	// names, because GetAPIKey checked the API key against that URL.
 	namespace := serverRef.ServerNamespace(fallbackNamespace)
-	forward, err := portforward.Start(ctx, namespace, serverRef.Name, 4200)
+	forward, err := kubectl.Start(ctx, namespace, serverRef.Name, 4200)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +102,9 @@ func (c *Client) checkPortForward() error {
 }
 
 // NewClientFromK8s creates a Client from a PrefectServerReference, reading
-// the API key through the Kubernetes client.
-func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
+// the API key through the Kubernetes client. kubectl is used as in
+// NewClientFromServerReference.
+func NewClientFromK8s(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
 	// Get the API key from the server reference
 	apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
 	if err != nil {
@@ -111,7 +112,7 @@ func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerR
 	}
 
 	// Create client using the existing factory function, passing the namespace as fallback
-	return NewClientFromServerReference(ctx, serverRef, apiKey, namespace, log)
+	return NewClientFromServerReference(ctx, kubectl, serverRef, apiKey, namespace, log)
 }
 
 // ClientFactory returns a Client for the Prefect server that serverRef
@@ -129,10 +130,11 @@ func UncachedObjects() []client.Object {
 
 // NewClientFactory returns a ClientFactory that reads API keys through
 // k8sClient and logs with the logger in the context. k8sClient must not cache
-// the kinds in UncachedObjects.
-func NewClientFactory(k8sClient client.Client) ClientFactory {
+// the kinds in UncachedObjects. Outside the cluster, port-forwards run with
+// kubectl, which must name the context that k8sClient connects to.
+func NewClientFactory(k8sClient client.Client, kubectl portforward.Kubectl) ClientFactory {
 	return func(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, namespace string) (*Client, error) {
-		return NewClientFromK8s(ctx, serverRef, k8sClient, namespace, log.FromContext(ctx))
+		return NewClientFromK8s(ctx, kubectl, serverRef, k8sClient, namespace, log.FromContext(ctx))
 	}
 }
 

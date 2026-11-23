@@ -36,6 +36,10 @@ echo "Forwarding from 127.0.0.1:$port -> 4200"
 exec sleep 600
 `
 
+// testKubectl is the kubectl configuration that the client specs pass. The
+// fake kubectl only logs it.
+var testKubectl = portforward.Kubectl{Context: "test-context"}
+
 // recordingServer is a Prefect API stand-in that records the API keys it
 // receives.
 type recordingServer struct {
@@ -105,13 +109,13 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		DeferCleanup(server.Close)
 		GinkgoT().Setenv("FAKE_PORT_alpha", server.port())
 
-		client, err := NewClientFromServerReference(ctx,
+		client, err := NewClientFromServerReference(ctx, testKubectl,
 			&prefectiov1.PrefectServerReference{Name: "alpha"}, "key-a", "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(client.Close)
 
 		Expect(kubectlCalls()).To(ConsistOf(
-			"port-forward --namespace team-a --address 127.0.0.1 svc/alpha :4200"))
+			"port-forward --context test-context --namespace team-a --address 127.0.0.1 svc/alpha :4200"))
 		Expect(client.BaseURL).To(Equal("http://127.0.0.1:" + server.port() + "/api"))
 	})
 
@@ -123,11 +127,11 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		GinkgoT().Setenv("FAKE_PORT_alpha", alpha.port())
 		GinkgoT().Setenv("FAKE_PORT_beta", beta.port())
 
-		alphaClient, err := NewClientFromServerReference(ctx,
+		alphaClient, err := NewClientFromServerReference(ctx, testKubectl,
 			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(alphaClient.Close)
-		betaClient, err := NewClientFromServerReference(ctx,
+		betaClient, err := NewClientFromServerReference(ctx, testKubectl,
 			&prefectiov1.PrefectServerReference{Name: "beta", Namespace: "team-b"}, "key-b", "team-b", logger)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(betaClient.Close)
@@ -144,7 +148,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		DeferCleanup(server.Close)
 		GinkgoT().Setenv("FAKE_PORT_alpha", server.port())
 
-		client, err := NewClientFromServerReference(ctx,
+		client, err := NewClientFromServerReference(ctx, testKubectl,
 			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 		client.Close()
@@ -160,7 +164,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		GinkgoT().Setenv("FAKE_PORT_alpha", server.port())
 
 		clientCtx, cancel := context.WithCancel(ctx)
-		client, err := NewClientFromServerReference(clientCtx,
+		client, err := NewClientFromServerReference(clientCtx, testKubectl,
 			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -171,15 +175,79 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 	It("returns kubectl's error when kubectl exits before forwarding", func() {
 		GinkgoT().Setenv("FAKE_KUBECTL_FAIL", `services "alpha" not found`)
 
-		_, err := NewClientFromServerReference(ctx,
+		_, err := NewClientFromServerReference(ctx, testKubectl,
 			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
 		Expect(err).To(MatchError(ContainSubstring(`services "alpha" not found`)))
 	})
 
+	It("passes the kubeconfig to kubectl when one is set", func() {
+		server := newRecordingServer()
+		DeferCleanup(server.Close)
+		GinkgoT().Setenv("FAKE_PORT_alpha", server.port())
+
+		kubectl := portforward.Kubectl{Kubeconfig: "/tmp/operator-kubeconfig", Context: "kind"}
+		forward, err := kubectl.Start(ctx, "team-a", "alpha", 4200)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(forward.Close)
+
+		Expect(kubectlCalls()).To(ConsistOf(
+			"port-forward --context kind --kubeconfig /tmp/operator-kubeconfig --namespace team-a --address 127.0.0.1 svc/alpha :4200"))
+	})
+
 	It("refuses to forward without a namespace", func() {
-		_, err := portforward.Start(ctx, "", "alpha", 4200)
+		_, err := testKubectl.Start(ctx, "", "alpha", 4200)
 		Expect(err).To(MatchError(ContainSubstring("needs a namespace")))
 		Expect(kubectlCalls()).To(BeEmpty())
+	})
+
+	It("refuses to forward without a kubeconfig context", func() {
+		_, err := NewClientFromServerReference(ctx, portforward.Kubectl{},
+			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
+		Expect(err).To(MatchError(ContainSubstring("needs a kubeconfig context")))
+		Expect(kubectlCalls()).To(BeEmpty())
+	})
+})
+
+var _ = Describe("PinCurrentContext", func() {
+	kubeconfigWithCurrentContext := func(current string) string {
+		return `apiVersion: v1
+kind: Config
+clusters:
+- name: local
+  cluster: {server: "https://127.0.0.1:6443"}
+- name: production
+  cluster: {server: "https://203.0.113.10"}
+users:
+- name: someone
+  user: {token: not-a-real-token}
+contexts:
+- name: local
+  context: {cluster: local, user: someone}
+- name: production
+  context: {cluster: production, user: someone}
+current-context: "` + current + `"
+`
+	}
+
+	It("keeps the context that was current when it was called", func() {
+		path := filepath.Join(GinkgoT().TempDir(), "config")
+		Expect(os.WriteFile(path, []byte(kubeconfigWithCurrentContext("local")), 0o600)).To(Succeed())
+
+		kubectl, err := portforward.PinCurrentContext(path)
+		Expect(err).NotTo(HaveOccurred())
+
+		// What `kubectl config use-context production` does to the file.
+		Expect(os.WriteFile(path, []byte(kubeconfigWithCurrentContext("production")), 0o600)).To(Succeed())
+
+		Expect(kubectl).To(Equal(portforward.Kubectl{Kubeconfig: path, Context: "local"}))
+	})
+
+	It("returns an error when the kubeconfig has no current context", func() {
+		path := filepath.Join(GinkgoT().TempDir(), "config")
+		Expect(os.WriteFile(path, []byte(kubeconfigWithCurrentContext("")), 0o600)).To(Succeed())
+
+		_, err := portforward.PinCurrentContext(path)
+		Expect(err).To(MatchError(ContainSubstring("no current context")))
 	})
 })
 

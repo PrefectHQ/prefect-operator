@@ -853,7 +853,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(context.Background(), serverRefWithRemote, "test-key", "fallback-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRefWithRemote, "test-key", "fallback-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -872,7 +872,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(context.Background(), serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "test-key", "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -886,7 +886,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						Namespace:    "prefect-system",
 					}
 
-					client, err := NewClientFromServerReference(context.Background(), serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "test-key", "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client.BaseURL).To(Equal(serverRef.GetAPIURL("test-namespace")))
@@ -965,7 +965,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromK8s(ctx, serverRef, nil, "deployment-namespace", logger)
+					client, err := NewClientFromK8s(ctx, testKubectl, serverRef, nil, "deployment-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -988,7 +988,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromK8s(ctx, serverRef, nil, "deployment-namespace", logger)
+					client, err := NewClientFromK8s(ctx, testKubectl, serverRef, nil, "deployment-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
