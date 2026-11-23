@@ -26,7 +26,9 @@ the pool's workers in Kubernetes.
 
 Each object has an owner reference to its resource, with `controller: true`.
 Kubernetes garbage collection deletes the objects when you delete the
-resource. That includes the SQLite PVC, and with it the server's database.
+resource. That includes the SQLite PVC, and with it the server's database. A
+`PrefectServer`'s objects are deleted only after its finalizer is removed. See
+[Deleting a server](#deleting-a-server).
 
 The operator overwrites changes made directly to these objects on its next
 reconcile. To change them, change the resource, or patch the pod template with
@@ -144,19 +146,21 @@ The operator decides adoption on the first sync and doesn't change it later.
 
 ## Deletion
 
-Every Prefect API resource has a finalizer:
+Every resource has a finalizer:
 
 | Resource | Finalizer |
 | --- | --- |
+| `PrefectServer` | `prefect.io/server-cleanup` |
 | `PrefectWorkPool` | `prefect.io/work-pool-cleanup` |
 | `PrefectWorkQueue` | `prefect.io/workqueue-cleanup` |
 | `PrefectDeployment` | `prefect.io/deployment-cleanup` |
 | `PrefectAutomation` | `prefect.io/automation-cleanup` |
 
-When you delete one, the operator deletes its object in Prefect and then
-removes the finalizer. It leaves adopted work pools and work queues in place,
-because something else created them and may still depend on them. A
-`PrefectDeployment` deletes the deployment it synced, even one it took over.
+When you delete a Prefect API resource, the operator deletes its object in
+Prefect and then removes the finalizer. It leaves adopted work pools and work
+queues in place, because something else created them and may still depend on
+them. A `PrefectDeployment` deletes the deployment it synced, even one it took
+over.
 
 If the delete in Prefect fails, the operator keeps the finalizer, records a
 `DeleteFailed` Warning event, and retries every 30 seconds. One hour after the
@@ -170,10 +174,49 @@ kubectl patch prefectdeployment hello --type=merge -p '{"metadata":{"finalizers"
 kubectl delete prefectdeployment hello
 ```
 
-`PrefectServer` has no finalizer. Kubernetes deletes it, and garbage
-collection deletes its objects, without waiting for the resources that use it.
-Delete those resources first. Otherwise they can't reach the server, and they
-stay in `Terminating` until the hour runs out.
+### Deleting a server
+
+Delete a server together with the resources that use it:
+
+```sh
+kubectl delete -f server.yaml -f work-pool.yaml -f deployment.yaml
+```
+
+A `PrefectServer` keeps its finalizer while a `PrefectWorkPool`,
+`PrefectWorkQueue`, `PrefectDeployment`, or `PrefectAutomation` names it in
+`spec.server`. That includes resources in other namespaces that the operator
+watches. It leaves out resources that also set `remoteApiUrl`, because they use
+that URL. The server's Deployment and Service keep running, so those resources
+can still delete their objects from it. When the last one is gone, the
+operator removes the finalizer, and garbage collection deletes the Deployment
+and Service.
+
+If you delete only the server, it waits until you delete the others, with no
+time limit. `kubectl delete` blocks until then, unless you pass
+`--wait=false`. The `DeletionBlocked` condition names up to five of the
+resources, and a `DependentsExist` Warning event repeats its message:
+
+```sh
+kubectl get prefectserver prefect -o jsonpath='{.status.conditions[?(@.type=="DeletionBlocked")].message}'
+```
+
+```text
+2 resources use this server and must be deleted first: PrefectDeployment default/hello, PrefectWorkPool default/process-pool
+```
+
+To delete the server without waiting, remove its finalizer. The resources
+that use it then can't reach it, and they stay in `Terminating` until the
+operator gives up after an hour:
+
+```sh
+kubectl patch prefectserver prefect --type=merge -p '{"metadata":{"finalizers":null}}'
+```
+
+The server waits only with background cascading deletion, which is the
+default for `kubectl delete`. With `--cascade=foreground`, garbage collection
+deletes the Deployment and Service before the server, whatever finalizers the
+server has. Argo CD prunes with foreground deletion unless you set the
+`PrunePropagationPolicy=background` sync option.
 
 ## Status
 
@@ -187,6 +230,7 @@ the operator records.
 | Prefect API resources | `Ready` | The object exists in Prefect and matches the spec. |
 | `PrefectServer` | `DeploymentReconciled`, `ServiceReconciled` | The operator created or updated the object. |
 | `PrefectServer` | `PersistentVolumeClaimReconciled`, `MigrationJobReconciled` | As above. The reason ends in `NotRequired` when the storage backend doesn't use the object. |
+| `PrefectServer` | `DeletionBlocked` | The server is being deleted and waits for the resources that use it. The message names them. See [Deleting a server](#deleting-a-server). |
 | `PrefectServer` | `SharedStateConfigured` | `False` when more than one replica runs without Redis lease storage. See [Server storage](../../guides/server-storage/#more-than-one-replica). |
 | `PrefectServer`, `PrefectWorkPool` | `DeploymentTemplateApplied`, `MigrationJobTemplateApplied` | The pod template patch was applied. See [Pod templates](../../guides/pod-templates/). |
 | `PrefectWorkPool` | `DeploymentReconciled` | The operator created or updated the worker Deployment. |

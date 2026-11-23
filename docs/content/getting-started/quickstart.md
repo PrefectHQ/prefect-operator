@@ -116,20 +116,14 @@ and its runs are under **Runs**.
 
 ## Clean up
 
-Delete the server last:
-
 ```sh
-kubectl delete -f deployment.yaml -f work-pool.yaml
-kubectl delete -f server.yaml
+kubectl delete -f server.yaml -f work-pool.yaml -f deployment.yaml
 ```
 
-The first command waits while the operator deletes the deployment and the work
-pool from Prefect. Deleting the `PrefectServer` then deletes its Deployment and
-Service through their owner references.
-
-If you delete the server at the same time, the other two can't reach it to
-delete their objects. They stay in `Terminating` for an hour, until the
-operator gives up. See [Deletion](../../concepts/how-it-works/#deletion).
+The command waits while the operator deletes the deployment and the work pool
+from Prefect. The `PrefectServer` stays up until both are gone, and then
+Kubernetes deletes it along with its Deployment and Service. See
+[Deleting a server](../../concepts/how-it-works/#deleting-a-server).
 
 ## Next steps
 

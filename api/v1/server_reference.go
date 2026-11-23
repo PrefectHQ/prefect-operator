@@ -113,6 +113,18 @@ func (s *PrefectServerReference) IsPrefectCloud() bool {
 	return s.AccountID != nil && *s.AccountID != "" && s.WorkspaceID != nil && *s.WorkspaceID != ""
 }
 
+// ServerReference returns the work pool's spec.server.
+func (p *PrefectWorkPool) ServerReference() *PrefectServerReference { return &p.Spec.Server }
+
+// ServerReference returns the work queue's spec.server.
+func (q *PrefectWorkQueue) ServerReference() *PrefectServerReference { return &q.Spec.Server }
+
+// ServerReference returns the deployment's spec.server.
+func (d *PrefectDeployment) ServerReference() *PrefectServerReference { return &d.Spec.Server }
+
+// ServerReference returns the automation's spec.server.
+func (a *PrefectAutomation) ServerReference() *PrefectServerReference { return &a.Spec.Server }
+
 // AnnotationAllowedAPIURLs is the annotation that a Secret or ConfigMap must
 // have before the operator reads an API key from it. Its value is a
 // comma-separated list of Prefect API URLs. The operator uses the key only for
