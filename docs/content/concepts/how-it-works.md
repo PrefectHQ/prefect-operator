@@ -178,9 +178,10 @@ them. A `PrefectDeployment` deletes the deployment it synced, even one it took
 over.
 
 If the delete in Prefect fails, the operator keeps the finalizer, records a
-`DeleteFailed` Warning event, and retries every 30 seconds. One hour after the
-resource's deletion timestamp, it removes the finalizer anyway. The event then
-says that the object may still exist in Prefect.
+`DeleteFailed` Warning event, and retries. The first retry comes after one
+second, and each wait after that is about twice as long, up to 30 seconds.
+One hour after the resource's deletion timestamp, it removes the finalizer
+anyway. The event then says that the object may still exist in Prefect.
 
 In a namespace that is being deleted, the operator doesn't wait an hour when
 the delete needs an object that the namespace's deletion already removed: the

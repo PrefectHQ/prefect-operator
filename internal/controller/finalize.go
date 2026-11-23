@@ -21,14 +21,19 @@ import (
 // finalizer anyway. It is a variable so that tests can shorten it.
 var deleteRetryWindow = time.Hour
 
-// deleteRetryInterval is how long finalize waits between Prefect deletes.
+// deleteRetryInterval is the longest that finalize waits between Prefect
+// deletes. The PrefectServer finalizer also checks its dependents this often.
 const deleteRetryInterval = 30 * time.Second
+
+// deleteRetryMinInterval is the shortest that finalize waits between Prefect
+// deletes.
+const deleteRetryMinInterval = time.Second
 
 // finalize runs when obj is being deleted. It calls deleteFromPrefect, unless
 // it's nil, and then removes finalizer so that Kubernetes can delete obj.
 //
 // When deleteFromPrefect fails, finalize keeps the finalizer, records a
-// Warning event, and retries every deleteRetryInterval. A failure can be
+// Warning event, and retries after deleteRetryDelay. A failure can be
 // temporary, such as a Prefect outage or an API key whose Secret doesn't have
 // the prefect.io/allowed-api-urls annotation yet, and removing the finalizer
 // would leave the object in Prefect: a deployment there keeps running its
@@ -60,7 +65,7 @@ func finalize(ctx context.Context, c client.Client, recorder events.EventRecorde
 				log.Error(err, "Failed to delete from Prefect; retrying", "until", deadline)
 				recorder.Eventf(obj, nil, corev1.EventTypeWarning, "DeleteFailed", eventActionDelete,
 					"Failed to delete from Prefect, retrying until %s: %v", deadline.UTC().Format(time.RFC3339), err)
-				return ctrl.Result{RequeueAfter: min(deleteRetryInterval, remaining)}, nil
+				return ctrl.Result{RequeueAfter: min(deleteRetryDelay(time.Since(deletionTime(obj))), remaining)}, nil
 			}
 			log.Error(err, "Failed to delete from Prefect; removing the finalizer anyway")
 			recorder.Eventf(obj, nil, corev1.EventTypeWarning, "DeleteFailed", eventActionDelete,
@@ -151,6 +156,16 @@ func namespaceTerminating(ctx context.Context, c client.Client, name string) boo
 // list or watch.
 func UncachedObjects() []client.Object {
 	return append(prefect.UncachedObjects(), &corev1.Namespace{})
+}
+
+// deleteRetryDelay returns how long finalize waits before it retries a failed
+// Prefect delete, given the time since the object's deletion timestamp. The
+// delay equals that time, between deleteRetryMinInterval and
+// deleteRetryInterval, so it about doubles with each retry. A short failure,
+// such as a 503 from an ephemeral server that another delete is writing to,
+// then costs about a second instead of deleteRetryInterval.
+func deleteRetryDelay(sinceDeletion time.Duration) time.Duration {
+	return min(max(sinceDeletion, deleteRetryMinInterval), deleteRetryInterval)
 }
 
 // deletionTime returns obj's deletion timestamp, or the current time if obj
