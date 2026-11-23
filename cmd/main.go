@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/clusterdomain"
 	"github.com/PrefectHQ/prefect-operator/internal/controller"
 	"github.com/PrefectHQ/prefect-operator/internal/portforward"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
@@ -50,6 +51,7 @@ func main() {
 	var enableHTTP2 bool
 	var defaultResyncInterval time.Duration
 	var reconcileTimeout time.Duration
+	var clusterDomain string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -63,6 +65,10 @@ func main() {
 	flag.DurationVar(&reconcileTimeout, "reconcile-timeout", 2*time.Minute,
 		"How long one reconcile may run before its context is canceled and it is retried. "+
 			"0 means no limit.")
+	flag.StringVar(&clusterDomain, "cluster-domain", "",
+		"The DNS domain of the cluster, which the URLs of in-cluster Prefect servers end with. "+
+			"When empty, the operator reads it from the search domains in "+clusterdomain.ResolvConfPath+", "+
+			"and uses "+prefectiov1.DefaultClusterDomain+" if they do not include it.")
 	// Without --zap-* flags, logs are JSON at info level. `make run` passes
 	// --zap-devel for console output at debug level.
 	opts := zap.Options{}
@@ -70,6 +76,14 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	domain, err := clusterdomain.Resolve(clusterDomain, clusterdomain.ResolvConfPath)
+	if err != nil {
+		setupLog.Error(err, "unable to get the cluster domain")
+		os.Exit(1)
+	}
+	prefectiov1.ClusterDomain = domain
+	setupLog.Info("URLs of in-cluster Prefect servers use this cluster domain", "domain", domain)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

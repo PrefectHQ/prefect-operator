@@ -200,6 +200,21 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		}
 	})
 
+	It("should reject an in-cluster server name or namespace that isn't a DNS label", func() {
+		for _, server := range []prefectiov1.PrefectServerReference{
+			{Name: "elsewhere.example.com/x?"},
+			{Name: "Prefect"},
+			{Name: "prefect", Namespace: "other.example.com/x?"},
+		} {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace},
+				Spec:       prefectiov1.PrefectWorkPoolSpec{Server: server},
+			}
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(
+				MatchError(ContainSubstring("should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'")), server.Name+"/"+server.Namespace)
+		}
+	})
+
 	It("should allow specifying a Prefect version", func() {
 		prefectWorkPool = &prefectiov1.PrefectWorkPool{
 			ObjectMeta: metav1.ObjectMeta{

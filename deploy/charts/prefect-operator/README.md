@@ -130,6 +130,7 @@ Kubernetes: `>=1.30.0-0`
 | nameOverride | string | `""` | partially overrides common.names.name |
 | namespaceOverride | string | `""` | fully override common.names.namespace |
 | operator.affinity | object | `{}` | affinity for operator pods assignment |
+| operator.clusterDomain | string | `""` | DNS domain of the cluster, which the URLs of in-cluster Prefect servers end with. The operator reads it from its pod's DNS search domains when empty |
 | operator.containerSecurityContext.allowPrivilegeEscalation | bool | `false` | set operator containers' security context allowPrivilegeEscalation |
 | operator.containerSecurityContext.capabilities | object | `{"drop":["ALL"]}` | set operator container's security context capabilities |
 | operator.containerSecurityContext.enabled | bool | `true` | render the operator container's security context |

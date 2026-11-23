@@ -18,6 +18,14 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --default-resync-interval=90s
 
+  - it: configures the cluster domain
+    set:
+      operator.clusterDomain: k8s.example.com
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cluster-domain=k8s.example.com
+
   - it: logs JSON at info level by default
     asserts:
       - contains:

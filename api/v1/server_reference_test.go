@@ -306,7 +306,7 @@ var _ = Describe("PrefectServerReference", func() {
 		})
 
 		It("Should check an in-cluster server's service URL", func() {
-			createKeyObjects(map[string]string{AnnotationAllowedAPIURLs: "http://prefect.prefect-system.svc:4200"})
+			createKeyObjects(map[string]string{AnnotationAllowedAPIURLs: "http://prefect.prefect-system.svc.cluster.local:4200"})
 			serverRef := &PrefectServerReference{Name: "prefect", Namespace: "prefect-system", APIKey: &APIKeySpec{ValueFrom: secretRef}}
 
 			Expect(serverRef.GetAPIKey(ctx, k8sClient, namespace)).To(Equal("secret-api-key-value"))
@@ -322,6 +322,11 @@ var _ = Describe("PrefectServerReference", func() {
 			Entry("the same URL", "https://api.prefect.cloud/api", "https://api.prefect.cloud/api", true),
 			Entry("a host without a path", "https://api.prefect.cloud", "https://api.prefect.cloud/api/accounts/a", true),
 			Entry("a parent path", "https://api.prefect.cloud/api/accounts/a", "https://api.prefect.cloud/api/accounts/a/workspaces/w", true),
+			Entry("an absolute host", "http://p.b.svc.cluster.local:4200", "http://p.b.svc.cluster.local.:4200/api", true),
+			Entry("an entry with an absolute host", "http://p.b.svc.cluster.local.:4200", "http://p.b.svc.cluster.local:4200/api", true),
+			Entry("an absolute host without a port", "https://api.prefect.cloud", "https://api.prefect.cloud./api", true),
+			Entry("an absolute host with another port", "http://p.b.svc.cluster.local:4200", "http://p.b.svc.cluster.local.:80/api", false),
+			Entry("a host without the cluster domain", "http://p.b.svc:4200", "http://p.b.svc.cluster.local.:4200/api", false),
 			Entry("a trailing slash", "https://api.prefect.cloud/api/accounts/a/", "https://api.prefect.cloud/api/accounts/a/workspaces/w", true),
 			Entry("scheme and host in another case", "HTTPS://API.Prefect.Cloud", "https://api.prefect.cloud/api", true),
 			Entry("the second of several entries", "https://a.example.com, https://api.prefect.cloud", "https://api.prefect.cloud/api", true),
@@ -387,7 +392,15 @@ var _ = Describe("PrefectServerReference", func() {
 			}
 
 			apiURL := serverRef.GetAPIURL("test-namespace")
-			Expect(apiURL).To(Equal("http://prefect-server.prefect-system.svc:4200/api"))
+			Expect(apiURL).To(Equal("http://prefect-server.prefect-system.svc.cluster.local.:4200/api"))
+		})
+
+		It("Should end the in-cluster host with the cluster domain", func() {
+			DeferCleanup(func(domain string) { ClusterDomain = domain }, ClusterDomain)
+			ClusterDomain = "k8s.example.com"
+
+			serverRef := &PrefectServerReference{Name: "prefect-server"}
+			Expect(serverRef.GetAPIURL("team-a")).To(Equal("http://prefect-server.team-a.svc.k8s.example.com.:4200/api"))
 		})
 
 		It("Should use fallback namespace when Name is set but Namespace is empty", func() {
@@ -396,7 +409,7 @@ var _ = Describe("PrefectServerReference", func() {
 			}
 
 			apiURL := serverRef.GetAPIURL("fallback-namespace")
-			Expect(apiURL).To(Equal("http://prefect-server.fallback-namespace.svc:4200/api"))
+			Expect(apiURL).To(Equal("http://prefect-server.fallback-namespace.svc.cluster.local.:4200/api"))
 		})
 
 		It("Should return empty string when neither RemoteAPIURL nor Name is set", func() {
@@ -418,11 +431,11 @@ var _ = Describe("PrefectServerReference", func() {
 		})
 	})
 
-	Context("ValidateRemoteAPIURL method", func() {
+	Context("ValidateAPIURL method", func() {
 		It("Should accept an http or https URL, and an in-cluster reference", func() {
-			Expect((&PrefectServerReference{RemoteAPIURL: new("https://api.prefect.cloud")}).ValidateRemoteAPIURL()).To(Succeed())
-			Expect((&PrefectServerReference{RemoteAPIURL: new("http://prefect.example.com:4200/api")}).ValidateRemoteAPIURL()).To(Succeed())
-			Expect((&PrefectServerReference{Name: "prefect-server"}).ValidateRemoteAPIURL()).To(Succeed())
+			Expect((&PrefectServerReference{RemoteAPIURL: new("https://api.prefect.cloud")}).ValidateAPIURL()).To(Succeed())
+			Expect((&PrefectServerReference{RemoteAPIURL: new("http://prefect.example.com:4200/api")}).ValidateAPIURL()).To(Succeed())
+			Expect((&PrefectServerReference{Name: "prefect-server"}).ValidateAPIURL()).To(Succeed())
 		})
 
 		It("Should refuse a URL with user information, a query or a fragment, or another scheme", func() {
@@ -432,10 +445,27 @@ var _ = Describe("PrefectServerReference", func() {
 				"http://internal.example.com/target?discard=/api",
 				"https://prefect.example.com/api#fragment",
 				"http://:4200",
+				"http://.:4200",
 			} {
-				Expect((&PrefectServerReference{RemoteAPIURL: new(remote)}).ValidateRemoteAPIURL()).
+				Expect((&PrefectServerReference{RemoteAPIURL: new(remote)}).ValidateAPIURL()).
 					To(MatchError(ContainSubstring("is not an http or https URL")), remote)
 			}
+		})
+
+		It("Should refuse an in-cluster name or namespace that isn't a DNS label", func() {
+			for _, serverRef := range []PrefectServerReference{
+				{Name: "elsewhere.example.com/x?"},
+				{Name: "Prefect"},
+				{Name: "prefect", Namespace: "other.example.com/x?"},
+			} {
+				Expect(serverRef.ValidateAPIURL()).To(MatchError(ContainSubstring("is not a DNS label")), serverRef.Name)
+			}
+			Expect((&PrefectServerReference{Name: "prefect", Namespace: "prefect-system"}).ValidateAPIURL()).To(Succeed())
+		})
+
+		It("Should check only the remote URL when a reference has both", func() {
+			serverRef := &PrefectServerReference{RemoteAPIURL: new("https://api.prefect.cloud"), Name: "not/a/label"}
+			Expect(serverRef.ValidateAPIURL()).To(Succeed())
 		})
 
 		It("Should refuse a query in the account ID", func() {
@@ -444,7 +474,7 @@ var _ = Describe("PrefectServerReference", func() {
 				AccountID:    new("account?x="),
 				WorkspaceID:  new("workspace"),
 			}
-			Expect(serverRef.ValidateRemoteAPIURL()).To(HaveOccurred())
+			Expect(serverRef.ValidateAPIURL()).To(HaveOccurred())
 		})
 	})
 
@@ -591,7 +621,7 @@ var _ = Describe("PrefectServerReference", func() {
 
 			// Test API URL generation for in-cluster
 			apiURL := serverRef.GetAPIURL("fallback-namespace")
-			Expect(apiURL).To(Equal("http://prefect-server.prefect-system.svc:4200/api"))
+			Expect(apiURL).To(Equal("http://prefect-server.prefect-system.svc.cluster.local.:4200/api"))
 
 			// Test API key retrieval when no key is configured
 			apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)

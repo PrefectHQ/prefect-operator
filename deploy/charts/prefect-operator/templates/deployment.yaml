@@ -59,6 +59,9 @@ spec:
             {{- if .Values.operator.defaultResyncInterval }}
             - {{ printf "--default-resync-interval=%s" .Values.operator.defaultResyncInterval | quote }}
             {{- end }}
+            {{- with .Values.operator.clusterDomain }}
+            - {{ printf "--cluster-domain=%s" . | quote }}
+            {{- end }}
             {{- with .Values.operator.logLevel }}
             - {{ printf "--zap-log-level=%v" . | quote }}
             {{- end }}

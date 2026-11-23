@@ -36,6 +36,13 @@ things the person who wrote the resource can't do directly:
 | `PrefectServer`, `PrefectWorkPool` | Run any container, with any ServiceAccount, in the resource's namespace, through `extraContainers`, `settings`, `serviceAccountName`, and `deploymentTemplate`. |
 | `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send the spec to Prefect with the API key in any Secret or ConfigMap in the namespace that has the `prefect.io/allowed-api-urls` annotation. |
 | `PrefectDeployment` | Run flow code on the work pool's workers, with any job settings the work pool's base job template exposes. |
+| `PrefectWorkPool`, `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send requests from the operator's pod to any http or https URL in `spec.server.remoteApiUrl`, and read up to 4 KiB of an error response in the `Synced` condition. |
+
+The operator doesn't connect to link-local addresses, such as the cloud
+instance metadata address `169.254.169.254`, even through a host name that
+resolves to one. If the operator uses an HTTP proxy, the proxy resolves host
+names, so block those addresses in the proxy too. To limit which other hosts the
+operator can reach, apply a NetworkPolicy to its pod.
 
 ## Admission policies
 
