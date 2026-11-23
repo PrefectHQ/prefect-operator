@@ -1,7 +1,8 @@
-# The operator reads the API key that spec.server.apiKey.valueFrom names and
-# sends it to the server that spec.server names, with requests built from the
-# rest of the spec. This policy lets a request create or change the spec only
-# if the requester may get the Secret or ConfigMap that spec.server names.
+# The operator reads the API key that spec.server.apiKey.valueFrom names, or
+# the auth string that spec.server.auth names, and sends it to the server that
+# spec.server names, with requests built from the rest of the spec. This policy
+# lets a request create or change the spec only if the requester may get the
+# Secret or ConfigMap that spec.server names.
 # Requests that leave the spec unchanged, such as the operator adding its
 # finalizer, are not checked.
 #
@@ -27,6 +28,8 @@ spec:
       expression: object.spec.?server.?apiKey.?valueFrom.?secretKeyRef.?name.orValue('')
     - name: configMapName
       expression: object.spec.?server.?apiKey.?valueFrom.?configMapKeyRef.?name.orValue('')
+    - name: authSecretName
+      expression: object.spec.?server.?auth.?secretKeyRef.?name.orValue('')
   validations:
     - expression: >-
         variables.specUnchanged || variables.secretName == '' ||
@@ -40,5 +43,12 @@ spec:
         authorizer.group('').resource('configmaps').namespace(request.namespace).name(variables.configMapName).check('get').allowed()
       messageExpression: >-
         'spec.server.apiKey.valueFrom.configMapKeyRef names ConfigMap ' + variables.configMapName +
+        ', which you do not have permission to get in namespace ' + request.namespace
+      reason: Forbidden
+    - expression: >-
+        variables.specUnchanged || variables.authSecretName == '' ||
+        authorizer.group('').resource('secrets').namespace(request.namespace).name(variables.authSecretName).check('get').allowed()
+      messageExpression: >-
+        'spec.server.auth.secretKeyRef names Secret ' + variables.authSecretName +
         ', which you do not have permission to get in namespace ' + request.namespace
       reason: Forbidden

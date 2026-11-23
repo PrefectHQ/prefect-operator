@@ -1,6 +1,6 @@
 ---
 title: Pod templates
-weight: 3
+weight: 4
 ---
 
 Most pod settings, such as resources, node selectors, tolerations, and extra

@@ -2866,6 +2866,48 @@ spec:
                     x-kubernetes-validations:
                     - message: set apiKey.value or apiKey.valueFrom, not both
                       rule: '!(has(self.value) && has(self.valueFrom))'
+                  auth:
+                    description: |-
+                      Auth is the auth string to send to a Prefect server that requires one,
+                      such as an in-cluster server with spec.auth. The operator sends it as HTTP
+                      basic authentication, and only to an API URL that the Secret's
+                      prefect.io/allowed-api-urls annotation lists, as for apiKey.valueFrom.
+                      A work pool's worker gets it as PREFECT_API_AUTH_STRING.
+                    properties:
+                      secretKeyRef:
+                        description: |-
+                          SecretKeyRef selects a key of a Secret in the resource's namespace. It
+                          must not be optional: a pod that uses it does not start without the key.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - secretKeyRef
+                    type: object
+                    x-kubernetes-validations:
+                    - message: secretKeyRef.name must be set
+                      rule: size(self.secretKeyRef.name) > 0
+                    - message: secretKeyRef.optional must not be true
+                      rule: '!has(self.secretKeyRef.optional) || !self.secretKeyRef.optional'
                   name:
                     description: |-
                       Name is the name of the in-cluster Prefect Server in the given namespace.
@@ -2897,6 +2939,9 @@ spec:
                       connect to Prefect Cloud
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: set apiKey or auth, not both
+                  rule: '!(has(self.apiKey) && has(self.auth))'
               serviceAccountName:
                 description: |-
                   ServiceAccountName defines the ServiceAccount to use for worker pods.
@@ -2904,8 +2949,8 @@ spec:
                 type: string
               settings:
                 description: |-
-                  A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL or
-                  PREFECT_API_KEY, which come from Server.
+                  A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL,
+                  PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server.
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.
@@ -3064,9 +3109,10 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-validations:
-                - message: settings must not set PREFECT_API_URL or PREFECT_API_KEY;
-                    set them with spec.server
-                  rule: self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY']))
+                - message: settings must not set PREFECT_API_URL, PREFECT_API_KEY
+                    or PREFECT_API_AUTH_STRING; set them with spec.server
+                  rule: self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY',
+                    'PREFECT_API_AUTH_STRING']))
               tolerations:
                 description: Tolerations allow the worker pods to be scheduled onto
                   nodes with matching taints.

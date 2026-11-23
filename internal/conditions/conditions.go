@@ -88,6 +88,67 @@ func InvalidPodTemplate(object string, err error) metav1.Condition {
 	}
 }
 
+// UnsupportedVersion reports that object was not changed because the Prefect
+// version of its image does not support something in the spec.
+func UnsupportedVersion(object string, err error) metav1.Condition {
+	return metav1.Condition{
+		Type:    fmt.Sprintf("%sReconciled", object),
+		Reason:  "UnsupportedVersion",
+		Message: err.Error(),
+		Status:  metav1.ConditionFalse,
+	}
+}
+
+// InvalidAuth reports that object was not changed because the Secret in
+// spec.auth has no valid auth string, or because the server's settings set
+// another one.
+func InvalidAuth(object string, err error) metav1.Condition {
+	return metav1.Condition{
+		Type:    fmt.Sprintf("%sReconciled", object),
+		Reason:  "InvalidAuth",
+		Message: err.Error(),
+		Status:  metav1.ConditionFalse,
+	}
+}
+
+// AuthSupported is the type of the condition that reports whether the Prefect
+// version of a server with spec.auth requires the auth string. It is True or
+// Unknown only when the server also has a valid auth string.
+const AuthSupported = "AuthSupported"
+
+// AuthVersionSupported reports that the Prefect version of image requires the
+// auth string.
+func AuthVersionSupported(image string) metav1.Condition {
+	return metav1.Condition{
+		Type:    AuthSupported,
+		Reason:  "VersionSupported",
+		Message: fmt.Sprintf("the Prefect version of the image %q supports spec.auth", image),
+		Status:  metav1.ConditionTrue,
+	}
+}
+
+// AuthVersionUnsupported reports that the Prefect version of the server's image
+// does not require the auth string.
+func AuthVersionUnsupported(err error) metav1.Condition {
+	return metav1.Condition{
+		Type:    AuthSupported,
+		Reason:  "UnsupportedVersion",
+		Message: err.Error(),
+		Status:  metav1.ConditionFalse,
+	}
+}
+
+// AuthVersionUnknown reports that the operator can't tell whether the server
+// requires the auth string.
+func AuthVersionUnknown(message string) metav1.Condition {
+	return metav1.Condition{
+		Type:    AuthSupported,
+		Reason:  "VersionUnknown",
+		Message: message,
+		Status:  metav1.ConditionUnknown,
+	}
+}
+
 // TemplateApplied reports that the user's pod template at field was applied to
 // object. ignored lists the protected fields the template tried to override,
 // which kept the operator's values.

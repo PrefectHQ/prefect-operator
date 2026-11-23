@@ -1,9 +1,11 @@
 package v1
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -17,6 +19,7 @@ import (
 
 // PrefectServerSpec defines the desired state of a PrefectServer
 // +kubebuilder:validation:XValidation:rule="!has(self.replicas) || self.replicas <= 1 || (has(self.postgres) && !has(self.sqlite))",message="replicas > 1 is only supported with the postgres backend alone (the controller prefers sqlite when both are set, and sqlite/ephemeral use node-local storage and must run a single replica)"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.settings) || self.settings.all(e, e.name != 'PREFECT_SERVER_API_AUTH_STRING')",message="settings must not set PREFECT_SERVER_API_AUTH_STRING when auth is set"
 type PrefectServerSpec struct {
 	// Version defines the version of the Prefect Server to deploy
 	Version *string `json:"version,omitempty"`
@@ -58,6 +61,16 @@ type PrefectServerSpec struct {
 
 	// A list of environment variables to set on the Prefect Server
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
+
+	// Auth makes the server require an auth string, "username:password", as
+	// HTTP basic authentication on every API request except its health checks.
+	// The operator sets PREFECT_SERVER_API_AUTH_STRING from the Secret key, so
+	// settings must not set it.
+	// Resources that use the server must set spec.server.auth to a Secret with
+	// the same auth string. Without auth, the server accepts API requests from
+	// anything that can reach it, including the operator acting for a resource
+	// in another namespace. Auth requires Prefect 3.6.22 or later.
+	Auth *ServerAuth `json:"auth,omitempty"`
 
 	// DeploymentLabels defines additional labels to add to the server Deployment
 	DeploymentLabels map[string]string `json:"deploymentLabels,omitempty"`
@@ -468,6 +481,22 @@ func (s *PrefectServer) ToEnvVars() []corev1.EnvVar {
 	return append(s.derivedEnvVars(), s.Spec.Settings...)
 }
 
+// ValidateAuthSettings returns an error if Spec.Auth is set and Spec.Settings
+// also sets the auth string. Settings override the variables that the operator
+// derives from the spec. The CRD rejects the exact name, but Prefect reads the
+// name in any case.
+func (s *PrefectServer) ValidateAuthSettings() error {
+	if s.Spec.Auth == nil {
+		return nil
+	}
+	for _, setting := range s.Spec.Settings {
+		if strings.EqualFold(setting.Name, EnvPrefectServerAPIAuthString) {
+			return fmt.Errorf("settings must not set %s when auth is set", setting.Name)
+		}
+	}
+	return nil
+}
+
 // DerivedEnvVarNames returns the names of the environment variables the
 // operator derives from the server's spec, leaving out its settings and any
 // variable the settings override.
@@ -493,6 +522,13 @@ func (s *PrefectServer) derivedEnvVars() []corev1.EnvVar {
 
 	if s.Spec.Redis != nil {
 		envVars = append(envVars, s.Spec.Redis.ToEnvVars()...)
+	}
+
+	if s.Spec.Auth != nil {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:      EnvPrefectServerAPIAuthString,
+			ValueFrom: s.Spec.Auth.envVarSource(),
+		})
 	}
 
 	return envVars

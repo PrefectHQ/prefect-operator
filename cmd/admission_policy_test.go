@@ -213,6 +213,22 @@ var _ = Describe("The chart's admission policies", Ordered, func() {
 			Expect(serverRefReader.Create(ctx, workQueue("configmap-queue", configMapKey("prefect-config")))).To(Succeed())
 		})
 
+		It("Denies an auth Secret the requester can't get, and allows one it can", func() {
+			authQueue := func() client.Object {
+				queue := workQueue("auth-queue", nil).(*prefectiov1.PrefectWorkQueue)
+				ref := corev1.SecretKeySelector{Key: "auth"}
+				ref.Name = "prefect-api-key"
+				queue.Spec.Server = prefectiov1.PrefectServerReference{
+					Name: "prefect", Auth: &prefectiov1.ServerAuth{SecretKeyRef: ref},
+				}
+				return queue
+			}
+			expectDenied(serverRefEditor.Create(ctx, authQueue()),
+				"spec.server.auth.secretKeyRef names Secret prefect-api-key, "+
+					"which you do not have permission to get in namespace admission-policy")
+			Expect(serverRefReader.Create(ctx, authQueue())).To(Succeed())
+		})
+
 		It("Allows a server reference without a Secret or ConfigMap", func() {
 			Expect(serverRefEditor.Create(ctx, workQueue("no-key-queue", nil))).To(Succeed())
 			Expect(serverRefEditor.Create(ctx, workQueue("literal-key-queue",

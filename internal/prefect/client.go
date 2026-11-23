@@ -24,8 +24,11 @@ import (
 
 // Client calls the Prefect API.
 type Client struct {
-	BaseURL    string
-	APIKey     string
+	BaseURL string
+	// APIKey is sent as a bearer token, unless AuthString is set.
+	APIKey string
+	// AuthString, "username:password", is sent as HTTP basic authentication.
+	AuthString string
 	HTTPClient *http.Client
 	log        logr.Logger
 	// portForward is the kubectl port-forward that BaseURL points to when the
@@ -48,6 +51,19 @@ func NewClient(baseURL, apiKey string, log logr.Logger) *Client {
 		},
 		log: log,
 	}
+}
+
+// Credentials are what a Client sends to authenticate: see Client.APIKey and
+// Client.AuthString. Both may be empty.
+type Credentials struct {
+	APIKey     string
+	AuthString string
+}
+
+func newClientWithCredentials(baseURL string, creds Credentials, log logr.Logger) *Client {
+	client := NewClient(baseURL, creds.APIKey, log)
+	client.AuthString = creds.AuthString
+	return client
 }
 
 // transport is http.DefaultTransport without connections to the addresses that
@@ -132,7 +148,7 @@ func refuseRedirect(req *http.Request, _ []*http.Request) error {
 // serverRef. When the operator runs outside the cluster and serverRef names an
 // in-cluster server, it starts a port-forward to that server with kubectl,
 // which runs until ctx ends or the Client is closed.
-func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
+func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, creds Credentials, fallbackNamespace string, log logr.Logger) (*Client, error) {
 	if err := serverRef.ValidateAPIURL(); err != nil {
 		return nil, err
 	}
@@ -143,7 +159,7 @@ func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubec
 	if !needsPortForwarding {
 		baseURL := serverRef.GetAPIURL(fallbackNamespace)
 		log.V(1).Info("Using in-cluster URL", "url", baseURL)
-		return NewClient(baseURL, apiKey, log), nil
+		return newClientWithCredentials(baseURL, creds, log), nil
 	}
 
 	// The forward must reach the Service in the namespace that GetAPIURL
@@ -156,7 +172,7 @@ func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubec
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d/api", forward.LocalPort)
 	log.V(1).Info("Using a port-forward", "url", baseURL, "service", serverRef.Name, "namespace", namespace)
 
-	client := NewClient(baseURL, apiKey, log)
+	client := newClientWithCredentials(baseURL, creds, log)
 	client.portForward = forward
 	return client, nil
 }
@@ -196,9 +212,13 @@ func NewClientFromK8s(ctx context.Context, kubectl portforward.Kubectl, serverRe
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key: %w", err)
 	}
+	authString, err := serverRef.GetAuthString(ctx, k8sClient, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get auth string: %w", err)
+	}
 
 	// Create client using the existing factory function, passing the namespace as fallback
-	return NewClientFromServerReference(ctx, kubectl, serverRef, apiKey, namespace, log)
+	return NewClientFromServerReference(ctx, kubectl, serverRef, Credentials{APIKey: apiKey, AuthString: authString}, namespace, log)
 }
 
 // ClientFactory returns a Client for the Prefect server that serverRef

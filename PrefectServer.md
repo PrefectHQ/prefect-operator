@@ -55,7 +55,7 @@ PrefectServer is the Schema for the prefectservers API
         <td>
           PrefectServerSpec defines the desired state of a PrefectServer<br/>
           <br/>
-            <i>Validations</i>:<li>!has(self.replicas) || self.replicas <= 1 || (has(self.postgres) && !has(self.sqlite)): replicas > 1 is only supported with the postgres backend alone (the controller prefers sqlite when both are set, and sqlite/ephemeral use node-local storage and must run a single replica)</li>
+            <i>Validations</i>:<li>!has(self.replicas) || self.replicas <= 1 || (has(self.postgres) && !has(self.sqlite)): replicas > 1 is only supported with the postgres backend alone (the controller prefers sqlite when both are set, and sqlite/ephemeral use node-local storage and must run a single replica)</li><li>!has(self.auth) || !has(self.settings) || self.settings.all(e, e.name != 'PREFECT_SERVER_API_AUTH_STRING'): settings must not set PREFECT_SERVER_API_AUTH_STRING when auth is set</li>
         </td>
         <td>false</td>
       </tr><tr>
@@ -91,6 +91,22 @@ PrefectServerSpec defines the desired state of a PrefectServer
         <td>
           Affinity defines the scheduling affinity/anti-affinity for the Prefect Server Deployment.
 Only node affinity is applied to the migration Job.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectserverspecauth">auth</a></b></td>
+        <td>object</td>
+        <td>
+          Auth makes the server require an auth string, "username:password", as
+HTTP basic authentication on every API request except its health checks.
+The operator sets PREFECT_SERVER_API_AUTH_STRING from the Secret key, so
+settings must not set it.
+Resources that use the server must set spec.server.auth to a Secret with
+the same auth string. Without auth, the server accepts API requests from
+anything that can reach it, including the operator acting for a resource
+in another namespace. Auth requires Prefect 3.6.22 or later.<br/>
+          <br/>
+            <i>Validations</i>:<li>size(self.secretKeyRef.name) > 0: secretKeyRef.name must be set</li><li>!has(self.secretKeyRef.optional) || !self.secretKeyRef.optional: secretKeyRef.optional must not be true</li>
         </td>
         <td>false</td>
       </tr><tr>
@@ -1877,6 +1893,89 @@ Valid operators are In, NotIn, Exists and DoesNotExist.<br/>
 the values array must be non-empty. If the operator is Exists or DoesNotExist,
 the values array must be empty. This array is replaced during a strategic
 merge patch.<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectServer.spec.auth
+<sup><sup>[↩ Parent](#prefectserverspec)</sup></sup>
+
+
+
+Auth makes the server require an auth string, "username:password", as
+HTTP basic authentication on every API request except its health checks.
+The operator sets PREFECT_SERVER_API_AUTH_STRING from the Secret key, so
+settings must not set it.
+Resources that use the server must set spec.server.auth to a Secret with
+the same auth string. Without auth, the server accepts API requests from
+anything that can reach it, including the operator acting for a resource
+in another namespace. Auth requires Prefect 3.6.22 or later.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b><a href="#prefectserverspecauthsecretkeyref">secretKeyRef</a></b></td>
+        <td>object</td>
+        <td>
+          SecretKeyRef selects a key of a Secret in the resource's namespace. It
+must not be optional: a pod that uses it does not start without the key.<br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectServer.spec.auth.secretKeyRef
+<sup><sup>[↩ Parent](#prefectserverspecauth)</sup></sup>
+
+
+
+SecretKeyRef selects a key of a Secret in the resource's namespace. It
+must not be optional: a pod that uses it does not start without the key.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          The key of the secret to select from.  Must be a valid secret key.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Name of the referent.
+This field is effectively required, but due to backwards compatibility is
+allowed to be empty. Instances of this type with an empty value here are
+almost certainly wrong.
+More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names<br/>
+          <br/>
+            <i>Default</i>: <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>optional</b></td>
+        <td>boolean</td>
+        <td>
+          Specify whether the Secret or its key must be defined<br/>
         </td>
         <td>false</td>
       </tr></tbody>

@@ -346,6 +346,60 @@ var _ = Describe("PrefectServerReference", func() {
 		)
 	})
 
+	Context("GetAuthString method", func() {
+		auth := &ServerAuth{SecretKeyRef: corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string",
+		}}
+		createAuthSecret := func(annotations map[string]string) {
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "prefect-auth", Namespace: namespace, Annotations: annotations},
+				Data:       map[string][]byte{"auth-string": []byte("admin:hunter2")},
+			})).To(Succeed())
+		}
+
+		It("Should return an empty string when Auth is nil", func() {
+			Expect((&PrefectServerReference{Name: "prefect"}).GetAuthString(ctx, k8sClient, namespace)).To(BeEmpty())
+		})
+
+		It("Should read the Secret when its annotation allows the server's URL", func() {
+			createAuthSecret(map[string]string{AnnotationAllowedAPIURLs: "http://prefect.prefect-system.svc.cluster.local:4200"})
+			serverRef := &PrefectServerReference{Name: "prefect", Namespace: "prefect-system", Auth: auth}
+
+			Expect(serverRef.GetAuthString(ctx, k8sClient, namespace)).To(Equal("admin:hunter2"))
+		})
+
+		It("Should refuse a URL that the annotation doesn't allow", func() {
+			createAuthSecret(map[string]string{AnnotationAllowedAPIURLs: "http://prefect.prefect-system.svc.cluster.local:4200"})
+			serverRef := &PrefectServerReference{RemoteAPIURL: new("https://prefect.example.com"), Auth: auth}
+
+			authString, err := serverRef.GetAuthString(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(
+				`secret prefect-auth does not allow its auth string to be used for "https://prefect.example.com/api": ` +
+					`its annotation prefect.io/allowed-api-urls is "http://prefect.prefect-system.svc.cluster.local:4200"`))
+			Expect(authString).To(BeEmpty())
+		})
+
+		It("Should refuse an empty auth string", func() {
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "prefect-auth", Namespace: namespace,
+					Annotations: map[string]string{AnnotationAllowedAPIURLs: "http://prefect.prefect-system.svc.cluster.local:4200"}},
+				Data: map[string][]byte{"auth-string": nil},
+			})).To(Succeed())
+			serverRef := &PrefectServerReference{Name: "prefect", Namespace: "prefect-system", Auth: auth}
+
+			_, err := serverRef.GetAuthString(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError("key auth-string in secret prefect-auth is empty"))
+		})
+
+		It("Should refuse a Secret without the annotation", func() {
+			createAuthSecret(nil)
+			serverRef := &PrefectServerReference{Name: "prefect", Auth: auth}
+
+			_, err := serverRef.GetAuthString(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(ContainSubstring("which must list the Prefect API URLs that its auth string may be used for")))
+		})
+	})
+
 	Context("GetAPIURL method", func() {
 		It("Should return remote API URL when RemoteAPIURL is set", func() {
 			serverRef := &PrefectServerReference{

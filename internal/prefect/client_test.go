@@ -15,6 +15,9 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestPrefectClient(t *testing.T) {
@@ -130,6 +133,24 @@ var _ = Describe("Prefect HTTP Client", func() {
 	})
 
 	Describe("Authentication", func() {
+		DescribeTable("Should send the Authorization header for its credentials",
+			func(creds Credentials, want string) {
+				var got string
+				mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					got = r.Header.Get("Authorization")
+					w.WriteHeader(http.StatusNotFound)
+				}))
+
+				_, _ = newClientWithCredentials(mockServer.URL+"/api", creds, logger).GetWorkPool(ctx, "pool")
+				Expect(got).To(Equal(want))
+			},
+			Entry("an API key as a bearer token", Credentials{APIKey: "pnu_key"}, "Bearer pnu_key"),
+			// base64 of "admin:hunter2"
+			Entry("an auth string as basic authentication", Credentials{AuthString: "admin:hunter2"}, "Basic YWRtaW46aHVudGVyMg=="),
+			Entry("the auth string when both are set", Credentials{APIKey: "pnu_key", AuthString: "admin:hunter2"}, "Basic YWRtaW46aHVudGVyMg=="),
+			Entry("nothing without credentials", Credentials{}, ""),
+		)
+
 		It("Should handle Prefect Cloud authentication", func() {
 			By("Setting up mock server that mimics Prefect Cloud")
 			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -980,7 +1001,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRefWithRemote, "test-key", "fallback-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRefWithRemote, Credentials{APIKey: "test-key"}, "fallback-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -999,7 +1020,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, Credentials{APIKey: "test-key"}, "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -1013,7 +1034,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						Namespace:    "prefect-system",
 					}
 
-					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, Credentials{APIKey: "test-key"}, "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client.BaseURL).To(Equal(serverRef.GetAPIURL("test-namespace")))
@@ -1025,7 +1046,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 			It("should refuse an in-cluster name that isn't a DNS label", func() {
 				serverRef := &prefectiov1.PrefectServerReference{Name: "elsewhere.example.com/x?"}
 
-				client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "", "test-namespace", logger)
+				client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, Credentials{APIKey: ""}, "test-namespace", logger)
 
 				Expect(err).To(MatchError(ContainSubstring("is not a DNS label")))
 				Expect(client).To(BeNil())
@@ -1115,6 +1136,50 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 					expectedURL := inClusterRef.GetAPIURL("deployment-namespace")
 					Expect(expectedURL).To(Equal("http://prefect-server.deployment-namespace.svc.cluster.local.:4200/api"))
+				})
+			})
+
+			Context("with an auth string", func() {
+				authSecret := func(allowed string) *corev1.Secret {
+					return &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Name: "prefect-auth", Namespace: "team-a",
+							Annotations: map[string]string{prefectiov1.AnnotationAllowedAPIURLs: allowed}},
+						Data: map[string][]byte{"auth-string": []byte("admin:hunter2")},
+					}
+				}
+				authRef := func(remoteAPIURL string) *prefectiov1.PrefectServerReference {
+					return &prefectiov1.PrefectServerReference{RemoteAPIURL: new(remoteAPIURL), Auth: &prefectiov1.ServerAuth{
+						SecretKeyRef: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string"},
+					}}
+				}
+
+				It("should send it to a URL that the Secret allows", func() {
+					var got string
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						got = r.Header.Get("Authorization")
+						w.WriteHeader(http.StatusNotFound)
+					}))
+					DeferCleanup(server.Close)
+					k8sClient := fake.NewClientBuilder().WithObjects(authSecret(server.URL)).Build()
+
+					client, err := NewClientFromK8s(ctx, testKubectl, authRef(server.URL), k8sClient, "team-a", logger)
+					Expect(err).NotTo(HaveOccurred())
+					_, _ = client.GetWorkPool(ctx, "pool")
+					Expect(got).To(Equal("Basic YWRtaW46aHVudGVyMg=="))
+				})
+
+				It("should not create a client for a URL that the Secret doesn't allow", func() {
+					requests := 0
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						requests++
+					}))
+					DeferCleanup(server.Close)
+					k8sClient := fake.NewClientBuilder().WithObjects(authSecret("http://prefect.team-b.svc.cluster.local:4200")).Build()
+
+					client, err := NewClientFromK8s(ctx, testKubectl, authRef(server.URL), k8sClient, "team-a", logger)
+					Expect(err).To(MatchError(ContainSubstring("does not allow its auth string to be used for")))
+					Expect(client).To(BeNil())
+					Expect(requests).To(BeZero())
 				})
 			})
 

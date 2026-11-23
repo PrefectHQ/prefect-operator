@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"unicode"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -14,6 +15,7 @@ import (
 )
 
 // PrefectServerReference defines how to connect to a Prefect server
+// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.auth))",message="set apiKey or auth, not both"
 type PrefectServerReference struct {
 	// Namespace is the namespace where the in-cluster Prefect Server is running.
 	// It must be a DNS label: lower case letters, digits and hyphens.
@@ -36,6 +38,13 @@ type PrefectServerReference struct {
 	// APIKey is the API key to use to connect to a remote Prefect Server
 	APIKey *APIKeySpec `json:"apiKey,omitempty"`
 
+	// Auth is the auth string to send to a Prefect server that requires one,
+	// such as an in-cluster server with spec.auth. The operator sends it as HTTP
+	// basic authentication, and only to an API URL that the Secret's
+	// prefect.io/allowed-api-urls annotation lists, as for apiKey.valueFrom.
+	// A work pool's worker gets it as PREFECT_API_AUTH_STRING.
+	Auth *ServerAuth `json:"auth,omitempty"`
+
 	// AccountID is the ID of the account to use to connect to Prefect Cloud
 	AccountID *string `json:"accountId,omitempty"`
 
@@ -56,6 +65,25 @@ type APIKeySpec struct {
 	// Prefect API URLs that the key may be used for. The chart's admission
 	// policy also requires that you may get the Secret or ConfigMap.
 	ValueFrom *corev1.EnvVarSource `json:"valueFrom,omitempty"`
+}
+
+// ServerAuth names the Secret key that holds a Prefect server's auth string,
+// in the form "username:password".
+// +kubebuilder:validation:XValidation:rule="size(self.secretKeyRef.name) > 0",message="secretKeyRef.name must be set"
+// +kubebuilder:validation:XValidation:rule="!has(self.secretKeyRef.optional) || !self.secretKeyRef.optional",message="secretKeyRef.optional must not be true"
+type ServerAuth struct {
+	// SecretKeyRef selects a key of a Secret in the resource's namespace. It
+	// must not be optional: a pod that uses it does not start without the key.
+	SecretKeyRef corev1.SecretKeySelector `json:"secretKeyRef"`
+}
+
+// envVarSource returns the source of an environment variable that holds the
+// auth string. It is never optional, because a server whose auth string is
+// missing accepts every request.
+func (a *ServerAuth) envVarSource() *corev1.EnvVarSource {
+	ref := a.SecretKeyRef
+	ref.Optional = nil
+	return &corev1.EnvVarSource{SecretKeyRef: &ref}
 }
 
 // DefaultClusterDomain is the DNS domain of a cluster that does not set another.
@@ -174,9 +202,9 @@ func (d *PrefectDeployment) ServerReference() *PrefectServerReference { return &
 func (a *PrefectAutomation) ServerReference() *PrefectServerReference { return &a.Spec.Server }
 
 // AnnotationAllowedAPIURLs is the annotation that a Secret or ConfigMap must
-// have before the operator reads an API key from it. Its value is a
-// comma-separated list of Prefect API URLs. The operator uses the key only for
-// a server whose API URL matches one of them: see APIURLAllowed.
+// have before the operator reads an API key or auth string from it. Its value
+// is a comma-separated list of Prefect API URLs. The operator uses the value
+// only for a server whose API URL matches one of them: see APIURLAllowed.
 const AnnotationAllowedAPIURLs = "prefect.io/allowed-api-urls"
 
 // The operator reads API key Secrets by name only. Its client does not cache
@@ -205,18 +233,7 @@ func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client
 	apiURL := s.GetAPIURL(namespace)
 
 	if ref := s.APIKey.ValueFrom.SecretKeyRef; ref != nil {
-		secret := &corev1.Secret{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
-			return "", fmt.Errorf("failed to get secret %s: %w", ref.Name, err)
-		}
-		if err := checkAllowedAPIURL("secret", ref.Name, secret.Annotations, apiURL); err != nil {
-			return "", err
-		}
-		value, exists := secret.Data[ref.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in secret %s", ref.Key, ref.Name)
-		}
-		return string(value), nil
+		return readSecretKey(ctx, k8sClient, namespace, ref, apiURL, "API key")
 	}
 
 	if ref := s.APIKey.ValueFrom.ConfigMapKeyRef; ref != nil {
@@ -224,7 +241,7 @@ func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, configMap); err != nil {
 			return "", fmt.Errorf("failed to get configmap %s: %w", ref.Name, err)
 		}
-		if err := checkAllowedAPIURL("configmap", ref.Name, configMap.Annotations, apiURL); err != nil {
+		if err := checkAllowedAPIURL("configmap", ref.Name, configMap.Annotations, apiURL, "API key"); err != nil {
 			return "", err
 		}
 		value, exists := configMap.Data[ref.Key]
@@ -237,18 +254,89 @@ func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client
 	return "", nil
 }
 
+// GetAuthString returns the auth string from the Secret that Auth names, or ""
+// if Auth is nil. namespace is the namespace of the resource that holds s. It
+// returns an error if the Secret, or the key in it, does not exist, or if the
+// Secret's AnnotationAllowedAPIURLs annotation does not allow s's API URL. It
+// also returns an error if the auth string is empty, because the client sends
+// no authentication without one.
+func (s *PrefectServerReference) GetAuthString(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
+	if s.Auth == nil {
+		return "", nil
+	}
+	ref := &s.Auth.SecretKeyRef
+	authString, err := readSecretKey(ctx, k8sClient, namespace, ref, s.GetAPIURL(namespace), "auth string")
+	if err != nil {
+		return "", err
+	}
+	if authString == "" {
+		return "", fmt.Errorf("key %s in secret %s is empty", ref.Key, ref.Name)
+	}
+	return authString, nil
+}
+
+// Validate returns an error unless the Secret key that a names, in namespace,
+// holds an auth string with a username and a password. The auth string must not
+// start or end with whitespace, which the server would make part of the username
+// or password. It must be ASCII, because a Prefect server with any other auth
+// string returns a 500 for every request. Validate does not check the Secret's
+// AnnotationAllowedAPIURLs annotation, which limits where a client sends an auth
+// string. A server does not send its own.
+func (a *ServerAuth) Validate(ctx context.Context, k8sClient client.Client, namespace string) error {
+	ref := &a.SecretKeyRef
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
+		return fmt.Errorf("failed to get secret %s: %w", ref.Name, err)
+	}
+	value, exists := secret.Data[ref.Key]
+	if !exists {
+		return fmt.Errorf("key %s not found in secret %s", ref.Key, ref.Name)
+	}
+	authString := strings.TrimSpace(string(value))
+	username, password, _ := strings.Cut(authString, ":")
+	if username == "" || password == "" {
+		return fmt.Errorf("key %s in secret %s must be an auth string in the form \"username:password\"", ref.Key, ref.Name)
+	}
+	if strings.ContainsFunc(authString, func(r rune) bool { return r > unicode.MaxASCII }) {
+		return fmt.Errorf("key %s in secret %s must contain only ASCII characters", ref.Key, ref.Name)
+	}
+	if authString != string(value) {
+		return fmt.Errorf("key %s in secret %s must not start or end with whitespace, such as a newline", ref.Key, ref.Name)
+	}
+	return nil
+}
+
+// readSecretKey returns the value of ref's key in the Secret in namespace. It
+// returns an error if the Secret or the key does not exist, or if the Secret's
+// AnnotationAllowedAPIURLs annotation does not allow apiURL. credential names
+// the value in error messages, such as "API key".
+func readSecretKey(ctx context.Context, k8sClient client.Client, namespace string, ref *corev1.SecretKeySelector, apiURL, credential string) (string, error) {
+	secret := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
+		return "", fmt.Errorf("failed to get secret %s: %w", ref.Name, err)
+	}
+	if err := checkAllowedAPIURL("secret", ref.Name, secret.Annotations, apiURL, credential); err != nil {
+		return "", err
+	}
+	value, exists := secret.Data[ref.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in secret %s", ref.Key, ref.Name)
+	}
+	return string(value), nil
+}
+
 // checkAllowedAPIURL returns an error unless the AnnotationAllowedAPIURLs
 // annotation in annotations allows apiURL. kind and name name the object that
-// has the annotations, for the error message.
-func checkAllowedAPIURL(kind, name string, annotations map[string]string, apiURL string) error {
+// has the annotations, and credential the value it holds, for the error message.
+func checkAllowedAPIURL(kind, name string, annotations map[string]string, apiURL, credential string) error {
 	allowed, ok := annotations[AnnotationAllowedAPIURLs]
 	if !ok {
-		return fmt.Errorf("%s %s does not have the annotation %s, which must list the Prefect API URLs that its API key may be used for",
-			kind, name, AnnotationAllowedAPIURLs)
+		return fmt.Errorf("%s %s does not have the annotation %s, which must list the Prefect API URLs that its %s may be used for",
+			kind, name, AnnotationAllowedAPIURLs, credential)
 	}
 	if !APIURLAllowed(allowed, apiURL) {
-		return fmt.Errorf("%s %s does not allow its API key to be used for %q: its annotation %s is %q",
-			kind, name, apiURL, AnnotationAllowedAPIURLs, allowed)
+		return fmt.Errorf("%s %s does not allow its %s to be used for %q: its annotation %s is %q",
+			kind, name, credential, apiURL, AnnotationAllowedAPIURLs, allowed)
 	}
 	return nil
 }

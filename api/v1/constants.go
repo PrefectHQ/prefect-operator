@@ -9,6 +9,7 @@ const (
 	EnvPrefectAPIDatabasePort           = "PREFECT_API_DATABASE_PORT"
 	EnvPrefectAPIDatabaseUser           = "PREFECT_API_DATABASE_USER"
 
+	EnvPrefectAPIAuthString          = "PREFECT_API_AUTH_STRING"
 	EnvPrefectAPIKey                 = "PREFECT_API_KEY"
 	EnvPrefectAPIURL                 = "PREFECT_API_URL"
 	EnvPrefectHome                   = "PREFECT_HOME"
@@ -19,6 +20,13 @@ const (
 	EnvPrefectRedisMessagingPort     = "PREFECT_REDIS_MESSAGING_PORT"
 	EnvPrefectRedisMessagingUsername = "PREFECT_REDIS_MESSAGING_USERNAME"
 	EnvPrefectRedisMessagingPassword = "PREFECT_REDIS_MESSAGING_PASSWORD"
+
+	EnvPrefectServerAPIAuthString = "PREFECT_SERVER_API_AUTH_STRING"
+	// The Kubernetes worker puts PREFECT_API_AUTH_STRING in each Job as a
+	// reference to the Secret key that these name, and as plain text without
+	// them.
+	EnvPrefectKubernetesWorkerAuthSecretName = "PREFECT_INTEGRATIONS_KUBERNETES_WORKER_API_AUTH_STRING_SECRET_NAME"
+	EnvPrefectKubernetesWorkerAuthSecretKey  = "PREFECT_INTEGRATIONS_KUBERNETES_WORKER_API_AUTH_STRING_SECRET_KEY"
 
 	EnvPrefectServerConcurrencyLeaseStorage = "PREFECT_SERVER_CONCURRENCY_LEASE_STORAGE"
 

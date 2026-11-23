@@ -1,6 +1,6 @@
 ---
 title: Connect to Prefect Cloud
-weight: 2
+weight: 3
 ---
 
 To manage objects in a Prefect Cloud workspace, or in a Prefect server outside

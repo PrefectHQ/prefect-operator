@@ -3,6 +3,7 @@ package prefect
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -112,7 +113,10 @@ func (c *Client) do(ctx context.Context, method, reqURL string, in, out any) err
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.APIKey != "" {
+	// Prefect's own client also prefers the auth string when both are set.
+	if c.AuthString != "" {
+		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(c.AuthString)))
+	} else if c.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	}
 

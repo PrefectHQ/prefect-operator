@@ -157,6 +157,37 @@ var _ = Describe("PrefectWorkPool.DerivedEnvVarNames", func() {
 
 		Expect(s.DerivedEnvVarNames()).To(ContainElement("PREFECT_API_KEY"))
 	})
+
+	It("reads the auth string from its Secret when one is set", func() {
+		ref := corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string"}
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Server: PrefectServerReference{Name: "prefect", Auth: &ServerAuth{SecretKeyRef: ref}},
+		}}
+
+		Expect(s.ToEnvVars()).To(ContainElement(corev1.EnvVar{
+			Name: "PREFECT_API_AUTH_STRING", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &ref},
+		}))
+		Expect(s.DerivedEnvVarNames()).To(ContainElement("PREFECT_API_AUTH_STRING"))
+	})
+
+	It("names the auth string's Secret for the Jobs of a Kubernetes worker only", func() {
+		secretName := corev1.EnvVar{Name: "PREFECT_INTEGRATIONS_KUBERNETES_WORKER_API_AUTH_STRING_SECRET_NAME", Value: "prefect-auth"}
+		secretKey := corev1.EnvVar{Name: "PREFECT_INTEGRATIONS_KUBERNETES_WORKER_API_AUTH_STRING_SECRET_KEY", Value: "auth-string"}
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Type: "kubernetes",
+			Server: PrefectServerReference{Name: "prefect", Auth: &ServerAuth{SecretKeyRef: corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string",
+			}}},
+		}}
+		Expect(s.ToEnvVars()).To(ContainElements(secretName, secretKey))
+
+		s.Spec.Type = "process"
+		Expect(s.ToEnvVars()).NotTo(Or(ContainElement(secretName), ContainElement(secretKey)))
+
+		s.Spec.Type = "kubernetes"
+		s.Spec.Server.Auth = nil
+		Expect(s.DerivedEnvVarNames()).NotTo(ContainElement(secretName.Name))
+	})
 })
 
 var _ = Describe("PrefectWorkPool.ValidateSettings", func() {
@@ -168,7 +199,7 @@ var _ = Describe("PrefectWorkPool.ValidateSettings", func() {
 	})
 
 	It("refuses settings that Server sets", func() {
-		for _, name := range []string{"PREFECT_API_URL", "PREFECT_API_KEY"} {
+		for _, name := range []string{"PREFECT_API_URL", "PREFECT_API_KEY", "PREFECT_API_AUTH_STRING"} {
 			s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
 				Settings: []corev1.EnvVar{{Name: name, Value: "x"}},
 			}}
