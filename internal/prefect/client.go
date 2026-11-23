@@ -23,74 +23,88 @@ type Client struct {
 	APIKey     string
 	HTTPClient *http.Client
 	log        logr.Logger
-	// PortForwardClient is used to port-forward to the Prefect server when running outside the cluster
-	PortForwardClient portforward.PortForwarder
+	// portForward is the kubectl port-forward that BaseURL points to when the
+	// operator runs outside the cluster, or nil.
+	portForward *portforward.Forward
 }
 
-// NewClient creates a new Prefect API client
+// NewClient creates a new Prefect API client. Its HTTP client does not follow
+// redirects: Go would resend the API key to the redirect's URL, which the
+// key's allowed API URLs may not include.
 func NewClient(baseURL, apiKey string, log logr.Logger) *Client {
 	return &Client{
-		BaseURL:    baseURL,
-		APIKey:     apiKey,
-		HTTPClient: &http.Client{Timeout: 30 * time.Second},
-		log:        log,
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+		HTTPClient: &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: refuseRedirect,
+		},
+		log: log,
 	}
 }
 
-// NewClientFromServerReference creates a Client from a PrefectServerReference
-func NewClientFromServerReference(serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
-	// Create a base client first to check if we're running in cluster
-	baseClient := NewClient("", apiKey, log)
+func refuseRedirect(req *http.Request, _ []*http.Request) error {
+	return fmt.Errorf("the Prefect API redirected the request to %s, and the client does not follow redirects",
+		req.URL.Redacted())
+}
 
-	// Determine if we need port-forwarding
-	needsPortForwarding := !baseClient.isRunningInCluster() && serverRef.IsInCluster()
-
-	// Set the base URL based on whether we need port-forwarding
-	var baseURL string
-	if needsPortForwarding {
-		// When port-forwarding, use localhost with port 14200
-		baseURL = "http://localhost:14200/api"
-		log.V(1).Info("Using localhost for port-forwarding", "url", baseURL)
-	} else {
-		// Use the server's namespace, or fallback to the provided namespace
-		namespace := serverRef.Namespace
-		if namespace == "" {
-			namespace = fallbackNamespace // Use provided fallback instead of hardcoded "default"
-		}
-		baseURL = serverRef.GetAPIURL(namespace)
+// NewClientFromServerReference creates a Client for the server that serverRef
+// points to. fallbackNamespace is the namespace of the resource that holds
+// serverRef. When the operator runs outside the cluster and serverRef names an
+// in-cluster server, it starts a port-forward to that server with kubectl,
+// which runs until ctx ends or the Client is closed.
+func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
+	// GetAPIURL prefers RemoteAPIURL over Name, and GetAPIKey checks the API
+	// key's allowed URLs against GetAPIURL, so a reference with both must not
+	// port-forward to the server that Name names.
+	needsPortForwarding := !isRunningInCluster() && serverRef.IsInCluster() && !serverRef.IsRemote()
+	if !needsPortForwarding {
+		baseURL := serverRef.GetAPIURL(fallbackNamespace)
 		log.V(1).Info("Using in-cluster URL", "url", baseURL)
+		return NewClient(baseURL, apiKey, log), nil
 	}
+
+	// The forward must reach the Service in the namespace that GetAPIURL
+	// names, because GetAPIKey checked the API key against that URL.
+	namespace := serverRef.ServerNamespace(fallbackNamespace)
+	forward, err := kubectl.Start(ctx, namespace, serverRef.Name, 4200)
+	if err != nil {
+		return nil, err
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d/api", forward.LocalPort)
+	log.V(1).Info("Using a port-forward", "url", baseURL, "service", serverRef.Name, "namespace", namespace)
 
 	client := NewClient(baseURL, apiKey, log)
-
-	if needsPortForwarding {
-		// Initialize port-forwarding client with local port 14200 and remote port 4200
-		portForwardClient := portforward.NewKubectlPortForwarder(serverRef.Namespace, serverRef.Name, 14200, 4200)
-		client.PortForwardClient = portForwardClient
-
-		// Set up port-forwarding
-		stopCh := make(chan struct{}, 1)
-		readyCh := make(chan struct{}, 1)
-		errCh := make(chan error, 1)
-
-		go func() {
-			errCh <- client.PortForwardClient.ForwardPorts(stopCh, readyCh)
-		}()
-
-		select {
-		case err := <-errCh:
-			return nil, err
-		case <-readyCh:
-			log.V(1).Info("Port-forwarding is ready")
-		}
-	}
-
+	client.portForward = forward
 	return client, nil
 }
 
+// Close stops the client's port-forward, if it has one. A closed Client
+// returns an error from every request that needed the port-forward.
+func (c *Client) Close() {
+	if c.portForward != nil {
+		c.portForward.Close()
+	}
+}
+
+// checkPortForward returns an error if the client's port-forward has stopped.
+// Another process could then listen on the same local port.
+func (c *Client) checkPortForward() error {
+	if c.portForward == nil {
+		return nil
+	}
+	select {
+	case <-c.portForward.Done():
+		return fmt.Errorf("the port-forward to the Prefect server at %s has stopped", c.BaseURL)
+	default:
+		return nil
+	}
+}
+
 // NewClientFromK8s creates a Client from a PrefectServerReference, reading
-// the API key through the Kubernetes client.
-func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
+// the API key through the Kubernetes client. kubectl is used as in
+// NewClientFromServerReference.
+func NewClientFromK8s(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
 	// Get the API key from the server reference
 	apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
 	if err != nil {
@@ -98,7 +112,7 @@ func NewClientFromK8s(ctx context.Context, serverRef *prefectiov1.PrefectServerR
 	}
 
 	// Create client using the existing factory function, passing the namespace as fallback
-	return NewClientFromServerReference(serverRef, apiKey, namespace, log)
+	return NewClientFromServerReference(ctx, kubectl, serverRef, apiKey, namespace, log)
 }
 
 // ClientFactory returns a Client for the Prefect server that serverRef
@@ -116,10 +130,11 @@ func UncachedObjects() []client.Object {
 
 // NewClientFactory returns a ClientFactory that reads API keys through
 // k8sClient and logs with the logger in the context. k8sClient must not cache
-// the kinds in UncachedObjects.
-func NewClientFactory(k8sClient client.Client) ClientFactory {
+// the kinds in UncachedObjects. Outside the cluster, port-forwards run with
+// kubectl, which must name the context that k8sClient connects to.
+func NewClientFactory(k8sClient client.Client, kubectl portforward.Kubectl) ClientFactory {
 	return func(ctx context.Context, serverRef *prefectiov1.PrefectServerReference, namespace string) (*Client, error) {
-		return NewClientFromK8s(ctx, serverRef, k8sClient, namespace, log.FromContext(ctx))
+		return NewClientFromK8s(ctx, kubectl, serverRef, k8sClient, namespace, log.FromContext(ctx))
 	}
 }
 
@@ -411,7 +426,7 @@ func (c *Client) DeleteWorkPool(ctx context.Context, name string) error {
 }
 
 // isRunningInCluster checks if the operator is running in-cluster
-func (c *Client) isRunningInCluster() bool {
+func isRunningInCluster() bool {
 	_, err := rest.InClusterConfig()
 	return err == nil
 }

@@ -14,9 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	kubeconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -25,6 +27,7 @@ import (
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
 	"github.com/PrefectHQ/prefect-operator/internal/controller"
+	"github.com/PrefectHQ/prefect-operator/internal/portforward"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
 	//+kubebuilder:scaffold:imports
 )
@@ -109,13 +112,22 @@ func main() {
 	// after the manager stops then its usage might be unsafe.
 	mgrOpts.LeaderElectionReleaseOnCancel = true
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
+	restConfig, kubectl, err := clusterConfig()
+	if err != nil {
+		setupLog.Error(err, "unable to load the kubeconfig")
+		os.Exit(1)
+	}
+	if kubectl.Context != "" {
+		setupLog.Info("port-forwards to in-cluster Prefect servers use this kubeconfig context", "context", kubectl.Context)
+	}
+
+	mgr, err := ctrl.NewManager(restConfig, mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	prefectClients := prefect.NewClientFactory(mgr.GetClient())
+	prefectClients := prefect.NewClientFactory(mgr.GetClient(), kubectl)
 	recorder := mgr.GetEventRecorder("prefect-operator")
 
 	if err = (&controller.PrefectServerReconciler{
@@ -187,6 +199,27 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// clusterConfig returns the manager's REST config. In the cluster, the
+// returned Kubectl is empty, because the operator reaches Prefect servers
+// through their Services. Outside the cluster, it reads the kubeconfig's
+// current context once and builds both the REST config and the Kubectl from
+// that context. A later `kubectl config use-context` then changes neither, so
+// port-forwards stay on the cluster that the operator watches. Both read the
+// kubeconfig that the --kubeconfig flag names, or the default kubeconfig when
+// the flag is empty.
+func clusterConfig() (*rest.Config, portforward.Kubectl, error) {
+	if _, err := rest.InClusterConfig(); err == nil {
+		cfg, err := kubeconfig.GetConfig()
+		return cfg, portforward.Kubectl{}, err
+	}
+	kubectl, err := portforward.PinCurrentContext(flag.Lookup(kubeconfig.KubeconfigFlagName).Value.String())
+	if err != nil {
+		return nil, portforward.Kubectl{}, err
+	}
+	cfg, err := kubeconfig.GetConfigWithContext(kubectl.Context)
+	return cfg, kubectl, err
 }
 
 // managerOptions returns the manager options that control how the operator

@@ -161,6 +161,7 @@ func (r *PrefectDeploymentReconciler) syncWithPrefect(ctx context.Context, deplo
 		log.Error(err, "Failed to create Prefect client", "deployment", deployment.Name)
 		return r.syncFailed(ctx, deployment, "PrefectClientError", err)
 	}
+	defer prefectClient.Close()
 
 	// Requeue until the referenced work pool exists (e.g. its PrefectWorkPool
 	// hasn't reconciled yet). Any other failure of the lookup is a sync error.
@@ -428,6 +429,7 @@ func (r *PrefectDeploymentReconciler) handleDeletion(ctx context.Context, deploy
 			if err != nil {
 				return fmt.Errorf("creating Prefect client: %w", err)
 			}
+			defer prefectClient.Close()
 			return prefectClient.DeleteDeployment(ctx, *id)
 		}
 	}

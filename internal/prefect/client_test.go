@@ -853,7 +853,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(serverRefWithRemote, "test-key", "fallback-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRefWithRemote, "test-key", "fallback-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -872,11 +872,26 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromServerReference(serverRef, "test-key", "test-namespace", logger)
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "test-key", "test-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
 					Expect(client.BaseURL).To(Equal("https://api.prefect.cloud/api"))
+				})
+
+				It("should send requests to the remote API URL when Name is also set", func() {
+					serverRef = &prefectiov1.PrefectServerReference{
+						RemoteAPIURL: new("https://api.prefect.cloud"),
+						Name:         testServerName,
+						Namespace:    "prefect-system",
+					}
+
+					client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "test-key", "test-namespace", logger)
+
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client.BaseURL).To(Equal(serverRef.GetAPIURL("test-namespace")))
+					Expect(client.BaseURL).To(Equal("https://api.prefect.cloud/api"))
+					Expect(client.portForward).To(BeNil())
 				})
 			})
 
@@ -950,7 +965,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromK8s(ctx, serverRef, nil, "deployment-namespace", logger)
+					client, err := NewClientFromK8s(ctx, testKubectl, serverRef, nil, "deployment-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
@@ -973,7 +988,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 						RemoteAPIURL: new("https://api.prefect.cloud"),
 					}
 
-					client, err := NewClientFromK8s(ctx, serverRef, nil, "deployment-namespace", logger)
+					client, err := NewClientFromK8s(ctx, testKubectl, serverRef, nil, "deployment-namespace", logger)
 
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())

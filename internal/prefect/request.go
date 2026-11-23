@@ -81,6 +81,10 @@ func (c *Client) endpoint(format string, args ...string) string {
 // the JSON body. When out is non-nil and the response has a body, do decodes
 // the body into out. A response with a non-2xx status returns an *apiError.
 func (c *Client) do(ctx context.Context, method, reqURL string, in, out any) error {
+	if err := c.checkPortForward(); err != nil {
+		return err
+	}
+
 	var body io.Reader
 	if in != nil {
 		data, err := json.Marshal(in)

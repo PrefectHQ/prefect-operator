@@ -1,0 +1,42 @@
+# The operator reads the API key that spec.server.apiKey.valueFrom names and
+# sends it to the server that spec.server names. This policy lets a request
+# set spec.server only if the requester may get the Secret or ConfigMap it
+# names. Requests that leave spec.server unchanged are not checked.
+#
+# PrefectServer and PrefectWorkPool are left out, because
+# workload-permissions.yaml already requires permission to create Deployments,
+# and a Deployment's pods can read any Secret or ConfigMap in their namespace.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: api-key-permissions
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["prefect.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["prefectautomations", "prefectdeployments", "prefectworkqueues"]
+  variables:
+    - name: serverUnchanged
+      expression: request.operation == 'UPDATE' && object.spec.?server == oldObject.spec.?server
+    - name: secretName
+      expression: object.spec.?server.?apiKey.?valueFrom.?secretKeyRef.?name.orValue('')
+    - name: configMapName
+      expression: object.spec.?server.?apiKey.?valueFrom.?configMapKeyRef.?name.orValue('')
+  validations:
+    - expression: >-
+        variables.serverUnchanged || variables.secretName == '' ||
+        authorizer.group('').resource('secrets').namespace(request.namespace).name(variables.secretName).check('get').allowed()
+      messageExpression: >-
+        'spec.server.apiKey.valueFrom.secretKeyRef names Secret ' + variables.secretName +
+        ', which you do not have permission to get in namespace ' + request.namespace
+      reason: Forbidden
+    - expression: >-
+        variables.serverUnchanged || variables.configMapName == '' ||
+        authorizer.group('').resource('configmaps').namespace(request.namespace).name(variables.configMapName).check('get').allowed()
+      messageExpression: >-
+        'spec.server.apiKey.valueFrom.configMapKeyRef names ConfigMap ' + variables.configMapName +
+        ', which you do not have permission to get in namespace ' + request.namespace
+      reason: Forbidden

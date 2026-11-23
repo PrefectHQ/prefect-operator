@@ -1,0 +1,60 @@
+suite: admission policies
+
+templates:
+  - templates/admission-policies.yaml
+
+tests:
+  - it: creates each policy from files/admission-policies, with a binding
+    asserts:
+      - hasDocuments:
+          count: 4
+      - containsDocument:
+          kind: ValidatingAdmissionPolicy
+          apiVersion: admissionregistration.k8s.io/v1
+          name: prefect-operator-api-key-permissions
+          any: true
+      - containsDocument:
+          kind: ValidatingAdmissionPolicyBinding
+          apiVersion: admissionregistration.k8s.io/v1
+          name: prefect-operator-api-key-permissions
+          any: true
+      - containsDocument:
+          kind: ValidatingAdmissionPolicy
+          apiVersion: admissionregistration.k8s.io/v1
+          name: prefect-operator-workload-permissions
+          any: true
+      - containsDocument:
+          kind: ValidatingAdmissionPolicyBinding
+          apiVersion: admissionregistration.k8s.io/v1
+          name: prefect-operator-workload-permissions
+          any: true
+
+  - it: rejects a request when a policy can't be evaluated
+    documentSelector:
+      path: kind
+      value: ValidatingAdmissionPolicy
+      matchMany: true
+    asserts:
+      - equal:
+          path: spec.failurePolicy
+          value: Fail
+
+  - it: binds each policy so that the API server denies the requests it rejects
+    documentSelector:
+      path: kind
+      value: ValidatingAdmissionPolicyBinding
+      matchMany: true
+    asserts:
+      - equal:
+          path: spec.validationActions
+          value: [Deny]
+      - matchRegex:
+          path: spec.policyName
+          pattern: ^prefect-operator-(api-key|workload)-permissions$
+
+  - it: creates no policies when admissionPolicy.enabled is false
+    set:
+      admissionPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

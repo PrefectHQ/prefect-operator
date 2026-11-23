@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
+	"github.com/PrefectHQ/prefect-operator/internal/portforward"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
 	"github.com/PrefectHQ/prefect-operator/internal/utils"
@@ -47,6 +48,8 @@ var _ = Describe("PrefectDeployment controller", func() {
 		recorder          *events.FakeRecorder
 		prefectAPI        *prefecttest.Server
 		prefectClient     *prefect.Client
+		// allowAPIKeyFor sets the API key Secret's allowed API URLs to apiURL.
+		allowAPIKeyFor func(apiURL string)
 	)
 
 	BeforeEach(func() {
@@ -67,15 +70,19 @@ var _ = Describe("PrefectDeployment controller", func() {
 		// Create the API key secret that the deployment references
 		apiKeySecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "prefect-api-key",
-				Namespace: namespaceName,
-				Labels:    map[string]string{prefectiov1.LabelAPIKey: "true"},
+				Name:        "prefect-api-key",
+				Namespace:   namespaceName,
+				Annotations: map[string]string{prefectiov1.AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 			},
 			Data: map[string][]byte{
 				"api-key": []byte("test-api-key-value"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, apiKeySecret)).To(Succeed())
+		allowAPIKeyFor = func(apiURL string) {
+			apiKeySecret.Annotations[prefectiov1.AnnotationAllowedAPIURLs] = apiURL
+			Expect(k8sClient.Update(ctx, apiKeySecret)).To(Succeed())
+		}
 
 		prefectDeployment = &prefectiov1.PrefectDeployment{
 			ObjectMeta: metav1.ObjectMeta{
@@ -514,8 +521,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating a ConfigMap with API key")
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "prefect-config",
-					Namespace: namespaceName,
+					Name:        "prefect-config",
+					Namespace:   namespaceName,
+					Annotations: map[string]string{prefectiov1.AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string]string{
 					"api-key": "configmap-api-key-value",
@@ -525,6 +533,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 			By("Testing GetAPIKey function directly")
 			serverRef := &prefectiov1.PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &prefectiov1.APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -605,9 +614,9 @@ var _ = Describe("PrefectDeployment controller", func() {
 			By("Creating secret without the expected key")
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "secret-wrong-key",
-					Namespace: namespaceName,
-					Labels:    map[string]string{prefectiov1.LabelAPIKey: "true"},
+					Name:        "secret-wrong-key",
+					Namespace:   namespaceName,
+					Annotations: map[string]string{prefectiov1.AnnotationAllowedAPIURLs: "https://api.prefect.cloud"},
 				},
 				Data: map[string][]byte{
 					"wrong-key": []byte("some-value"),
@@ -617,6 +626,7 @@ var _ = Describe("PrefectDeployment controller", func() {
 
 			By("Testing GetAPIKey with wrong key")
 			serverRef := &prefectiov1.PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
 				APIKey: &prefectiov1.APIKeySpec{
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -918,7 +928,8 @@ var _ = Describe("PrefectDeployment controller", func() {
 			prefectDeployment.Spec.Server.RemoteAPIURL = new(prefectAPI.URL)
 			prefectDeployment.Spec.Server.AccountID = nil
 			prefectDeployment.Spec.Server.WorkspaceID = nil
-			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient)
+			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient, portforward.Kubectl{})
+			allowAPIKeyFor(prefectAPI.URL)
 
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 			for range 2 {
@@ -931,16 +942,11 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(prefectAPI.Calls(createDeploymentRoute)).To(Equal(1))
 		})
 
-		It("Should not send the API key from a Secret without the prefect.io/api-key label", func() {
-			secret := &corev1.Secret{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespaceName, Name: "prefect-api-key"}, secret)).To(Succeed())
-			delete(secret.Labels, prefectiov1.LabelAPIKey)
-			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
-
+		It("Should not send the API key to a server that the Secret doesn't allow", func() {
 			prefectDeployment.Spec.Server.RemoteAPIURL = new(prefectAPI.URL)
 			prefectDeployment.Spec.Server.AccountID = nil
 			prefectDeployment.Spec.Server.WorkspaceID = nil
-			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient)
+			reconciler.NewPrefectClient = prefect.NewClientFactory(k8sClient, portforward.Kubectl{})
 
 			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
 			By("Finalizer pass")
@@ -948,14 +954,14 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
-			Expect(err).To(MatchError(ContainSubstring("does not have the label prefect.io/api-key=true")))
+			Expect(err).To(MatchError(ContainSubstring("secret prefect-api-key does not allow its API key to be used for")))
 
 			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
 			Expect(prefectDeployment.Status.Ready).To(BeFalse())
 			cond := meta.FindStatusCondition(prefectDeployment.Status.Conditions, PrefectDeploymentConditionSynced)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Reason).To(Equal("PrefectClientError"))
-			Expect(cond.Message).To(ContainSubstring("prefect.io/api-key=true"))
+			Expect(cond.Message).To(ContainSubstring("prefect.io/allowed-api-urls"))
 			Expect(prefectAPI.Calls(readWorkPoolRoute)).To(BeZero())
 		})
 	})

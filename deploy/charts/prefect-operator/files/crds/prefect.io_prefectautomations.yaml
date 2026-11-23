@@ -388,8 +388,10 @@ spec:
                       valueFrom:
                         description: |-
                           ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-                          in the resource's namespace. A Secret must have the label
-                          prefect.io/api-key: "true", or the operator does not read it.
+                          in the resource's namespace. The Secret or ConfigMap must have the
+                          annotation prefect.io/allowed-api-urls, a comma-separated list of the
+                          Prefect API URLs that the key may be used for. The chart's admission
+                          policy also requires that you may get the Secret or ConfigMap.
                         properties:
                           configMapKeyRef:
                             description: Selects a key of a ConfigMap.
@@ -520,6 +522,9 @@ spec:
                             x-kubernetes-map-type: atomic
                         type: object
                     type: object
+                    x-kubernetes-validations:
+                    - message: set apiKey.value or apiKey.valueFrom, not both
+                      rule: '!(has(self.value) && has(self.valueFrom))'
                   name:
                     description: Name is the name of the in-cluster Prefect Server
                       in the given namespace

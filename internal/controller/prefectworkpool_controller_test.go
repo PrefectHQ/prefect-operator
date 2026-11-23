@@ -142,6 +142,31 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		Expect(container.Image).To(Equal("prefecthq/prefect:custom-prefect-image"))
 	})
 
+	It("should reject an API key with both value and valueFrom", func() {
+		prefectWorkPool = &prefectiov1.PrefectWorkPool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name.Name,
+				Namespace: name.Namespace,
+			},
+			Spec: prefectiov1.PrefectWorkPoolSpec{
+				Server: prefectiov1.PrefectServerReference{
+					RemoteAPIURL: new("https://api.prefect.cloud"),
+					APIKey: &prefectiov1.APIKeySpec{
+						Value: new("literal-key"),
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-api-key"},
+								Key:                  "api-key",
+							},
+						},
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, prefectWorkPool)
+		Expect(err).To(MatchError(ContainSubstring("set apiKey.value or apiKey.valueFrom, not both")))
+	})
+
 	It("should allow specifying a Prefect version", func() {
 		prefectWorkPool = &prefectiov1.PrefectWorkPool{
 			ObjectMeta: metav1.ObjectMeta{

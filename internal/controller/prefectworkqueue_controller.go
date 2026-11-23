@@ -140,6 +140,7 @@ func (r *PrefectWorkQueueReconciler) syncWithPrefect(ctx context.Context, workQu
 		r.notSynced(ctx, workQueue, "PrefectClientError", err.Error())
 		return ctrl.Result{}, err
 	}
+	defer prefectClient.Close()
 
 	spec := &prefect.WorkQueueSpec{
 		Name:             workQueue.Spec.Name,
@@ -329,6 +330,7 @@ func (r *PrefectWorkQueueReconciler) handleDeletion(ctx context.Context, workQue
 			if err != nil {
 				return fmt.Errorf("creating Prefect client: %w", err)
 			}
+			defer prefectClient.Close()
 			return prefectClient.DeleteWorkQueue(ctx, workQueue.Spec.WorkPoolName, managedName)
 		}
 	}
