@@ -9,6 +9,8 @@ const (
 	EnvPrefectAPIDatabasePort           = "PREFECT_API_DATABASE_PORT"
 	EnvPrefectAPIDatabaseUser           = "PREFECT_API_DATABASE_USER"
 
+	EnvPrefectAPIKey                 = "PREFECT_API_KEY"
+	EnvPrefectAPIURL                 = "PREFECT_API_URL"
 	EnvPrefectHome                   = "PREFECT_HOME"
 	EnvPrefectMessagingBroker        = "PREFECT_MESSAGING_BROKER"
 	EnvPrefectMessagingCache         = "PREFECT_MESSAGING_CACHE"

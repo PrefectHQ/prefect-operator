@@ -144,10 +144,10 @@ var _ = Describe("PrefectWorkPool.DerivedEnvVarNames", func() {
 
 	It("leaves out variables the settings override", func() {
 		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
-			Settings: []corev1.EnvVar{{Name: "PREFECT_API_URL", Value: "https://prefect.example.com/api"}},
+			Settings: []corev1.EnvVar{{Name: "PREFECT_WORKER_WEBSERVER_PORT", Value: "9090"}},
 		}}
 
-		Expect(s.DerivedEnvVarNames()).To(Equal([]string{EnvPrefectHome, "PREFECT_WORKER_WEBSERVER_PORT"}))
+		Expect(s.DerivedEnvVarNames()).To(Equal([]string{EnvPrefectHome, "PREFECT_API_URL"}))
 	})
 
 	It("includes the API key when one is set", func() {
@@ -156,5 +156,23 @@ var _ = Describe("PrefectWorkPool.DerivedEnvVarNames", func() {
 		}}
 
 		Expect(s.DerivedEnvVarNames()).To(ContainElement("PREFECT_API_KEY"))
+	})
+})
+
+var _ = Describe("PrefectWorkPool.ValidateSettings", func() {
+	It("accepts other settings", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Settings: []corev1.EnvVar{{Name: "PREFECT_LOGGING_LEVEL", Value: "DEBUG"}},
+		}}
+		Expect(s.ValidateSettings()).To(Succeed())
+	})
+
+	It("refuses settings that Server sets", func() {
+		for _, name := range []string{"PREFECT_API_URL", "PREFECT_API_KEY"} {
+			s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+				Settings: []corev1.EnvVar{{Name: name, Value: "x"}},
+			}}
+			Expect(s.ValidateSettings()).To(MatchError("settings must not set " + name + "; set it with spec.server"))
+		}
 	})
 })

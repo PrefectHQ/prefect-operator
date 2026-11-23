@@ -161,7 +161,9 @@ in-cluster server, it's `http://<name>.<namespace>.svc:4200/api`. The resource's
 
 Set either `apiKey.value` or `apiKey.valueFrom`, not both. The operator checks
 the annotation each time it reads the key. A `PrefectWorkPool` worker reads the
-key itself, through a `secretKeyRef` or `configMapKeyRef` in its Deployment. If
+key itself, through a `secretKeyRef` or `configMapKeyRef` in its Deployment.
+The work pool's `settings` can't set `PREFECT_API_URL` or `PREFECT_API_KEY`, so
+the worker uses the URL the operator checked. If
 you remove a URL from the annotation later, the operator stops updating the
 worker Deployment, but running and restarted workers still read the key. To
 stop a worker from using the key, delete the `PrefectWorkPool` or rotate the

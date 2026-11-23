@@ -164,7 +164,7 @@ var _ = Describe("PrefectWorkPool pod templates", func() {
 				Workers: 1,
 				Settings: []corev1.EnvVar{
 					{Name: "API_HOST", Value: "prefect.example.com"},
-					{Name: "PREFECT_API_URL", Value: "https://$(API_HOST)/api"},
+					{Name: "PREFECT_UI_URL", Value: "https://$(API_HOST)/api"},
 				},
 				DeploymentTemplate: rawTemplate(`{"spec":{"containers":[{"name":"prefect-worker","env":[
 					{"name":"PREFECT_HOME","value":"/tmp"}

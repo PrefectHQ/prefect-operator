@@ -175,7 +175,10 @@ If not specified, the default ServiceAccount for the namespace will be used.<br/
         <td><b><a href="#prefectworkpoolspecsettingsindex">settings</a></b></td>
         <td>[]object</td>
         <td>
-          A list of environment variables to set on the Prefect Worker<br/>
+          A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL or
+PREFECT_API_KEY, which come from Server.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY'])): settings must not set PREFECT_API_URL or PREFECT_API_KEY; set them with spec.server</li>
         </td>
         <td>false</td>
       </tr><tr>

@@ -2897,8 +2897,9 @@ spec:
                   If not specified, the default ServiceAccount for the namespace will be used.
                 type: string
               settings:
-                description: A list of environment variables to set on the Prefect
-                  Worker
+                description: |-
+                  A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL or
+                  PREFECT_API_KEY, which come from Server.
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.
@@ -3056,6 +3057,10 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-validations:
+                - message: settings must not set PREFECT_API_URL or PREFECT_API_KEY;
+                    set them with spec.server
+                  rule: self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY']))
               tolerations:
                 description: Tolerations allow the worker pods to be scheduled onto
                   nodes with matching taints.
