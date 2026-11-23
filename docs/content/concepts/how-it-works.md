@@ -250,6 +250,7 @@ the operator records.
 | `PrefectServer` | `SharedStateConfigured` | `False` when more than one replica runs without Redis lease storage. See [Server storage](../../guides/server-storage/#more-than-one-replica). |
 | `PrefectServer`, `PrefectWorkPool` | `DeploymentTemplateApplied`, `MigrationJobTemplateApplied` | The pod template patch was applied. See [Pod templates](../../guides/pod-templates/). |
 | `PrefectWorkPool` | `DeploymentReconciled` | The operator created or updated the worker Deployment. |
+| `PrefectWorkPool` | `SettingsApplied` | Present only when the operator left some `settings` out of the worker, because they set a variable that `spec.server` sets, such as `prefect_api_url`. The message names them. |
 
 `Synced` reasons you may see:
 
@@ -259,6 +260,6 @@ the operator records.
 | `SyncError` | The Prefect API returned an error. The message includes it. |
 | `WorkPoolNotFound`, `DeploymentNotFound` | A dependency doesn't exist in Prefect yet. See [Dependencies](#dependencies-between-resources). |
 | `ConversionError` | The spec couldn't be turned into a Prefect API request, for example because of an invalid schedule. |
-| `InvalidSpec` | The spec breaks a rule that the CRD's validation didn't catch, such as a work pool `settings` entry that sets `PREFECT_API_URL`. |
+| `InvalidSpec` | The spec breaks a rule that the CRD's validation didn't catch, such as an automation without a trigger. |
 | `BaseJobTemplateError` | The work pool's base job template ConfigMap or key doesn't exist. |
 | `Recreating` | The object was deleted in Prefect during the sync. The next sync, one second later, creates it again. |

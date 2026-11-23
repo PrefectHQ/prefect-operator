@@ -178,7 +178,9 @@ If not specified, the default ServiceAccount for the namespace will be used.<br/
         <td>[]object</td>
         <td>
           A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL,
-PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server.<br/>
+PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server. The operator leaves out
+settings that set them in another case, such as prefect_api_url, and reports them in the
+SettingsApplied condition.<br/>
           <br/>
             <i>Validations</i>:<li>self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY', 'PREFECT_API_AUTH_STRING'])): settings must not set PREFECT_API_URL, PREFECT_API_KEY or PREFECT_API_AUTH_STRING; set them with spec.server</li>
         </td>

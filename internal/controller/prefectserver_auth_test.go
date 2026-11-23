@@ -183,10 +183,12 @@ var _ = Describe("PrefectServer auth", func() {
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, name, &appsv1.Deployment{}))).To(BeTrue())
 	})
 
-	It("restores the auth string that a deploymentTemplate sets", func() {
+	It("restores the auth string that a deploymentTemplate sets, in any case", func() {
 		server := newServer(nil)
-		server.Spec.DeploymentTemplate = rawTemplate(
-			`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_SERVER_API_AUTH_STRING","value":"admin:other"}]}]}}`)
+		server.Spec.DeploymentTemplate = rawTemplate(`{"spec":{"containers":[{"name":"prefect-server","env":[
+			{"name":"PREFECT_SERVER_API_AUTH_STRING","value":"admin:other"},
+			{"name":"prefect_server_api_auth_string","value":"admin:other"}
+		]}]}}`)
 		Expect(k8sClient.Create(ctx, server)).To(Succeed())
 		Expect(reconcileServer()).To(Succeed())
 
@@ -197,6 +199,8 @@ var _ = Describe("PrefectServer auth", func() {
 			HaveField("Value", ""),
 			HaveField("ValueFrom.SecretKeyRef.Name", "prefect-auth"),
 		)))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(
+			HaveField("Name", "prefect_server_api_auth_string")))
 	})
 
 	It("rejects the auth string in settings, only with auth", func() {

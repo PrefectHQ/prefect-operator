@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,7 +43,8 @@ type ProtectedContainer struct {
 	// VolumeMounts are volume mount names. Any other mount at one of their
 	// paths is dropped too, so the pod doesn't end up with two mounts at one path.
 	VolumeMounts []string
-	// Env are environment variable names.
+	// Env are environment variable names. They match without regard to case,
+	// so a template can't add the same variable in another case.
 	Env []string
 }
 
@@ -270,8 +272,11 @@ func restoreContainer(merged, base []corev1.Container, index int, p ProtectedCon
 		return slices.Contains(p.VolumeMounts, mount.Name) || slices.Contains(paths, mount.MountPath)
 	}, func(mount corev1.VolumeMount) string { return mount.Name })
 
+	// Prefect reads its settings from the environment without regard to case,
+	// so a template variable such as prefect_api_url would override
+	// PREFECT_API_URL.
 	got.Env, env = restoreItems(got.Env, want.Env, func(env corev1.EnvVar) bool {
-		return slices.Contains(p.Env, env.Name)
+		return slices.ContainsFunc(p.Env, func(name string) bool { return strings.EqualFold(name, env.Name) })
 	}, func(env corev1.EnvVar) string { return env.Name })
 
 	return merged, slices.Concat(itemPaths(path+".ports", ports), itemPaths(path+".volumeMounts", mounts), itemPaths(path+".env", env))

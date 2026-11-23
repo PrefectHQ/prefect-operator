@@ -169,6 +169,22 @@ func TemplateApplied(object, field string, ignored []string) metav1.Condition {
 	}
 }
 
+// TypeSettingsApplied is the condition that SettingsIgnored returns.
+const TypeSettingsApplied = "SettingsApplied"
+
+// SettingsIgnored reports work pool settings that the operator left out of the
+// worker, because spec.server sets those variables. names are the settings'
+// names as written.
+func SettingsIgnored(names []string) metav1.Condition {
+	return metav1.Condition{
+		Type:   TypeSettingsApplied,
+		Reason: "ServerSettingsIgnored",
+		Message: fmt.Sprintf("settings were applied, except for %s, which spec.server sets; "+
+			"remove them from settings", strings.Join(names, ", ")),
+		Status: metav1.ConditionTrue,
+	}
+}
+
 func Updated(object string) metav1.Condition {
 	return metav1.Condition{
 		Type:    fmt.Sprintf("%sReconciled", object),

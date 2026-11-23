@@ -90,7 +90,9 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	currentStatus := workPool.Status
+	// meta.SetStatusCondition changes conditions in place, so a shallow copy
+	// shares them and the comparison below would miss those changes.
+	currentStatus := *workPool.Status.DeepCopy()
 
 	// Defer a final status update at the end of the reconciliation loop, so that any of the
 	// individual reconciliation functions can update the status as they see fit.
@@ -120,12 +122,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	if err := workPool.ValidateSettings(); err != nil {
-		// Retrying won't help until the user fixes the spec, which triggers a
-		// new reconcile.
-		_ = r.syncFailed(&workPool, "InvalidSpec", err)
-		return ctrl.Result{}, nil
-	}
+	reportIgnoredSettings(r.Recorder, &workPool)
 
 	var baseJobTemplateConfigMap corev1.ConfigMap
 
@@ -232,6 +229,7 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // applies the work pool's deploymentTemplate to it. It also returns the
 // protected fields the template tried to override.
 func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplateSpec, []string, error) {
+	settings, _ := workPool.WorkerSettings()
 	base := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: workPool.WorkerLabels(),
@@ -263,7 +261,7 @@ func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplat
 							MountPath: constants.PrefectHomeMountPath,
 						},
 					},
-					Env: append(workPool.ToEnvVars(), workPool.Spec.Settings...),
+					Env: append(workPool.ToEnvVars(), settings...),
 
 					Resources: workPool.Spec.Resources,
 
@@ -284,7 +282,7 @@ func workerPodTemplate(workPool *prefectiov1.PrefectWorkPool) (corev1.PodTemplat
 		Containers: map[string]podtemplate.ProtectedContainer{
 			prefectiov1.ContainerNameWorker: {
 				VolumeMounts: []string{constants.PrefectDataVolumeName},
-				Env:          workPool.DerivedEnvVarNames(),
+				Env:          workPool.ProtectedEnvVarNames(),
 			},
 		},
 	})
@@ -405,6 +403,21 @@ func (r *PrefectWorkPoolReconciler) syncWithPrefect(ctx context.Context, workPoo
 	r.setCondition(workPool, PrefectWorkPoolConditionSynced, metav1.ConditionTrue, "SyncSuccessful", "Work pool successfully synced with Prefect API")
 
 	return nil
+}
+
+// reportIgnoredSettings sets the SettingsApplied condition and records a
+// Warning event when WorkerSettings leaves out some of the work pool's
+// settings, and removes the condition when it leaves out none.
+func reportIgnoredSettings(recorder events.EventRecorder, workPool *prefectiov1.PrefectWorkPool) {
+	_, ignored := workPool.WorkerSettings()
+	if len(ignored) == 0 {
+		meta.RemoveStatusCondition(&workPool.Status.Conditions, conditions.TypeSettingsApplied)
+		return
+	}
+	condition := conditions.SettingsIgnored(ignored)
+	if meta.SetStatusCondition(&workPool.Status.Conditions, condition) {
+		recorder.Eventf(workPool, nil, corev1.EventTypeWarning, condition.Reason, eventActionSync, "%s", condition.Message)
+	}
 }
 
 // syncFailed records why a sync failed in the Synced condition, which
