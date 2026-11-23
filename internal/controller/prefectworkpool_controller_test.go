@@ -167,6 +167,26 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 		Expect(err).To(MatchError(ContainSubstring("set apiKey.value or apiKey.valueFrom, not both")))
 	})
 
+	It("should reject a remoteApiUrl that isn't a plain http or https URL", func() {
+		for _, remote := range []string{
+			"ftp://prefect.example.com",
+			"prefect.example.com/api",
+			"https://user:password@prefect.example.com",
+			"http://internal.example.com/target?discard=/api",
+			"https://prefect.example.com/api#fragment",
+			"http://:4200",
+		} {
+			prefectWorkPool = &prefectiov1.PrefectWorkPool{
+				ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace},
+				Spec: prefectiov1.PrefectWorkPoolSpec{
+					Server: prefectiov1.PrefectServerReference{RemoteAPIURL: new(remote)},
+				},
+			}
+			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(
+				MatchError(ContainSubstring("remoteApiUrl must be an http or https URL")), remote)
+		}
+	})
+
 	It("should allow specifying a Prefect version", func() {
 		prefectWorkPool = &prefectiov1.PrefectWorkPool{
 			ObjectMeta: metav1.ObjectMeta{

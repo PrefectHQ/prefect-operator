@@ -394,10 +394,17 @@ spec:
                       Server is running
                     type: string
                   remoteApiUrl:
-                    description: RemoteAPIURL is the API URL for the remote Prefect
-                      Server. Set if using with an external Prefect Server or Prefect
-                      Cloud
+                    description: |-
+                      RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud.
+                      It must be an http or https URL with a host, and without user information, a query or a fragment.
+                    maxLength: 2048
                     type: string
+                    x-kubernetes-validations:
+                    - message: remoteApiUrl must be an http or https URL with a host,
+                        and without user information, a query or a fragment
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                        && url(self).getHostname() != '' && !self.contains('@') &&
+                        !self.contains('?') && !self.contains('#')
                   workspaceId:
                     description: WorkspaceID is the ID of the workspace to use to
                       connect to Prefect Cloud
