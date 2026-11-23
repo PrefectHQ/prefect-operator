@@ -1,6 +1,8 @@
 package prefect
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -261,6 +263,52 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Expect(err.Error()).To(ContainSubstring("API request failed with status 500"))
 			Expect(err.Error()).To(ContainSubstring("Internal server error"))
 			Expect(flow).To(BeNil())
+		})
+
+		It("Refuses a response body larger than the limit", func() {
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(bytes.Repeat([]byte(" "), maxResponseBytes+1))
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			flow, err := client.GetFlowByName(ctx, testFlowName)
+			Expect(err).To(MatchError(ContainSubstring("response body is larger than")))
+			Expect(flow).To(BeNil())
+		})
+
+		It("Applies the limit to a gzip response after decompressing it", func() {
+			var compressed bytes.Buffer
+			gz := gzip.NewWriter(&compressed)
+			_, _ = gz.Write(bytes.Repeat([]byte(" "), maxResponseBytes+1))
+			Expect(gz.Close()).To(Succeed())
+			Expect(compressed.Len()).To(BeNumerically("<", maxResponseBytes))
+
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Encoding", "gzip")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(compressed.Bytes())
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			_, err := client.GetFlowByName(ctx, testFlowName)
+			Expect(err).To(MatchError(ContainSubstring("response body is larger than")))
+		})
+
+		It("Keeps only the start of a large error response", func() {
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write(bytes.Repeat([]byte("x"), maxResponseBytes+1))
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			err := client.DeleteDeployment(ctx, "deployment-id")
+			Expect(err).NotTo(HaveOccurred(), "a 404 still means the object is gone")
+
+			_, err = client.UpdateDeployment(ctx, "deployment-id", &DeploymentSpec{}, nil)
+			Expect(err).To(MatchError(ErrNotFound))
+			Expect(len(err.Error())).To(BeNumerically("<", maxErrorBodyBytes+100))
+			Expect(err.Error()).To(HaveSuffix("(truncated)"))
 		})
 	})
 
