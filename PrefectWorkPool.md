@@ -175,7 +175,10 @@ If not specified, the default ServiceAccount for the namespace will be used.<br/
         <td><b><a href="#prefectworkpoolspecsettingsindex">settings</a></b></td>
         <td>[]object</td>
         <td>
-          A list of environment variables to set on the Prefect Worker<br/>
+          A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL or
+PREFECT_API_KEY, which come from Server.<br/>
+          <br/>
+            <i>Validations</i>:<li>self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY'])): settings must not set PREFECT_API_URL or PREFECT_API_KEY; set them with spec.server</li>
         </td>
         <td>false</td>
       </tr><tr>
@@ -5251,7 +5254,10 @@ Server defines which Prefect Server to connect to
         <td><b>remoteApiUrl</b></td>
         <td>string</td>
         <td>
-          RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud<br/>
+          RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud.
+It must be an http or https URL with a host, and without user information, a query or a fragment.<br/>
+          <br/>
+            <i>Validations</i>:<li>isURL(self) && url(self).getScheme() in ['http', 'https'] && url(self).getHostname() != '' && !self.contains('@') && !self.contains('?') && !self.contains('#'): remoteApiUrl must be an http or https URL with a host, and without user information, a query or a fragment</li>
         </td>
         <td>false</td>
       </tr><tr>

@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"fmt"
 	"maps"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +50,9 @@ type PrefectWorkPoolSpec struct {
 	// ExtraContainers defines additional containers to add to each worker in the Work Pool
 	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
-	// A list of environment variables to set on the Prefect Worker
+	// A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL or
+	// PREFECT_API_KEY, which come from Server.
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY']))",message="settings must not set PREFECT_API_URL or PREFECT_API_KEY; set them with spec.server"
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 
 	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
@@ -190,7 +194,7 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 			Value: PrefectHomePath,
 		},
 		{
-			Name:  "PREFECT_API_URL",
+			Name:  EnvPrefectAPIURL,
 			Value: s.PrefectAPIURL(),
 		},
 		{
@@ -204,17 +208,35 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 	// this Deployment.
 	if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.ValueFrom != nil {
 		envVars = append(envVars, corev1.EnvVar{
-			Name:      "PREFECT_API_KEY",
+			Name:      EnvPrefectAPIKey,
 			ValueFrom: s.Spec.Server.APIKey.ValueFrom,
 		})
 	} else if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.Value != nil {
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  "PREFECT_API_KEY",
+			Name:  EnvPrefectAPIKey,
 			Value: *s.Spec.Server.APIKey.Value,
 		})
 	}
 
 	return envVars
+}
+
+// serverEnvVarNames are the worker environment variables that Spec.Server
+// sets.
+var serverEnvVarNames = []string{EnvPrefectAPIURL, EnvPrefectAPIKey}
+
+// ValidateSettings returns an error if Spec.Settings sets PREFECT_API_URL or
+// PREFECT_API_KEY. Settings override the worker variables that ToEnvVars
+// returns, and the operator checks the API key's allowed URLs against
+// Spec.Server only. The CRD rejects such settings, but resources written
+// before that rule existed can still have them.
+func (s *PrefectWorkPool) ValidateSettings() error {
+	for _, setting := range s.Spec.Settings {
+		if slices.Contains(serverEnvVarNames, setting.Name) {
+			return fmt.Errorf("settings must not set %s; set it with spec.server", setting.Name)
+		}
+	}
+	return nil
 }
 
 // DerivedEnvVarNames returns the names of the environment variables the

@@ -73,7 +73,30 @@ var _ = Describe("finalize", func() {
 		expectGone()
 	})
 
-	It("removes the finalizer when the Prefect delete fails", func() {
+	It("keeps the finalizer and retries when the Prefect delete fails", func() {
+		obj := deleting(finalizer)
+
+		result, err := finalize(ctx, k8sClient, recorder, obj, finalizer, func(context.Context) error {
+			calls++
+			return errors.New("prefect is down")
+		})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+		Expect(calls).To(Equal(1))
+		Expect(recorder.Events).To(Receive(And(
+			HavePrefix("Warning DeleteFailed Failed to delete from Prefect, retrying until "),
+			HaveSuffix(": prefect is down"))))
+		Expect(k8sClient.Get(ctx, name, obj)).To(Succeed())
+		Expect(obj.Finalizers).To(ConsistOf(finalizer))
+
+		controllerutil.RemoveFinalizer(obj, finalizer)
+		Expect(k8sClient.Update(ctx, obj)).To(Succeed())
+	})
+
+	It("removes the finalizer when the Prefect delete still fails after the retry window", func() {
+		DeferCleanup(func(window time.Duration) { deleteRetryWindow = window }, deleteRetryWindow)
+		deleteRetryWindow = 0
 		obj := deleting(finalizer)
 
 		_, err := finalize(ctx, k8sClient, recorder, obj, finalizer, func(context.Context) error {

@@ -20,7 +20,10 @@ type PrefectServerReference struct {
 	// Name is the name of the in-cluster Prefect Server in the given namespace
 	Name string `json:"name,omitempty"`
 
-	// RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud
+	// RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud.
+	// It must be an http or https URL with a host, and without user information, a query or a fragment.
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https'] && url(self).getHostname() != '' && !self.contains('@') && !self.contains('?') && !self.contains('#')",message="remoteApiUrl must be an http or https URL with a host, and without user information, a query or a fragment"
 	RemoteAPIURL *string `json:"remoteApiUrl,omitempty"`
 
 	// APIKey is the API key to use to connect to a remote Prefect Server
@@ -68,6 +71,22 @@ func (s *PrefectServerReference) GetAPIURL(fallbackNamespace string) string {
 	}
 
 	return ""
+}
+
+// ValidateRemoteAPIURL returns an error if s is remote and its API URL is not
+// an http or https URL with a host, or has user information, a query or a
+// fragment. The CRD rejects such a remoteApiUrl, but resources written before
+// that rule existed can still have one. In a query, the paths that the client
+// appends would not reach the server as paths.
+func (s *PrefectServerReference) ValidateRemoteAPIURL() error {
+	if !s.IsRemote() {
+		return nil
+	}
+	if _, ok := parseAPIURL(s.GetAPIURL("")); !ok {
+		return fmt.Errorf("the API URL %q is not an http or https URL with a host, "+
+			"or has user information, a query or a fragment", s.GetAPIURL(""))
+	}
+	return nil
 }
 
 // ServerNamespace returns the namespace of the in-cluster server that s
@@ -202,7 +221,8 @@ func APIURLAllowed(allowed, apiURL string) bool {
 
 // parseAPIURL parses an absolute http or https URL, with its scheme and host in
 // lower case and its path cleaned. It returns false for any other URL, or one
-// with user information, a query or a fragment.
+// without a host name, such as "http://:4200", or with user information, a
+// query or a fragment.
 func parseAPIURL(raw string) (*url.URL, bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
@@ -210,7 +230,7 @@ func parseAPIURL(raw string) (*url.URL, bool) {
 	}
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return nil, false
 	}
 	u.Path = path.Clean("/" + u.Path)

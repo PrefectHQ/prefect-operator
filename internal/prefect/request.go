@@ -9,6 +9,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
+)
+
+const (
+	// maxResponseBytes is the largest response body the client reads. The
+	// operator's default memory limit is 128 MiB, and the transport
+	// decompresses gzip responses, so the limit applies after decompression.
+	maxResponseBytes = 8 << 20
+	// maxErrorBodyBytes is how much of a non-2xx response body an *apiError
+	// keeps. The error message is written to the resource's status.
+	maxErrorBodyBytes = 4 << 10
 )
 
 // ErrNotFound matches the error for a Prefect API response with status 404.
@@ -111,14 +122,17 @@ func (c *Client) do(ctx context.Context, method, reqURL string, in, out any) err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 	c.log.V(1).Info("Prefect API request", "method", method, "url", reqURL, "status", resp.StatusCode)
 
 	if !isSuccessStatusCode(resp.StatusCode) {
-		return &apiError{statusCode: resp.StatusCode, body: string(respBody)}
+		return &apiError{statusCode: resp.StatusCode, body: errorExcerpt(respBody)}
+	}
+	if len(respBody) > maxResponseBytes {
+		return fmt.Errorf("response body is larger than %d bytes", maxResponseBytes)
 	}
 	if out != nil && len(bytes.TrimSpace(respBody)) > 0 {
 		if err := json.Unmarshal(respBody, out); err != nil {
@@ -126,4 +140,12 @@ func (c *Client) do(ctx context.Context, method, reqURL string, in, out any) err
 		}
 	}
 	return nil
+}
+
+// errorExcerpt returns body as a string, cut to maxErrorBodyBytes.
+func errorExcerpt(body []byte) string {
+	if len(body) <= maxErrorBodyBytes {
+		return string(body)
+	}
+	return strings.ToValidUTF8(string(body[:maxErrorBodyBytes]), "") + " (truncated)"
 }

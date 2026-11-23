@@ -112,6 +112,8 @@ tbd
 
 ## Requirements
 
+Kubernetes: `>=1.30.0-0`
+
 | Repository | Name | Version |
 |------------|------|---------|
 | https://charts.bitnami.com/bitnami | common | 2.41.0 |
@@ -120,7 +122,7 @@ tbd
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| admissionPolicy.enabled | bool | `true` | specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC. Writing a PrefectServer or PrefectWorkPool spec requires permission to create Deployments in its namespace. Setting spec.server on any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names. |
+| admissionPolicy.enabled | bool | `true` | specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC. Writing a PrefectServer or PrefectWorkPool spec requires permission to create Deployments in its namespace. Writing the spec of any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names. |
 | commonAnnotations | object | `{}` | annotations to add to all deployed objects |
 | commonLabels | object | `{"app.kubernetes.io/component":"operator"}` | labels to add to all deployed objects |
 | crds.install | bool | `true` | install and upgrade the operator's CRDs with the chart. Uninstalling the chart leaves them in place. Set to false when the CRDs are managed outside this release, such as by another release of the chart in the same cluster |
@@ -130,6 +132,7 @@ tbd
 | operator.affinity | object | `{}` | affinity for operator pods assignment |
 | operator.containerSecurityContext.allowPrivilegeEscalation | bool | `false` | set operator containers' security context allowPrivilegeEscalation |
 | operator.containerSecurityContext.capabilities | object | `{"drop":["ALL"]}` | set operator container's security context capabilities |
+| operator.containerSecurityContext.enabled | bool | `true` | render the operator container's security context |
 | operator.defaultResyncInterval | string | `""` | default interval for checking Prefect resources for out-of-band drift. Uses the operator's 5m default when empty |
 | operator.extraEnvVars | list | `[]` | array with environment variables to add to operator container |
 | operator.image.pullPolicy | string | `"IfNotPresent"` | operator image pull policy |

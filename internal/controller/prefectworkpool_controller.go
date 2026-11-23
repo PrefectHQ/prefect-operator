@@ -120,6 +120,13 @@ func (r *PrefectWorkPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
+	if err := workPool.ValidateSettings(); err != nil {
+		// Retrying won't help until the user fixes the spec, which triggers a
+		// new reconcile.
+		_ = r.syncFailed(&workPool, "InvalidSpec", err)
+		return ctrl.Result{}, nil
+	}
+
 	var baseJobTemplateConfigMap corev1.ConfigMap
 
 	if workPool.Spec.BaseJobTemplate != nil && workPool.Spec.BaseJobTemplate.ConfigMap != nil {

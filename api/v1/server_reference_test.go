@@ -337,6 +337,7 @@ var _ = Describe("PrefectServerReference", func() {
 			Entry("an entry without a scheme", "api.prefect.cloud", "https://api.prefect.cloud/api", false),
 			Entry("an empty annotation", "", "https://api.prefect.cloud/api", false),
 			Entry("an empty API URL", "https://api.prefect.cloud", "", false),
+			Entry("an entry with a port but no host name", "http://:4200", "http://:4200/api", false),
 		)
 	})
 
@@ -414,6 +415,36 @@ var _ = Describe("PrefectServerReference", func() {
 
 			apiURL := serverRef.GetAPIURL("test-namespace")
 			Expect(apiURL).To(Equal("https://external.prefect.io/api"))
+		})
+	})
+
+	Context("ValidateRemoteAPIURL method", func() {
+		It("Should accept an http or https URL, and an in-cluster reference", func() {
+			Expect((&PrefectServerReference{RemoteAPIURL: new("https://api.prefect.cloud")}).ValidateRemoteAPIURL()).To(Succeed())
+			Expect((&PrefectServerReference{RemoteAPIURL: new("http://prefect.example.com:4200/api")}).ValidateRemoteAPIURL()).To(Succeed())
+			Expect((&PrefectServerReference{Name: "prefect-server"}).ValidateRemoteAPIURL()).To(Succeed())
+		})
+
+		It("Should refuse a URL with user information, a query or a fragment, or another scheme", func() {
+			for _, remote := range []string{
+				"ftp://prefect.example.com",
+				"https://user@prefect.example.com",
+				"http://internal.example.com/target?discard=/api",
+				"https://prefect.example.com/api#fragment",
+				"http://:4200",
+			} {
+				Expect((&PrefectServerReference{RemoteAPIURL: new(remote)}).ValidateRemoteAPIURL()).
+					To(MatchError(ContainSubstring("is not an http or https URL")), remote)
+			}
+		})
+
+		It("Should refuse a query in the account ID", func() {
+			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				AccountID:    new("account?x="),
+				WorkspaceID:  new("workspace"),
+			}
+			Expect(serverRef.ValidateRemoteAPIURL()).To(HaveOccurred())
 		})
 	})
 

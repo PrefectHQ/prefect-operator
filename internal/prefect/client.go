@@ -54,6 +54,9 @@ func refuseRedirect(req *http.Request, _ []*http.Request) error {
 // in-cluster server, it starts a port-forward to that server with kubectl,
 // which runs until ctx ends or the Client is closed.
 func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
+	if err := serverRef.ValidateRemoteAPIURL(); err != nil {
+		return nil, err
+	}
 	// GetAPIURL prefers RemoteAPIURL over Name, and GetAPIKey checks the API
 	// key's allowed URLs against GetAPIURL, so a reference with both must not
 	// port-forward to the server that Name names.
@@ -105,7 +108,11 @@ func (c *Client) checkPortForward() error {
 // the API key through the Kubernetes client. kubectl is used as in
 // NewClientFromServerReference.
 func NewClientFromK8s(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
-	// Get the API key from the server reference
+	// Check the URL first, because GetAPIKey would otherwise report only that
+	// the key's annotation does not allow it.
+	if err := serverRef.ValidateRemoteAPIURL(); err != nil {
+		return nil, err
+	}
 	apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key: %w", err)

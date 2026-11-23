@@ -500,7 +500,10 @@ Server configuration for connecting to Prefect API
         <td><b>remoteApiUrl</b></td>
         <td>string</td>
         <td>
-          RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud<br/>
+          RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud.
+It must be an http or https URL with a host, and without user information, a query or a fragment.<br/>
+          <br/>
+            <i>Validations</i>:<li>isURL(self) && url(self).getScheme() in ['http', 'https'] && url(self).getHostname() != '' && !self.contains('@') && !self.contains('?') && !self.contains('#'): remoteApiUrl must be an http or https URL with a host, and without user information, a query or a fragment</li>
         </td>
         <td>false</td>
       </tr><tr>
