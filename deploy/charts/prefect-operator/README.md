@@ -122,7 +122,7 @@ Kubernetes: `>=1.30.0-0`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| admissionPolicy.enabled | bool | `true` | specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC. Writing a PrefectServer or PrefectWorkPool spec requires permission to create Deployments in its namespace. Writing the spec of any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names. |
+| admissionPolicy.enabled | bool | `true` | specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC and refuse foreground deletes of PrefectServers. Writing a PrefectServer or PrefectWorkPool spec requires permission to create Deployments in its namespace. Writing the spec of any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names. |
 | commonAnnotations | object | `{}` | annotations to add to all deployed objects |
 | commonLabels | object | `{"app.kubernetes.io/component":"operator"}` | labels to add to all deployed objects |
 | crds.install | bool | `true` | install and upgrade the operator's CRDs with the chart. Uninstalling the chart leaves them in place. Set to false when the CRDs are managed outside this release, such as by another release of the chart in the same cluster |

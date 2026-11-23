@@ -1,0 +1,26 @@
+# Foreground deletion makes garbage collection delete a PrefectServer's
+# Deployment and Service before the server, whatever finalizers the server
+# has. The resources that use the server then can't delete their objects from
+# it. This policy refuses foreground deletes of PrefectServers. A policy can't
+# see whether anything uses the server, so it refuses them all.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: server-deletion
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["prefect.io"]
+        apiVersions: ["*"]
+        operations: ["DELETE"]
+        resources: ["prefectservers"]
+  validations:
+    - expression: >-
+        request.?options.?propagationPolicy.orValue('') != 'Foreground'
+      message: >-
+        foreground deletion deletes a PrefectServer's Deployment and Service before the resources
+        that use the server can delete their objects from it; delete it with background propagation,
+        which is the kubectl default; in Argo CD, set the PrunePropagationPolicy=background sync option,
+        and the Application's finalizer to resources-finalizer.argocd.argoproj.io/background
+      reason: Forbidden

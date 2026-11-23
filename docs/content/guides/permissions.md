@@ -51,9 +51,9 @@ operator can reach, apply a NetworkPolicy to its pod.
 
 ## Admission policies
 
-The chart installs two ValidatingAdmissionPolicies that close the first two
-rows. Writing a resource then also requires the RBAC for what the operator does
-with it:
+The chart installs three ValidatingAdmissionPolicies. Two of them close the
+first two rows. Writing a resource then also requires the RBAC for what the
+operator does with it:
 
 | Resource | The requester also needs |
 | --- | --- |
@@ -67,8 +67,11 @@ the operator creates a Deployment from each PrefectWorkPool, so writing its spec
 requires permission to create Deployments in namespace data-eng
 ```
 
-The policies don't check a request that leaves the spec unchanged, such as the
-operator adding its finalizer. They check new requests only, so resources that
+The third policy refuses a foreground delete of a `PrefectServer`. See
+[Deleting a server](../../concepts/how-it-works/#deleting-a-server).
+
+The first two policies don't check a request that leaves the spec unchanged,
+such as the operator adding its finalizer. They check new requests only, so resources that
 already exist aren't checked until someone changes them.
 
 The policies need Kubernetes 1.30 or later. The chart value

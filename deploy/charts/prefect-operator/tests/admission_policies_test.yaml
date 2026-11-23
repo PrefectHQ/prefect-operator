@@ -7,7 +7,7 @@ tests:
   - it: creates each policy from files/admission-policies, with a binding
     asserts:
       - hasDocuments:
-          count: 4
+          count: 6
       - containsDocument:
           kind: ValidatingAdmissionPolicy
           apiVersion: admissionregistration.k8s.io/v1
@@ -22,6 +22,16 @@ tests:
           kind: ValidatingAdmissionPolicy
           apiVersion: admissionregistration.k8s.io/v1
           name: prefect-operator-workload-permissions
+          any: true
+      - containsDocument:
+          kind: ValidatingAdmissionPolicy
+          apiVersion: admissionregistration.k8s.io/v1
+          name: prefect-operator-server-deletion
+          any: true
+      - containsDocument:
+          kind: ValidatingAdmissionPolicyBinding
+          apiVersion: admissionregistration.k8s.io/v1
+          name: prefect-operator-server-deletion
           any: true
       - containsDocument:
           kind: ValidatingAdmissionPolicyBinding
@@ -50,7 +60,7 @@ tests:
           value: [Deny]
       - matchRegex:
           path: spec.policyName
-          pattern: ^prefect-operator-(api-key|workload)-permissions$
+          pattern: ^prefect-operator-((api-key|workload)-permissions|server-deletion)$
 
   - it: creates no policies when admissionPolicy.enabled is false
     set:

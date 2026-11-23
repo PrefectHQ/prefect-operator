@@ -150,10 +150,10 @@ operator:
   # -- seconds operator pod needs to terminate gracefully
   terminationGracePeriodSeconds: 10
 
-## Admission policies, which the API server checks when someone creates or changes a Prefect resource.
+## Admission policies, which the API server checks when someone writes or deletes a Prefect resource.
 ## They need Kubernetes 1.30 or later.
 admissionPolicy:
-  # -- specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC.
+  # -- specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC and refuse foreground deletes of PrefectServers.
   # Writing a PrefectServer or PrefectWorkPool spec requires permission to create Deployments in its namespace.
   # Writing the spec of any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names.
   enabled: true
