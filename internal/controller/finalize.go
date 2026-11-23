@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/events"
@@ -12,14 +13,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// deleteRetryWindow is how long finalize retries a failed Prefect delete,
+// measured from the object's deletion timestamp, before it removes the
+// finalizer anyway. It is a variable so that tests can shorten it.
+var deleteRetryWindow = time.Hour
+
+// deleteRetryInterval is how long finalize waits between Prefect deletes.
+const deleteRetryInterval = 30 * time.Second
+
 // finalize runs when obj is being deleted. It calls deleteFromPrefect, unless
 // it's nil, and then removes finalizer so that Kubernetes can delete obj.
 //
-// The finalizer is removed even when deleteFromPrefect fails. Otherwise a
-// Prefect outage, or a Prefect object that Prefect won't delete, such as a
-// work pool's default queue, would keep obj in Kubernetes until someone
-// removed the finalizer by hand. A Warning event on obj records that the
-// Prefect object may still exist.
+// When deleteFromPrefect fails, finalize keeps the finalizer, records a
+// Warning event, and retries every deleteRetryInterval. A failure can be
+// temporary, such as a Prefect outage or an API key whose Secret doesn't have
+// the prefect.io/allowed-api-urls annotation yet, and removing the finalizer
+// would leave the object in Prefect: a deployment there keeps running its
+// schedules. Once deleteRetryWindow has passed since obj's deletion
+// timestamp, finalize removes the finalizer even if the delete fails, so that
+// a delete Prefect always refuses doesn't keep obj in Kubernetes. A Warning
+// event on obj then records that the Prefect object may still exist.
 func finalize(ctx context.Context, c client.Client, recorder events.EventRecorder, obj client.Object, finalizer string, deleteFromPrefect func(context.Context) error) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(obj, finalizer) {
 		return ctrl.Result{}, nil
@@ -28,6 +41,13 @@ func finalize(ctx context.Context, c client.Client, recorder events.EventRecorde
 	log := log.FromContext(ctx)
 	if deleteFromPrefect != nil {
 		if err := deleteFromPrefect(ctx); err != nil {
+			deadline := deletionTime(obj).Add(deleteRetryWindow)
+			if remaining := time.Until(deadline); remaining > 0 {
+				log.Error(err, "Failed to delete from Prefect; retrying", "until", deadline)
+				recorder.Eventf(obj, nil, corev1.EventTypeWarning, "DeleteFailed", eventActionDelete,
+					"Failed to delete from Prefect, retrying until %s: %v", deadline.UTC().Format(time.RFC3339), err)
+				return ctrl.Result{RequeueAfter: min(deleteRetryInterval, remaining)}, nil
+			}
 			log.Error(err, "Failed to delete from Prefect; removing the finalizer anyway")
 			recorder.Eventf(obj, nil, corev1.EventTypeWarning, "DeleteFailed", eventActionDelete,
 				"Failed to delete from Prefect, so it may still exist there: %v", err)
@@ -42,4 +62,13 @@ func finalize(ctx context.Context, c client.Client, recorder events.EventRecorde
 	}
 	log.Info("Removed finalizer")
 	return ctrl.Result{}, nil
+}
+
+// deletionTime returns obj's deletion timestamp, or the current time if obj
+// doesn't have one.
+func deletionTime(obj client.Object) time.Time {
+	if ts := obj.GetDeletionTimestamp(); ts != nil {
+		return ts.Time
+	}
+	return time.Now()
 }

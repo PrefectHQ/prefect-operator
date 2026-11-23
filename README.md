@@ -163,11 +163,16 @@ Set either `apiKey.value` or `apiKey.valueFrom`, not both. The operator checks
 the annotation each time it reads the key. A `PrefectWorkPool` worker reads the
 key itself, through a `secretKeyRef` or `configMapKeyRef` in its Deployment.
 The work pool's `settings` can't set `PREFECT_API_URL` or `PREFECT_API_KEY`, so
-the worker uses the URL the operator checked. If
-you remove a URL from the annotation later, the operator stops updating the
-worker Deployment, but running and restarted workers still read the key. To
-stop a worker from using the key, delete the `PrefectWorkPool` or rotate the
-key.
+the worker uses the URL the operator checked. If you remove a URL from the
+annotation later, the operator stops updating the worker Deployment, but
+running and restarted workers still read the key. To stop a worker from using
+the key, delete the `PrefectWorkPool` or rotate the key.
+
+When you delete a resource, the operator deletes its object in Prefect. If
+that fails, for example because the key's Secret doesn't have the annotation
+yet, the operator retries every 30 seconds and records a `DeleteFailed`
+event. After an hour, it lets Kubernetes delete the resource anyway, and the
+object may still exist in Prefect.
 
 ## Permissions for writing Prefect resources
 
@@ -182,8 +187,9 @@ resource also requires the RBAC for what the operator then does with it:
 
 The chart's editor roles grant only the Prefect resources, so grant these
 permissions alongside them. The policies don't check a request that leaves the
-spec unchanged, such as the operator adding its finalizer. They check new requests only, so resources that already exist
-aren't checked until someone changes them.
+spec unchanged, such as the operator adding its finalizer. They check new
+requests only, so resources that already exist aren't checked until someone
+changes them.
 
 The policies need Kubernetes 1.30 or later, and `admissionPolicy.enabled`
 controls whether the chart installs them. Without them, anyone who can write a
