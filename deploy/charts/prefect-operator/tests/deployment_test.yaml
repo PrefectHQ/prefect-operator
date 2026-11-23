@@ -56,3 +56,19 @@ tests:
           path: spec.template.spec.containers[0].args
           value:
             - --leader-elect
+
+  - it: sets the operator container's security context by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+  - it: leaves out the operator container's security context when it is disabled
+    set:
+      operator.containerSecurityContext.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext

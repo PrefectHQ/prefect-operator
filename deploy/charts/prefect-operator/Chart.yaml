@@ -7,6 +7,10 @@ dependencies:
     version: 2.41.0
 description: Prefect Operator application bundle
 engine: gotpl
+# ValidatingAdmissionPolicy v1 and CRD validation ratcheting, which lets the
+# operator remove finalizers from resources that predate newer CRD rules, both
+# need Kubernetes 1.30.
+kubeVersion: ">=1.30.0-0"
 home: https://github.com/PrefectHQ
 maintainers:
   - name: jamiezieziula

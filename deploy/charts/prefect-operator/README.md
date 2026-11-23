@@ -112,6 +112,8 @@ tbd
 
 ## Requirements
 
+Kubernetes: `>=1.30.0-0`
+
 | Repository | Name | Version |
 |------------|------|---------|
 | https://charts.bitnami.com/bitnami | common | 2.41.0 |
@@ -130,6 +132,7 @@ tbd
 | operator.affinity | object | `{}` | affinity for operator pods assignment |
 | operator.containerSecurityContext.allowPrivilegeEscalation | bool | `false` | set operator containers' security context allowPrivilegeEscalation |
 | operator.containerSecurityContext.capabilities | object | `{"drop":["ALL"]}` | set operator container's security context capabilities |
+| operator.containerSecurityContext.enabled | bool | `true` | render the operator container's security context |
 | operator.defaultResyncInterval | string | `""` | default interval for checking Prefect resources for out-of-band drift. Uses the operator's 5m default when empty |
 | operator.extraEnvVars | list | `[]` | array with environment variables to add to operator container |
 | operator.image.pullPolicy | string | `"IfNotPresent"` | operator image pull policy |

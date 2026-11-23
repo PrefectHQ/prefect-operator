@@ -98,6 +98,8 @@ operator:
 
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container
   containerSecurityContext:
+    # -- render the operator container's security context
+    enabled: true
     # -- set operator containers' security context runAsUser
     # runAsUser: 1001
     # -- set operator containers' security context runAsNonRoot
