@@ -219,15 +219,24 @@ var _ = Describe("The chart's admission policies", Ordered, func() {
 				&prefectiov1.APIKeySpec{Value: new("pnu_literal")}))).To(Succeed())
 		})
 
-		It("Checks a change to spec.server, and allows other changes", func() {
+		It("Checks any spec change", func() {
 			queue := workQueue("admin-queue", secretKey("prefect-api-key")).(*prefectiov1.PrefectWorkQueue)
 			Expect(adminClient.Create(ctx, queue)).To(Succeed())
 
 			queue.Spec.ConcurrencyLimit = new(int32(2))
-			Expect(serverRefEditor.Update(ctx, queue)).To(Succeed())
+			expectDenied(serverRefEditor.Update(ctx, queue), "names Secret prefect-api-key")
+			Expect(serverRefReader.Update(ctx, queue)).To(Succeed())
 
 			queue.Spec.Server.RemoteAPIURL = new("https://prefect.example.com")
 			expectDenied(serverRefEditor.Update(ctx, queue), "names Secret prefect-api-key")
+		})
+
+		It("Allows a change that leaves the spec alone", func() {
+			deploy := deployment("labeled-deployment", secretKey("prefect-api-key"))
+			Expect(adminClient.Create(ctx, deploy)).To(Succeed())
+
+			deploy.SetLabels(map[string]string{"team": "data"})
+			Expect(serverRefEditor.Update(ctx, deploy)).To(Succeed())
 		})
 	})
 })

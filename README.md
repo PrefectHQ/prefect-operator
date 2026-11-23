@@ -176,12 +176,11 @@ resource also requires the RBAC for what the operator then does with it:
 | Resource | The requester also needs |
 | --- | --- |
 | `PrefectServer`, `PrefectWorkPool` | `create` on `deployments` in the resource's namespace. The operator builds a Deployment from the spec, including `extraContainers`, `settings`, `serviceAccountName` and `deploymentTemplate`. |
-| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | `get` on the Secret or ConfigMap that `spec.server.apiKey.valueFrom` names. |
+| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | `get` on the Secret or ConfigMap that `spec.server.apiKey.valueFrom` names. The operator sends the spec to Prefect with that key. |
 
 The chart's editor roles grant only the Prefect resources, so grant these
 permissions alongside them. The policies don't check a request that leaves the
-spec unchanged, or for the second row `spec.server`, such as the operator adding
-its finalizer. They check new requests only, so resources that already exist
+spec unchanged, such as the operator adding its finalizer. They check new requests only, so resources that already exist
 aren't checked until someone changes them.
 
 The policies need Kubernetes 1.30 or later, and `admissionPolicy.enabled`

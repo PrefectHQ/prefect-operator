@@ -150,7 +150,7 @@ operator:
 admissionPolicy:
   # -- specifies whether to create ValidatingAdmissionPolicies that check the requester's RBAC.
   # Writing a PrefectServer or PrefectWorkPool spec requires permission to create Deployments in its namespace.
-  # Setting spec.server on any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names.
+  # Writing the spec of any other resource requires permission to get the Secret or ConfigMap that spec.server.apiKey names.
   enabled: true
 
 ## RBAC configuration
