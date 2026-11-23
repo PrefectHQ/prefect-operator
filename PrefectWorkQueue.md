@@ -220,6 +220,8 @@ Server configuration for connecting to the Prefect API
         <td>object</td>
         <td>
           APIKey is the API key to use to connect to a remote Prefect Server<br/>
+          <br/>
+            <i>Validations</i>:<li>!(has(self.value) && has(self.valueFrom)): set apiKey.value or apiKey.valueFrom, not both</li>
         </td>
         <td>false</td>
       </tr><tr>
@@ -282,8 +284,10 @@ APIKey is the API key to use to connect to a remote Prefect Server
         <td>object</td>
         <td>
           ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-in the resource's namespace. The chart's admission policy lets you name
-only a Secret or ConfigMap that your own RBAC lets you get.<br/>
+in the resource's namespace. The Secret or ConfigMap must have the
+annotation prefect.io/allowed-api-urls, a comma-separated list of the
+Prefect API URLs that the key may be used for. The chart's admission
+policy also requires that you may get the Secret or ConfigMap.<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -296,8 +300,10 @@ only a Secret or ConfigMap that your own RBAC lets you get.<br/>
 
 
 ValueFrom is a reference to a Secret or ConfigMap key holding the API key,
-in the resource's namespace. The chart's admission policy lets you name
-only a Secret or ConfigMap that your own RBAC lets you get.
+in the resource's namespace. The Secret or ConfigMap must have the
+annotation prefect.io/allowed-api-urls, a comma-separated list of the
+Prefect API URLs that the key may be used for. The chart's admission
+policy also requires that you may get the Secret or ConfigMap.
 
 <table>
     <thead>

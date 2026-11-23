@@ -272,6 +272,9 @@ spec:
                             x-kubernetes-map-type: atomic
                         type: object
                     type: object
+                    x-kubernetes-validations:
+                    - message: set apiKey.value or apiKey.valueFrom, not both
+                      rule: '!(has(self.value) && has(self.valueFrom))'
                   name:
                     description: Name is the name of the in-cluster Prefect Server
                       in the given namespace

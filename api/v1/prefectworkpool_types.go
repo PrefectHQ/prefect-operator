@@ -199,8 +199,9 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 		},
 	}
 
-	// If the API key is specified, add it to the environment variables.
-	// If both are set, we favor ValueFrom > Value as it is more secure.
+	// ValueFrom wins over Value, as it does in GetAPIKey, which checks the
+	// annotation on the same Secret or ConfigMap before the operator writes
+	// this Deployment.
 	if s.Spec.Server.APIKey != nil && s.Spec.Server.APIKey.ValueFrom != nil {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:      "PREFECT_API_KEY",

@@ -159,6 +159,14 @@ the API URL is `remoteApiUrl` with `/api` appended if it's missing, followed by
 in-cluster server, it's `http://<name>.<namespace>.svc:4200/api`. The resource's
 `Synced` condition names the annotation when the operator refuses a key.
 
+Set either `apiKey.value` or `apiKey.valueFrom`, not both. The operator checks
+the annotation each time it reads the key. A `PrefectWorkPool` worker reads the
+key itself, through a `secretKeyRef` or `configMapKeyRef` in its Deployment. If
+you remove a URL from the annotation later, the operator stops updating the
+worker Deployment, but running and restarted workers still read the key. To
+stop a worker from using the key, delete the `PrefectWorkPool` or rotate the
+key.
+
 ## Permissions for writing Prefect resources
 
 The operator uses its own service account to create Deployments and read API

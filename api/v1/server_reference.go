@@ -33,7 +33,9 @@ type PrefectServerReference struct {
 	WorkspaceID *string `json:"workspaceId,omitempty"`
 }
 
-// APIKeySpec is the API key to use to connect to a remote Prefect Server
+// APIKeySpec is the API key to use to connect to a remote Prefect Server.
+// Set one of Value or ValueFrom.
+// +kubebuilder:validation:XValidation:rule="!(has(self.value) && has(self.valueFrom))",message="set apiKey.value or apiKey.valueFrom, not both"
 type APIKeySpec struct {
 	// Value is the literal value of the API key
 	Value *string `json:"value,omitempty"`
@@ -111,11 +113,13 @@ func (s *PrefectServerReference) GetAPIKey(ctx context.Context, k8sClient client
 		return "", nil
 	}
 
-	if s.APIKey.Value != nil {
-		return *s.APIKey.Value, nil
-	}
-
+	// ValueFrom wins over Value, as it does in the worker's PREFECT_API_KEY,
+	// so that the operator checks the annotation on the object the worker
+	// reads. Objects created before the CRD rejected both can still have both.
 	if s.APIKey.ValueFrom == nil {
+		if s.APIKey.Value != nil {
+			return *s.APIKey.Value, nil
+		}
 		return "", nil
 	}
 

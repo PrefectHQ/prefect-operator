@@ -51,6 +51,29 @@ var _ = Describe("PrefectServerReference", func() {
 			Expect(apiKey).To(Equal("direct-api-key-value"))
 		})
 
+		It("Should read and check the Secret when both Value and ValueFrom are set", func() {
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-secret", Namespace: namespace},
+				Data:       map[string][]byte{"api-key": []byte("secret-api-key-value")},
+			})).To(Succeed())
+
+			serverRef := &PrefectServerReference{
+				RemoteAPIURL: new("https://api.prefect.cloud"),
+				APIKey: &APIKeySpec{
+					Value: new("direct-api-key-value"),
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "test-secret"},
+							Key:                  "api-key",
+						},
+					},
+				},
+			}
+
+			_, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
+			Expect(err).To(MatchError(ContainSubstring(AnnotationAllowedAPIURLs)))
+		})
+
 		It("Should retrieve API key from Secret when ValueFrom.SecretKeyRef is set", func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
