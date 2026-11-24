@@ -1,3 +1,6 @@
 [
-  {"version": "dev", "path": "dev/"}
+  {
+    "version": "dev",
+    "path": "dev/"
+  }
 ]
