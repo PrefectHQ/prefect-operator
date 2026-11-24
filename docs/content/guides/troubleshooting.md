@@ -47,6 +47,23 @@ kubectl get prefectserver prefect -o jsonpath='{.status.conditions[?(@.type=="De
 Delete those resources. The operator deletes the server after the last one is
 gone. See [Deleting a server](../../concepts/how-it-works/#deleting-a-server).
 
+## Deleting a `PrefectServer` is refused
+
+```text
+ValidatingAdmissionPolicy 'prefect-operator-server-deletion' with binding 'prefect-operator-server-deletion' denied request: foreground deletion deletes a PrefectServer's Deployment and Service before the resources that use the server can delete their objects from it; ...
+```
+
+The chart's admission policies refuse foreground deletes of servers. Delete
+the server without `--cascade=foreground`. If Argo CD's prune fails with this
+message, set the `PrunePropagationPolicy=background` sync option on the
+Application.
+
+If deleting an Argo CD Application fails with it, delete the server with
+`kubectl delete prefectserver`, and Argo CD finishes deleting the rest. Kubernetes
+doesn't allow a new finalizer on the Application once its deletion has started,
+so change the finalizer of other Applications that include a server beforehand.
+See [Deleting a server](../../concepts/how-it-works/#deleting-a-server).
+
 ## `Synced` is `False` with `PrefectClientError`
 
 The operator couldn't read the API key. The message says which of these it is:

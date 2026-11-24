@@ -115,7 +115,7 @@ var _ = Describe("The chart's admission policies", Ordered, func() {
 
 		paths, err := filepath.Glob(filepath.Join(chartFiles, "admission-policies", "*.yaml"))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(paths).To(HaveLen(2))
+		Expect(paths).To(HaveLen(3))
 		for _, path := range paths {
 			raw, err := os.ReadFile(path)
 			Expect(err).NotTo(HaveOccurred())
@@ -149,12 +149,17 @@ var _ = Describe("The chart's admission policies", Ordered, func() {
 			rbacv1.PolicyRule{APIGroups: []string{""}, Resources: []string{"configmaps"},
 				ResourceNames: []string{"prefect-config"}, Verbs: []string{"get"}})
 
-		By("waiting until the API server enforces both policies")
+		By("waiting until the API server enforces each policy")
 		Eventually(func() error {
 			return poolEditor.Create(ctx, workPool("probe"), client.DryRunAll)
 		}).Should(Satisfy(apierrors.IsForbidden))
 		Eventually(func() error {
 			return serverRefEditor.Create(ctx, workQueue("probe", secretKey("prefect-api-key")), client.DryRunAll)
+		}).Should(Satisfy(apierrors.IsForbidden))
+		Expect(adminClient.Create(ctx, server("probe"))).To(Succeed())
+		Eventually(func() error {
+			return adminClient.Delete(ctx, server("probe"),
+				client.PropagationPolicy(metav1.DeletePropagationForeground), client.DryRunAll)
 		}).Should(Satisfy(apierrors.IsForbidden))
 	})
 
@@ -186,6 +191,25 @@ var _ = Describe("The chart's admission policies", Ordered, func() {
 
 			pool.Labels = map[string]string{"team": "data"}
 			Expect(poolEditor.Update(ctx, pool)).To(Succeed())
+		})
+	})
+
+	Context("For deleting a PrefectServer", func() {
+		It("Denies a foreground delete", func() {
+			Expect(adminClient.Create(ctx, server("foreground-server"))).To(Succeed())
+
+			expectDenied(adminClient.Delete(ctx, server("foreground-server"),
+				client.PropagationPolicy(metav1.DeletePropagationForeground)),
+				"foreground deletion deletes a PrefectServer's Deployment and Service")
+		})
+
+		It("Allows a background delete and a delete with the default propagation", func() {
+			Expect(adminClient.Create(ctx, server("background-server"))).To(Succeed())
+			Expect(adminClient.Create(ctx, server("default-server"))).To(Succeed())
+
+			Expect(adminClient.Delete(ctx, server("background-server"),
+				client.PropagationPolicy(metav1.DeletePropagationBackground))).To(Succeed())
+			Expect(adminClient.Delete(ctx, server("default-server"))).To(Succeed())
 		})
 	})
 

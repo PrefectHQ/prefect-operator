@@ -250,8 +250,26 @@ kubectl patch prefectserver prefect --type=merge -p '{"metadata":{"finalizers":n
 The server waits only with background cascading deletion, which is the
 default for `kubectl delete`. With `--cascade=foreground`, garbage collection
 deletes the Deployment and Service before the server, whatever finalizers the
-server has. Argo CD prunes with foreground deletion unless you set the
-`PrunePropagationPolicy=background` sync option.
+server has. The chart's [admission policies](../../guides/permissions/#admission-policies)
+refuse a foreground delete of a `PrefectServer`, even one that nothing uses.
+
+Argo CD uses foreground deletion by default. On each Application that includes
+a server, set the sync option for prunes, and the finalizer for deleting the
+Application itself:
+
+```yaml
+metadata:
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io/background
+spec:
+  syncPolicy:
+    syncOptions:
+      - PrunePropagationPolicy=background
+```
+
+Garbage collection also uses foreground deletion, for a server that has an
+owner reference to an object deleted that way. The policy refuses it, and the
+owner stays in `Terminating` until you delete the server yourself.
 
 ## Status
 
