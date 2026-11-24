@@ -1,9 +1,9 @@
 package v1
 
 import (
-	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,7 +51,9 @@ type PrefectWorkPoolSpec struct {
 	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
 	// A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL,
-	// PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server.
+	// PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server. The operator leaves out
+	// settings that set them in another case, such as prefect_api_url, and reports them in the
+	// SettingsApplied condition.
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY', 'PREFECT_API_AUTH_STRING']))",message="settings must not set PREFECT_API_URL, PREFECT_API_KEY or PREFECT_API_AUTH_STRING; set them with spec.server"
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 
@@ -239,25 +241,46 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 // sets.
 var serverEnvVarNames = []string{EnvPrefectAPIURL, EnvPrefectAPIKey, EnvPrefectAPIAuthString}
 
-// ValidateSettings returns an error if Spec.Settings sets PREFECT_API_URL,
-// PREFECT_API_KEY or PREFECT_API_AUTH_STRING. Settings override the worker
-// variables that ToEnvVars returns, and the operator checks the allowed URLs
-// of the API key and auth string against Spec.Server only. The CRD rejects such settings, but resources written
-// before that rule existed can still have them.
-func (s *PrefectWorkPool) ValidateSettings() error {
-	for _, setting := range s.Spec.Settings {
-		if slices.Contains(serverEnvVarNames, setting.Name) {
-			return fmt.Errorf("settings must not set %s; set it with spec.server", setting.Name)
+// ProtectedEnvVarNames returns the names of the worker environment variables
+// that a deploymentTemplate must not set: DerivedEnvVarNames, and the
+// variables Spec.Server sets even when Spec.Server leaves them unset, so that
+// a template can't add an API key or auth string the operator didn't check.
+func (s *PrefectWorkPool) ProtectedEnvVarNames() []string {
+	names := s.DerivedEnvVarNames()
+	for _, name := range serverEnvVarNames {
+		if !slices.Contains(names, name) {
+			names = append(names, name)
 		}
 	}
-	return nil
+	return names
+}
+
+// WorkerSettings returns Spec.Settings without the entries that set a variable
+// in serverEnvVarNames, matched without regard to case, and the names of the
+// entries it left out. Settings override the worker variables that ToEnvVars
+// returns, and the operator checks the allowed URLs of the API key and auth
+// string against Spec.Server only. Prefect reads its settings from the
+// environment without regard to case, so "prefect_api_url" also sets the API
+// URL. The CRD rejects these names in upper case only, because a CEL rule that
+// changes the case of every setting's name exceeds the CRD's cost budget, and
+// resources written before that rule existed can still have them.
+func (s *PrefectWorkPool) WorkerSettings() (settings []corev1.EnvVar, ignored []string) {
+	for _, setting := range s.Spec.Settings {
+		if slices.ContainsFunc(serverEnvVarNames, func(name string) bool { return strings.EqualFold(name, setting.Name) }) {
+			ignored = append(ignored, setting.Name)
+			continue
+		}
+		settings = append(settings, setting)
+	}
+	return settings, ignored
 }
 
 // DerivedEnvVarNames returns the names of the environment variables the
-// operator sets on the worker, leaving out its settings and any variable the
-// settings override.
+// operator sets on the worker, leaving out its settings and any variable that
+// the settings from WorkerSettings override.
 func (s *PrefectWorkPool) DerivedEnvVarNames() []string {
-	return envVarNames(s.ToEnvVars(), s.Spec.Settings)
+	settings, _ := s.WorkerSettings()
+	return envVarNames(s.ToEnvVars(), settings)
 }
 
 func (s *PrefectWorkPool) HealthProbe() corev1.ProbeHandler {

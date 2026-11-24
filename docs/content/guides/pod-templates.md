@@ -81,8 +81,10 @@ these back if a template overrides them:
 - the `api` port of the `prefect-server` container
 - the `prefect-data` volume and its mounts
 - the environment variables the operator derives from the resource, such as
-  the database settings and the worker's `PREFECT_API_URL`. Variables from
-  `settings` are not protected.
+  the database settings and the worker's `PREFECT_API_URL`, in any case.
+  Prefect reads `prefect_api_url` as `PREFECT_API_URL`, so the operator removes
+  a template variable with that name too. Variables from `settings` are not
+  protected.
 
 When it puts a field back, the resource's `DeploymentTemplateApplied` (or
 `MigrationJobTemplateApplied`) condition has the reason `ProtectedFieldsIgnored`.

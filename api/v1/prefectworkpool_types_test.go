@@ -190,20 +190,43 @@ var _ = Describe("PrefectWorkPool.DerivedEnvVarNames", func() {
 	})
 })
 
-var _ = Describe("PrefectWorkPool.ValidateSettings", func() {
-	It("accepts other settings", func() {
+var _ = Describe("PrefectWorkPool.ProtectedEnvVarNames", func() {
+	It("includes the variables Server sets even when it leaves them unset", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{Server: PrefectServerReference{Name: "prefect"}}}
+
+		Expect(s.ProtectedEnvVarNames()).To(ConsistOf(
+			EnvPrefectHome, "PREFECT_API_URL", "PREFECT_WORKER_WEBSERVER_PORT", "PREFECT_API_KEY", "PREFECT_API_AUTH_STRING"))
+	})
+})
+
+var _ = Describe("PrefectWorkPool.WorkerSettings", func() {
+	It("keeps other settings", func() {
 		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
 			Settings: []corev1.EnvVar{{Name: "PREFECT_LOGGING_LEVEL", Value: "DEBUG"}},
 		}}
-		Expect(s.ValidateSettings()).To(Succeed())
+		settings, ignored := s.WorkerSettings()
+		Expect(settings).To(Equal(s.Spec.Settings))
+		Expect(ignored).To(BeEmpty())
 	})
 
-	It("refuses settings that Server sets", func() {
-		for _, name := range []string{"PREFECT_API_URL", "PREFECT_API_KEY", "PREFECT_API_AUTH_STRING"} {
-			s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
-				Settings: []corev1.EnvVar{{Name: name, Value: "x"}},
-			}}
-			Expect(s.ValidateSettings()).To(MatchError("settings must not set " + name + "; set it with spec.server"))
-		}
+	It("leaves out settings that Server sets, in any case", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Settings: []corev1.EnvVar{
+				{Name: "PREFECT_API_URL", Value: "x"},
+				{Name: "PREFECT_LOGGING_LEVEL", Value: "DEBUG"},
+				{Name: "prefect_api_key", Value: "x"},
+				{Name: "Prefect_API_Auth_String", Value: "x"},
+			},
+		}}
+		settings, ignored := s.WorkerSettings()
+		Expect(settings).To(Equal([]corev1.EnvVar{{Name: "PREFECT_LOGGING_LEVEL", Value: "DEBUG"}}))
+		Expect(ignored).To(Equal([]string{"PREFECT_API_URL", "prefect_api_key", "Prefect_API_Auth_String"}))
+	})
+
+	It("keeps protecting the API URL when a setting overrides it", func() {
+		s := &PrefectWorkPool{Spec: PrefectWorkPoolSpec{
+			Settings: []corev1.EnvVar{{Name: "prefect_api_url", Value: "x"}},
+		}}
+		Expect(s.DerivedEnvVarNames()).To(ContainElement("PREFECT_API_URL"))
 	})
 })

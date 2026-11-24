@@ -180,6 +180,13 @@ var _ = Describe("Apply", func() {
 		}))
 	})
 
+	It("ignores a protected env var written in another case", func() {
+		result, ignored := mustApplyIgnored(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"prefect_home","value":"/tmp"}]}]}}`)
+
+		Expect(ignored).To(Equal([]string{"spec.containers[prefect-server].env[prefect_home]"}))
+		Expect(server(result).Env).To(Equal(base().Spec.Containers[0].Env))
+	})
+
 	It("ignores overrides of protected env vars but keeps other env", func() {
 		result, ignored := mustApplyIgnored(`{"spec":{"containers":[{"name":"prefect-server","env":[{"name":"PREFECT_HOME","value":"/tmp"},{"name":"EXTRA","value":"1"}]}]}}`)
 

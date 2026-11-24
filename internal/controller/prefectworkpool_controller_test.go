@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/PrefectHQ/prefect-operator/internal/podtemplate"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect"
 	"github.com/PrefectHQ/prefect-operator/internal/prefect/prefecttest"
 	"github.com/go-logr/logr"
@@ -176,7 +177,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(
-				MatchError(ContainSubstring("settings must not set PREFECT_API_URL, PREFECT_API_KEY or PREFECT_API_AUTH_STRING")), setting)
+				MatchError(ContainSubstring("settings must not set PREFECT_API_URL, PREFECT_API_KEY or PREFECT_API_AUTH_STRING; set them")), setting)
 		}
 	})
 
@@ -660,6 +661,35 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			Expect(synced).NotTo(BeNil())
 			Expect(synced.Status).To(Equal(metav1.ConditionTrue))
 			Expect(synced.Reason).To(Equal("SyncSuccessful"))
+		})
+
+		It("should save a change to an existing condition when nothing else in the status changes", func() {
+			By("Setting a template and an ignored setting, so the reconcile removes no conditions")
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			prefectWorkPool.Spec.Settings = append(prefectWorkPool.Spec.Settings,
+				corev1.EnvVar{Name: "prefect_api_url", Value: "http://elsewhere.example.com/api"})
+			prefectWorkPool.Spec.DeploymentTemplate = &runtime.RawExtension{Raw: []byte(`{"metadata":{"labels":{"team":"data"}}}`)}
+			Expect(k8sClient.Update(ctx, prefectWorkPool)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Changing only the Ready condition's reason")
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			meta.SetStatusCondition(&prefectWorkPool.Status.Conditions, metav1.Condition{
+				Type:    PrefectWorkPoolConditionReady,
+				Status:  metav1.ConditionTrue,
+				Reason:  "Stale",
+				Message: "set by the test",
+			})
+			Expect(k8sClient.Status().Update(ctx, prefectWorkPool)).To(Succeed())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, prefectWorkPool)).To(Succeed())
+			ready := meta.FindStatusCondition(prefectWorkPool.Status.Conditions, PrefectWorkPoolConditionReady)
+			Expect(ready).NotTo(BeNil())
+			Expect(ready.Reason).To(Equal("WorkPoolReady"))
 		})
 
 		It("should update the Deployment with the new setting", func() {
@@ -1525,5 +1555,67 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			Expect(recorder.Events).To(Receive(Equal(
 				"Warning WorkerDeploymentError Failed to create or update the worker Deployment: " + err.Error())))
 		})
+	})
+})
+
+// The CRD rejects these settings, so the tests call the helpers directly with
+// a work pool written before that rule existed.
+var _ = Describe("Settings that spec.server sets", func() {
+	var workPool *prefectiov1.PrefectWorkPool
+
+	BeforeEach(func() {
+		workPool = &prefectiov1.PrefectWorkPool{
+			ObjectMeta: metav1.ObjectMeta{Name: "old-pool", Namespace: "default"},
+			Spec: prefectiov1.PrefectWorkPoolSpec{
+				Type:   "process",
+				Server: prefectiov1.PrefectServerReference{Name: "prefect"},
+				Settings: []corev1.EnvVar{
+					{Name: "PREFECT_API_URL", Value: "http://elsewhere.example.com/api"},
+					{Name: "prefect_api_key", Value: "pnu_other"},
+					{Name: "PREFECT_LOGGING_LEVEL", Value: "DEBUG"},
+				},
+			},
+		}
+	})
+
+	It("leaves them out of the worker and keeps the operator's API URL", func() {
+		podTemplate, _, err := workerPodTemplate(workPool)
+		Expect(err).NotTo(HaveOccurred())
+
+		env := podtemplate.FindContainer(&podTemplate.Spec, prefectiov1.ContainerNameWorker).Env
+		Expect(env).To(ContainElement(corev1.EnvVar{Name: "PREFECT_API_URL", Value: "http://prefect.default.svc.cluster.local.:4200/api"}))
+		Expect(env).To(ContainElement(corev1.EnvVar{Name: "PREFECT_LOGGING_LEVEL", Value: "DEBUG"}))
+		Expect(env).NotTo(ContainElement(HaveField("Value", "http://elsewhere.example.com/api")))
+		Expect(env).NotTo(ContainElement(HaveField("Name", "prefect_api_key")))
+	})
+
+	It("removes an API key that the template adds in any case", func() {
+		workPool.Spec.DeploymentTemplate = &runtime.RawExtension{Raw: []byte(
+			`{"spec":{"containers":[{"name":"prefect-worker","env":[{"name":"Prefect_Api_Key","value":"pnu_template"}]}]}}`)}
+
+		podTemplate, ignored, err := workerPodTemplate(workPool)
+		Expect(err).NotTo(HaveOccurred())
+
+		env := podtemplate.FindContainer(&podTemplate.Spec, prefectiov1.ContainerNameWorker).Env
+		Expect(env).NotTo(ContainElement(HaveField("Name", "Prefect_Api_Key")))
+		Expect(ignored).To(Equal([]string{"spec.containers[prefect-worker].env[Prefect_Api_Key]"}))
+	})
+
+	It("reports them once in a condition and an event, and clears the condition when they're gone", func() {
+		recorder := events.NewFakeRecorder(10)
+		reportIgnoredSettings(recorder, workPool)
+		reportIgnoredSettings(recorder, workPool)
+
+		condition := meta.FindStatusCondition(workPool.Status.Conditions, "SettingsApplied")
+		Expect(condition).NotTo(BeNil())
+		Expect(condition.Reason).To(Equal("ServerSettingsIgnored"))
+		Expect(condition.Message).To(Equal(
+			"settings were applied, except for PREFECT_API_URL, prefect_api_key, which spec.server sets; remove them from settings"))
+		Expect(recorder.Events).To(Receive(Equal("Warning ServerSettingsIgnored " + condition.Message)))
+		Expect(recorder.Events).NotTo(Receive())
+
+		workPool.Spec.Settings = workPool.Spec.Settings[2:]
+		reportIgnoredSettings(recorder, workPool)
+		Expect(meta.FindStatusCondition(workPool.Status.Conditions, "SettingsApplied")).To(BeNil())
 	})
 })

@@ -78,7 +78,14 @@ the resource's `Synced` condition is `False` with the reason
 A `PrefectWorkPool` worker reads the key itself, through a `secretKeyRef` or
 `configMapKeyRef` in the worker Deployment's `PREFECT_API_KEY` variable. The
 operator sets the worker's `PREFECT_API_URL` to the URL it checked, and the
-CRD rejects `settings` that set either variable.
+CRD rejects `settings` that set either variable. Prefect reads these names in
+any case, so the operator also leaves out a setting such as `prefect_api_url`
+and reports it in the work pool's `SettingsApplied` condition.
+
+These rules stop a work pool from sending the key to another URL by mistake.
+They don't stop someone who can write the work pool on purpose, because
+`deploymentTemplate` can change the worker's command or image. See
+[Permissions](../permissions/).
 
 If you remove a URL from the annotation later, the operator stops updating the
 worker Deployment. Running workers, and workers that restart, still read the

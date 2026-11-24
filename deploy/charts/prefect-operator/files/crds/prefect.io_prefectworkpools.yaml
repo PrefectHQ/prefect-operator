@@ -2950,7 +2950,9 @@ spec:
               settings:
                 description: |-
                   A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL,
-                  PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server.
+                  PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server. The operator leaves out
+                  settings that set them in another case, such as prefect_api_url, and reports them in the
+                  SettingsApplied condition.
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.
