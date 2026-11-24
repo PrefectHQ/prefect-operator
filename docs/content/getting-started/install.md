@@ -8,13 +8,13 @@ has two manifests:
 
 | File | Contents |
 | --- | --- |
-| `prefect-operator.yaml` | The CRDs, and the operator's ServiceAccount, RBAC, and Deployment. Releases after v0.20.0 also include the [admission policies](../../guides/permissions/). |
+| `prefect-operator.yaml` | The CRDs, and the operator's ServiceAccount, RBAC, and Deployment. v1.0 and later also include the [admission policies](../../guides/permissions/). |
 | `prefect-crds.yaml` | The CRDs only. |
 
 ## With kubectl
 
 ```sh
-VERSION=v0.20.0
+VERSION=v1.0.0
 kubectl apply --server-side \
   -f https://github.com/PrefectHQ/prefect-operator/releases/download/$VERSION/prefect-operator.yaml
 ```
@@ -62,22 +62,10 @@ The second command lists five CRDs: `prefectautomations`, `prefectdeployments`,
 - Without the admission policies, see [Permissions](../../guides/permissions/)
   for what anyone who can write the custom resources can do.
 
-## Downgrade
+## Upgrade and downgrade
 
-Releases after v0.20.0 add the finalizer `prefect.io/server-cleanup` to each
-`PrefectServer`. Earlier releases don't remove it, so after a downgrade to one
-of them, a deleted server stays in `Terminating`, and so does a namespace that
-has one. After you downgrade, remove the finalizer from each server:
-
-```sh
-kubectl get prefectservers -A -o jsonpath='{range .items[*]}{.metadata.namespace} {.metadata.name}{"\n"}{end}' |
-  while read -r namespace name; do
-    kubectl -n "$namespace" patch prefectserver "$name" --type=merge -p '{"metadata":{"finalizers":null}}'
-  done
-```
-
-Do this after the downgrade, because a later release adds the finalizer back
-while it runs.
+See [Upgrade](../upgrade/) for what changes in each release, and what to do
+before you upgrade or after you downgrade.
 
 ## Uninstall
 
