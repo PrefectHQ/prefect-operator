@@ -140,3 +140,23 @@ func SharedStateInMemory() metav1.Condition {
 		Status:  metav1.ConditionFalse,
 	}
 }
+
+// DeletionBlocked reports that a PrefectServer being deleted keeps its
+// finalizer because other resources still use it. dependents names some or
+// all of them, and total is how many there are.
+func DeletionBlocked(dependents []string, total int) metav1.Condition {
+	subject := fmt.Sprintf("%d resources use", total)
+	if total == 1 {
+		subject = "1 resource uses"
+	}
+	message := fmt.Sprintf("%s this server and must be deleted first: %s", subject, strings.Join(dependents, ", "))
+	if more := total - len(dependents); more > 0 {
+		message += fmt.Sprintf(", and %d more", more)
+	}
+	return metav1.Condition{
+		Type:    "DeletionBlocked",
+		Reason:  "DependentsExist",
+		Message: message,
+		Status:  metav1.ConditionTrue,
+	}
+}

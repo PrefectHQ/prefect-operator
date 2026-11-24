@@ -68,13 +68,12 @@ Delete the custom resources first, so the operator can delete the objects it
 created in Prefect. Then delete the operator:
 
 ```sh
-kubectl delete prefectautomations,prefectdeployments,prefectworkqueues,prefectworkpools --all -A
-kubectl delete prefectservers --all -A
+kubectl delete prefectautomations,prefectdeployments,prefectworkqueues,prefectworkpools,prefectservers --all -A
 kubectl delete -f https://github.com/PrefectHQ/prefect-operator/releases/download/$VERSION/prefect-operator.yaml
 ```
 
-Delete the `PrefectServer` resources last. The other resources need their
-server to delete their objects from it.
+Each `PrefectServer` stays up until the resources that use it are gone, so
+they can delete their objects from it.
 
 If you delete the operator first, the resources keep their finalizers and stay
 in `Terminating`. See [Deletion](../../concepts/how-it-works/#deletion).

@@ -29,6 +29,22 @@ started. To remove it sooner, and leave the object in Prefect, see
 If the operator isn't running, nothing removes the finalizer. Start the
 operator again, or remove the finalizer by hand.
 
+## A `PrefectServer` is stuck in `Terminating`
+
+The server waits until no resource names it in `spec.server`, with no time
+limit. Its `DeletionBlocked` condition says which resources those are:
+
+```sh
+kubectl get prefectserver prefect -o jsonpath='{.status.conditions[?(@.type=="DeletionBlocked")].message}'
+```
+
+```text
+1 resource uses this server and must be deleted first: PrefectWorkPool default/process-pool
+```
+
+Delete those resources. The operator deletes the server after the last one is
+gone. See [Deleting a server](../../concepts/how-it-works/#deleting-a-server).
+
 ## `Synced` is `False` with `PrefectClientError`
 
 The operator couldn't read the API key. The message says which of these it is:

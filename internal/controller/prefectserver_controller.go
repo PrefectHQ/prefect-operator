@@ -20,8 +20,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -52,6 +54,7 @@ const (
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=prefect.io,resources=prefectservers/finalizers,verbs=update
+//+kubebuilder:rbac:groups=prefect.io,resources=prefectworkpools;prefectworkqueues;prefectdeployments;prefectautomations,verbs=get;list;watch
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
@@ -76,6 +79,23 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
+	}
+
+	// A server that is being deleted only waits for the resources that use
+	// it, and its Deployment and Service get no further changes. This check
+	// comes before adding the finalizer, because the API server rejects new
+	// finalizers on an object that is being deleted.
+	if server.DeletionTimestamp != nil {
+		return r.handleDeletion(ctx, server)
+	}
+
+	// Add the finalizer before any status changes: Update overwrites server
+	// with the stored object, status included.
+	if !controllerutil.ContainsFinalizer(server, PrefectServerFinalizer) {
+		controllerutil.AddFinalizer(server, PrefectServerFinalizer)
+		if err := r.Update(ctx, server); err != nil {
+			return ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
+		}
 	}
 
 	// Defer a final status update at the end of the reconciliation loop, so that any of the
@@ -789,12 +809,19 @@ func (r *PrefectServerReconciler) initContainerWaitForPostgres(server *prefectio
 	}
 }
 
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager sets up the controller with the Manager. When a resource
+// that uses a server is deleted, the server is reconciled if it is being
+// deleted too, so that it can remove its finalizer.
 func (r *PrefectServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&prefectiov1.PrefectServer{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		Complete(r)
+		Owns(&corev1.PersistentVolumeClaim{})
+	for _, kind := range serverDependentKinds() {
+		b = b.Watches(kind.object,
+			handler.EnqueueRequestsFromMapFunc(r.serverOfDeletedDependent),
+			builder.WithPredicates(dependentDeleted))
+	}
+	return b.Complete(r)
 }
