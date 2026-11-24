@@ -66,7 +66,8 @@ See [Deleting a server](../../concepts/how-it-works/#deleting-a-server).
 
 ## `Synced` is `False` with `PrefectClientError`
 
-The operator couldn't read the API key. The message says which of these it is:
+The operator couldn't read the API key or auth string. The message says which
+of these it is:
 
 - The Secret or ConfigMap doesn't exist in the resource's namespace.
 - It doesn't have the `prefect.io/allowed-api-urls` annotation.

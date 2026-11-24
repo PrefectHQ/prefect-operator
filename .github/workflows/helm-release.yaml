@@ -117,19 +117,29 @@ jobs:
             exit 1
           fi
 
-      - name: Update chart index
+      # Another release or the docs workflow can push to gh-pages after the
+      # checkout. On a rejected push, this step starts again from the new
+      # gh-pages and merges the index again, instead of rebasing a commit
+      # whose index.yaml would conflict.
+      - name: Update chart index, commit, and push
         run: |
           git stash  # Stash changes to the values.yaml so checkout doesn't complain
           git checkout gh-pages
-          helm repo index /tmp/chart --url https://prefecthq.github.io/prefect-operator/charts --merge ./index.yaml
-
-      - name: Commit and push
-        run: |
-          cp /tmp/chart/index.yaml .
-          cp /tmp/chart/prefect-operator-${RELEASE_VERSION}.* ./charts
-          git add ./index.yaml ./charts/prefect-operator-$RELEASE_VERSION.* ./charts/
-          git commit -m "Release $RELEASE_VERSION"
-          git push origin gh-pages
+          for attempt in 1 2 3 4 5; do
+            helm repo index /tmp/chart --url https://prefecthq.github.io/prefect-operator/charts --merge ./index.yaml
+            cp /tmp/chart/index.yaml .
+            cp /tmp/chart/prefect-operator-${RELEASE_VERSION}.* ./charts
+            git add ./index.yaml ./charts/prefect-operator-$RELEASE_VERSION.* ./charts/
+            git commit -m "Release $RELEASE_VERSION"
+            if git push origin gh-pages; then
+              exit 0
+            fi
+            echo "Push rejected, retrying on the new gh-pages."
+            sleep $((attempt * 5))
+            git fetch origin gh-pages
+            git reset --hard origin/gh-pages
+          done
+          exit 1
 
       - name: Create Github Release + Tag
         if: ${{ inputs.mode == 'release' }}

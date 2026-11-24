@@ -162,6 +162,21 @@ docs: tools
 	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectautomations.yaml --output PrefectAutomation.md
 	crdoc --resources deploy/charts/prefect-operator/files/crds/prefect.io_prefectworkqueues.yaml --output PrefectWorkQueue.md
 
+# Hugo builds only the docs site, so it isn't in .mise.toml, which every CI
+# job installs. mise exec downloads this version on first use. Renovate
+# updates it.
+HUGO_VERSION ?= 0.170.1
+HUGO = mise exec hugo@$(HUGO_VERSION) -- hugo
+HUGO_ARGS ?=
+
+.PHONY: docs-serve
+docs-serve: ## Preview the docs site at http://localhost:1313/prefect-operator/.
+	$(HUGO) server --source docs
+
+.PHONY: docs-build
+docs-build: ## Build the docs site into docs/public, or pass HUGO_ARGS="--destination <dir>".
+	$(HUGO) --source docs --gc --minify $(HUGO_ARGS)
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/

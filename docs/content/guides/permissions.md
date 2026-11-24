@@ -19,9 +19,9 @@ In every namespace it watches, it can:
 - manage the five Prefect custom resources and their status
 
 It reads Secrets by name only, with no `list` or `watch`: the ones that a
-resource's `spec.server.apiKey.valueFrom` names. Database and Redis passwords
-are passed to pods as `secretKeyRef` environment variables, so the operator
-never reads them.
+resource's `spec.server.apiKey.valueFrom` or `spec.server.auth` names. Database
+and Redis passwords, and a server's own `spec.auth`, are passed to pods as
+`secretKeyRef` environment variables, so the operator never reads them.
 
 To limit it to some namespaces, set the `WATCH_NAMESPACES` environment variable
 on the operator to a comma-separated list. See
@@ -35,7 +35,7 @@ things the person who wrote the resource can't do directly:
 | Resource | Lets the writer |
 | --- | --- |
 | `PrefectServer`, `PrefectWorkPool` | Run any container, with any ServiceAccount, in the resource's namespace, through `extraContainers`, `settings`, `serviceAccountName`, and `deploymentTemplate`. |
-| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send the spec to Prefect with the API key in any Secret or ConfigMap in the namespace that has the `prefect.io/allowed-api-urls` annotation. |
+| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send the spec to Prefect with the API key or auth string in any Secret or ConfigMap in the namespace that has the `prefect.io/allowed-api-urls` annotation. |
 | `PrefectDeployment` | Run flow code on the work pool's workers, with any job settings the work pool's base job template exposes. |
 | `PrefectWorkPool`, `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send requests from the operator's pod to any http or https URL in `spec.server.remoteApiUrl`, and read up to 4 KiB of an error response in the `Synced` condition. |
 
@@ -58,7 +58,7 @@ operator does with it:
 | Resource | The requester also needs |
 | --- | --- |
 | `PrefectServer`, `PrefectWorkPool` | `create` on `deployments` in the resource's namespace. |
-| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | `get` on the Secret or ConfigMap that `spec.server.apiKey.valueFrom` names. |
+| `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | `get` on the Secret or ConfigMap that `spec.server.apiKey.valueFrom` names, and on the Secret that `spec.server.auth` names. |
 
 When a request fails a policy, the API server rejects it with a message such as:
 

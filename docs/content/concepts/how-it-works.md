@@ -294,7 +294,7 @@ the operator records.
 
 | Reason | Cause |
 | --- | --- |
-| `PrefectClientError` | The operator couldn't build a client: the API key's Secret is missing, lacks the `prefect.io/allowed-api-urls` annotation, or doesn't allow the URL. |
+| `PrefectClientError` | The operator couldn't build a client: the Secret or ConfigMap with the API key or auth string is missing, lacks the `prefect.io/allowed-api-urls` annotation, or doesn't allow the URL. |
 | `SyncError` | The Prefect API returned an error. The message includes it. |
 | `WorkPoolNotFound`, `DeploymentNotFound` | A dependency doesn't exist in Prefect yet. See [Dependencies](#dependencies-between-resources). |
 | `ConversionError` | The spec couldn't be turned into a Prefect API request, for example because of an invalid schedule. |
