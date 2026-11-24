@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prefect Operator docs</title>
+<script>
+  // versions.json lists releases newest first, then dev. The docs workflow
+  // updates it on every release, so this page never changes.
+  fetch("versions.json", { cache: "no-cache" })
+    .then((response) => response.json())
+    .then((versions) => location.replace(versions[0].path))
+    .catch(() => {});
+</script>
+</head>
+<body>
+<p><a href="dev/">Prefect Operator docs</a></p>
+</body>
+</html>
