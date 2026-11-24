@@ -5,9 +5,10 @@ name: Build and Push Image
   workflow_call:
     inputs:
       environment:
-        description: Determines which docker registry credentials to use
-        required: true
+        description: Determines which docker registry credentials to use. Not needed when docker-login is false.
+        required: false
         type: string
+        default: ""
       image:
         description: Image name (without the tag & registry)
         required: true
