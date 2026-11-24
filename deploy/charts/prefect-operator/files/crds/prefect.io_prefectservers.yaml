@@ -964,6 +964,51 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              auth:
+                description: |-
+                  Auth makes the server require an auth string, "username:password", as
+                  HTTP basic authentication on every API request except its health checks.
+                  The operator sets PREFECT_SERVER_API_AUTH_STRING from the Secret key, so
+                  settings must not set it.
+                  Resources that use the server must set spec.server.auth to a Secret with
+                  the same auth string. Without auth, the server accepts API requests from
+                  anything that can reach it, including the operator acting for a resource
+                  in another namespace. Auth requires Prefect 3.6.22 or later.
+                properties:
+                  secretKeyRef:
+                    description: |-
+                      SecretKeyRef selects a key of a Secret in the resource's namespace. It
+                      must not be optional: a pod that uses it does not start without the key.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - secretKeyRef
+                type: object
+                x-kubernetes-validations:
+                - message: secretKeyRef.name must be set
+                  rule: size(self.secretKeyRef.name) > 0
+                - message: secretKeyRef.optional must not be true
+                  rule: '!has(self.secretKeyRef.optional) || !self.secretKeyRef.optional'
               deploymentLabels:
                 additionalProperties:
                   type: string
@@ -4351,6 +4396,10 @@ spec:
                 use node-local storage and must run a single replica)
               rule: '!has(self.replicas) || self.replicas <= 1 || (has(self.postgres)
                 && !has(self.sqlite))'
+            - message: settings must not set PREFECT_SERVER_API_AUTH_STRING when auth
+                is set
+              rule: '!has(self.auth) || !has(self.settings) || self.settings.all(e,
+                e.name != ''PREFECT_SERVER_API_AUTH_STRING'')'
           status:
             description: PrefectServerStatus defines the observed state of PrefectServer
             properties:

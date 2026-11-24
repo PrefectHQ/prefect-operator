@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-weight: 5
+weight: 6
 ---
 
 Start with the resource's conditions and events, then the operator's logs:
@@ -54,6 +54,18 @@ The operator couldn't read the API key. The message says which of these it is:
 - The annotation doesn't list the resource's API URL. The message includes the
   URL the operator computed. Compare it with the annotation, as described in
   [Connect to Prefect Cloud](../prefect-cloud/#the-prefectioallowed-api-urls-annotation).
+
+## `Synced` is `False` with status 401
+
+The server requires an auth string, and the resource doesn't send it or sends
+the wrong one. Set `spec.server.auth` to a Secret with the server's auth
+string. See [Require authentication](../server-auth/).
+
+## Flow run pods have `CreateContainerConfigError`
+
+A flow run on a `kubernetes` work pool with `spec.server.auth` reads the auth
+string from a Secret, which must exist in the namespace its Job runs in. See
+[Flow runs in Kubernetes Jobs](../server-auth/#flow-runs-in-kubernetes-jobs).
 
 ## `Synced` is `False` with `WorkPoolNotFound`
 

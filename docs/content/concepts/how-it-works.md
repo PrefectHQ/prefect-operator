@@ -243,7 +243,8 @@ the operator records.
 | --- | --- | --- |
 | Prefect API resources | `Synced` | The last sync with Prefect succeeded. When `False`, the reason and message say why. |
 | Prefect API resources | `Ready` | The object exists in Prefect and matches the spec. |
-| `PrefectServer` | `DeploymentReconciled`, `ServiceReconciled` | The operator created or updated the object. |
+| `PrefectServer` | `DeploymentReconciled`, `ServiceReconciled` | The operator created or updated the object. `DeploymentReconciled` is `False` with the reason `UnsupportedVersion` when `spec.auth` is set and the image is a Prefect release that [doesn't support it](../../guides/server-auth/#prefect-version), or the reason `InvalidAuth` when the Secret has no valid auth string or the server's `settings` [set another one](../../guides/server-auth/#rules). |
+| `PrefectServer` | `AuthSupported` | `True` when the server's [Prefect version](../../guides/server-auth/#prefect-version) supports `spec.auth`, and `False` when it doesn't. `Unknown` when the operator can't tell the version of the image. Without a valid auth string, it is neither `True` nor `Unknown`. |
 | `PrefectServer` | `PersistentVolumeClaimReconciled`, `MigrationJobReconciled` | As above. The reason ends in `NotRequired` when the storage backend doesn't use the object. |
 | `PrefectServer` | `DeletionBlocked` | The server is being deleted and waits for the resources that use it. The message names them. See [Deleting a server](#deleting-a-server). |
 | `PrefectServer` | `SharedStateConfigured` | `False` when more than one replica runs without Redis lease storage. See [Server storage](../../guides/server-storage/#more-than-one-replica). |

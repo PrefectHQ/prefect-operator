@@ -129,6 +129,10 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	if err := r.checkAuth(ctx, server, desiredDeployment); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	reportPodTemplate(r.Recorder, server, &server.Status.Conditions, constants.Deployment, deploymentTemplateField, server.Spec.DeploymentTemplate, ignored.deployment)
 	var migrationJobTemplate *runtime.RawExtension
 	if desiredMigrationJob != nil {
@@ -170,6 +174,55 @@ func (r *PrefectServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// checkAuth returns an error if server has a spec.auth that its image, settings
+// or Secret does not support, and the reconciler must not change the server's
+// Deployment.
+// It also sets the status conditions and records an event.
+func (r *PrefectServerReconciler) checkAuth(ctx context.Context, server *prefectiov1.PrefectServer, desired appsv1.Deployment) error {
+	if server.Spec.Auth == nil {
+		meta.RemoveStatusCondition(&server.Status.Conditions, conditions.AuthSupported)
+		return nil
+	}
+
+	// A deploymentTemplate can set the image, so this checks the rendered one.
+	image := podtemplate.FindContainer(&desired.Spec.Template.Spec, prefectiov1.ContainerNamePrefectServer).Image
+	known, err := prefectiov1.ValidateServerAuthImage(image)
+	if err != nil {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.AuthVersionUnsupported(err))
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.UnsupportedVersion(constants.Deployment, err))
+		r.Recorder.Eventf(server, nil, corev1.EventTypeWarning, "UnsupportedVersion", eventActionSync, "%v", err)
+		// Retrying won't help until the user changes the spec, and that
+		// change triggers a new reconcile.
+		return reconcile.TerminalError(err)
+	}
+
+	// The Deployment may still be one from before spec.auth, so AuthSupported
+	// must not be True.
+	reportInvalid := func(err error) {
+		meta.RemoveStatusCondition(&server.Status.Conditions, conditions.AuthSupported)
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.InvalidAuth(constants.Deployment, err))
+		r.Recorder.Eventf(server, nil, corev1.EventTypeWarning, "InvalidAuth", eventActionSync, "%v", err)
+	}
+	if err := server.ValidateAuthSettings(); err != nil {
+		reportInvalid(err)
+		// Only a change to the spec can fix this, as with the version.
+		return reconcile.TerminalError(err)
+	}
+	if err := server.Spec.Auth.Validate(ctx, r.Client, server.Namespace); err != nil {
+		reportInvalid(err)
+		// The operator doesn't watch Secrets, so this retries until the Secret
+		// is valid.
+		return err
+	}
+
+	if known {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.AuthVersionSupported(image))
+	} else {
+		meta.SetStatusCondition(&server.Status.Conditions, conditions.AuthVersionUnknown(prefectiov1.UnknownServerAuthImage(image)))
+	}
+	return nil
 }
 
 // checkSharedState sets the SharedStateConfigured status condition. With

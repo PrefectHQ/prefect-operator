@@ -168,7 +168,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 	})
 
 	It("should reject settings that set the API URL or key", func() {
-		for _, setting := range []string{"PREFECT_API_URL", "PREFECT_API_KEY"} {
+		for _, setting := range []string{"PREFECT_API_URL", "PREFECT_API_KEY", "PREFECT_API_AUTH_STRING"} {
 			prefectWorkPool = &prefectiov1.PrefectWorkPool{
 				ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace},
 				Spec: prefectiov1.PrefectWorkPoolSpec{
@@ -176,7 +176,7 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(
-				MatchError(ContainSubstring("settings must not set PREFECT_API_URL or PREFECT_API_KEY")), setting)
+				MatchError(ContainSubstring("settings must not set PREFECT_API_URL, PREFECT_API_KEY or PREFECT_API_AUTH_STRING")), setting)
 		}
 	})
 
@@ -213,6 +213,20 @@ var _ = Describe("PrefectWorkPool Controller", func() {
 			Expect(k8sClient.Create(ctx, prefectWorkPool)).To(
 				MatchError(ContainSubstring("should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'")), server.Name+"/"+server.Namespace)
 		}
+	})
+
+	It("should reject a server reference with both apiKey and auth", func() {
+		prefectWorkPool = &prefectiov1.PrefectWorkPool{
+			ObjectMeta: metav1.ObjectMeta{Name: name.Name, Namespace: name.Namespace},
+			Spec: prefectiov1.PrefectWorkPoolSpec{Server: prefectiov1.PrefectServerReference{
+				Name:   "prefect",
+				APIKey: &prefectiov1.APIKeySpec{Value: new("key")},
+				Auth: &prefectiov1.ServerAuth{SecretKeyRef: corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string",
+				}},
+			}},
+		}
+		Expect(k8sClient.Create(ctx, prefectWorkPool)).To(MatchError(ContainSubstring("set apiKey or auth, not both")))
 	})
 
 	It("should allow specifying a Prefect version", func() {

@@ -97,6 +97,8 @@ PrefectDeploymentSpec defines the desired state of a PrefectDeployment
         <td>object</td>
         <td>
           Server configuration for connecting to Prefect API<br/>
+          <br/>
+            <i>Validations</i>:<li>!(has(self.apiKey) && has(self.auth)): set apiKey or auth, not both</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -483,6 +485,19 @@ Server configuration for connecting to Prefect API
         </td>
         <td>false</td>
       </tr><tr>
+        <td><b><a href="#prefectdeploymentspecserverauth">auth</a></b></td>
+        <td>object</td>
+        <td>
+          Auth is the auth string to send to a Prefect server that requires one,
+such as an in-cluster server with spec.auth. The operator sends it as HTTP
+basic authentication, and only to an API URL that the Secret's
+prefect.io/allowed-api-urls annotation lists, as for apiKey.valueFrom.
+A work pool's worker gets it as PREFECT_API_AUTH_STRING.<br/>
+          <br/>
+            <i>Validations</i>:<li>size(self.secretKeyRef.name) > 0: secretKeyRef.name must be set</li><li>!has(self.secretKeyRef.optional) || !self.secretKeyRef.optional: secretKeyRef.optional must not be true</li>
+        </td>
+        <td>false</td>
+      </tr><tr>
         <td><b>name</b></td>
         <td>string</td>
         <td>
@@ -810,6 +825,86 @@ Selects a resource of the container: only resources limits and requests
 
 
 Selects a key of a secret in the pod's namespace
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>key</b></td>
+        <td>string</td>
+        <td>
+          The key of the secret to select from.  Must be a valid secret key.<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>name</b></td>
+        <td>string</td>
+        <td>
+          Name of the referent.
+This field is effectively required, but due to backwards compatibility is
+allowed to be empty. Instances of this type with an empty value here are
+almost certainly wrong.
+More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names<br/>
+          <br/>
+            <i>Default</i>: <br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b>optional</b></td>
+        <td>boolean</td>
+        <td>
+          Specify whether the Secret or its key must be defined<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectDeployment.spec.server.auth
+<sup><sup>[↩ Parent](#prefectdeploymentspecserver)</sup></sup>
+
+
+
+Auth is the auth string to send to a Prefect server that requires one,
+such as an in-cluster server with spec.auth. The operator sends it as HTTP
+basic authentication, and only to an API URL that the Secret's
+prefect.io/allowed-api-urls annotation lists, as for apiKey.valueFrom.
+A work pool's worker gets it as PREFECT_API_AUTH_STRING.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b><a href="#prefectdeploymentspecserverauthsecretkeyref">secretKeyRef</a></b></td>
+        <td>object</td>
+        <td>
+          SecretKeyRef selects a key of a Secret in the resource's namespace. It
+must not be optional: a pod that uses it does not start without the key.<br/>
+        </td>
+        <td>true</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectDeployment.spec.server.auth.secretKeyRef
+<sup><sup>[↩ Parent](#prefectdeploymentspecserverauth)</sup></sup>
+
+
+
+SecretKeyRef selects a key of a Secret in the resource's namespace. It
+must not be optional: a pod that uses it does not start without the key.
 
 <table>
     <thead>

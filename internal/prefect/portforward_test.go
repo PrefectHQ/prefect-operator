@@ -110,7 +110,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		GinkgoT().Setenv("FAKE_PORT_alpha", server.port())
 
 		client, err := NewClientFromServerReference(ctx, testKubectl,
-			&prefectiov1.PrefectServerReference{Name: "alpha"}, "key-a", "team-a", logger)
+			&prefectiov1.PrefectServerReference{Name: "alpha"}, Credentials{APIKey: "key-a"}, "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(client.Close)
 
@@ -128,11 +128,11 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		GinkgoT().Setenv("FAKE_PORT_beta", beta.port())
 
 		alphaClient, err := NewClientFromServerReference(ctx, testKubectl,
-			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
+			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, Credentials{APIKey: "key-a"}, "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(alphaClient.Close)
 		betaClient, err := NewClientFromServerReference(ctx, testKubectl,
-			&prefectiov1.PrefectServerReference{Name: "beta", Namespace: "team-b"}, "key-b", "team-b", logger)
+			&prefectiov1.PrefectServerReference{Name: "beta", Namespace: "team-b"}, Credentials{APIKey: "key-b"}, "team-b", logger)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(betaClient.Close)
 
@@ -149,7 +149,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		GinkgoT().Setenv("FAKE_PORT_alpha", server.port())
 
 		client, err := NewClientFromServerReference(ctx, testKubectl,
-			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
+			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, Credentials{APIKey: "key-a"}, "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 		client.Close()
 
@@ -165,7 +165,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 
 		clientCtx, cancel := context.WithCancel(ctx)
 		client, err := NewClientFromServerReference(clientCtx, testKubectl,
-			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
+			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, Credentials{APIKey: "key-a"}, "team-a", logger)
 		Expect(err).NotTo(HaveOccurred())
 
 		cancel()
@@ -176,7 +176,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 		GinkgoT().Setenv("FAKE_KUBECTL_FAIL", `services "alpha" not found`)
 
 		_, err := NewClientFromServerReference(ctx, testKubectl,
-			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
+			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, Credentials{APIKey: "key-a"}, "team-a", logger)
 		Expect(err).To(MatchError(ContainSubstring(`services "alpha" not found`)))
 	})
 
@@ -202,7 +202,7 @@ var _ = Describe("Port-forwarding to an in-cluster server", func() {
 
 	It("refuses to forward without a kubeconfig context", func() {
 		_, err := NewClientFromServerReference(ctx, portforward.Kubectl{},
-			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, "key-a", "team-a", logger)
+			&prefectiov1.PrefectServerReference{Name: "alpha", Namespace: "team-a"}, Credentials{APIKey: "key-a"}, "team-a", logger)
 		Expect(err).To(MatchError(ContainSubstring("needs a kubeconfig context")))
 		Expect(kubectlCalls()).To(BeEmpty())
 	})
@@ -252,7 +252,7 @@ current-context: "` + current + `"
 })
 
 var _ = Describe("Redirects", func() {
-	It("does not follow a redirect or send the API key to its URL", func() {
+	DescribeTable("does not follow a redirect or send the credentials to its URL", func(creds Credentials) {
 		var redirectedKeys []string
 		var mu sync.Mutex
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,12 +266,15 @@ var _ = Describe("Redirects", func() {
 		}))
 		DeferCleanup(server.Close)
 
-		client := NewClient(server.URL+"/api", "key-a", logr.Discard())
+		client := newClientWithCredentials(server.URL+"/api", creds, logr.Discard())
 		_, err := client.GetWorkPool(context.Background(), "pool")
 
 		Expect(err).To(MatchError(ContainSubstring("does not follow redirects")))
 		mu.Lock()
 		defer mu.Unlock()
 		Expect(redirectedKeys).To(BeEmpty())
-	})
+	},
+		Entry("an API key", Credentials{APIKey: "key-a"}),
+		Entry("an auth string", Credentials{AuthString: "admin:hunter2"}),
+	)
 })

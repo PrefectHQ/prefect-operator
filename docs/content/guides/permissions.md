@@ -1,6 +1,6 @@
 ---
 title: Permissions
-weight: 4
+weight: 5
 ---
 
 ## What the operator can do
@@ -37,6 +37,10 @@ things the person who wrote the resource can't do directly:
 | `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send the spec to Prefect with the API key in any Secret or ConfigMap in the namespace that has the `prefect.io/allowed-api-urls` annotation. |
 | `PrefectDeployment` | Run flow code on the work pool's workers, with any job settings the work pool's base job template exposes. |
 | `PrefectWorkPool`, `PrefectWorkQueue`, `PrefectDeployment`, `PrefectAutomation` | Send requests from the operator's pod to any http or https URL in `spec.server.remoteApiUrl`, and read up to 4 KiB of an error response in the `Synced` condition. |
+
+The operator can reach every in-cluster `PrefectServer`, so a resource in one
+namespace can use a server in another. To control which namespaces can use a
+server, [require authentication](../server-auth/) on it.
 
 The operator doesn't connect to link-local addresses, such as the cloud
 instance metadata address `169.254.169.254`, even through a host name that

@@ -31,6 +31,30 @@ var _ = Describe("PrefectServer type", func() {
 	})
 
 	Context("Server environment variables", func() {
+		It("should read the auth string from its Secret when spec.auth is set", func() {
+			ref := corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string"}
+			server := &PrefectServer{Spec: PrefectServerSpec{Ephemeral: &EphemeralConfiguration{}, Auth: &ServerAuth{SecretKeyRef: ref}}}
+
+			Expect(server.ToEnvVars()).To(ContainElement(corev1.EnvVar{
+				Name: "PREFECT_SERVER_API_AUTH_STRING", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &ref},
+			}))
+			Expect(server.DerivedEnvVarNames()).To(ContainElement("PREFECT_SERVER_API_AUTH_STRING"))
+		})
+
+		It("should require the auth string's Secret even when its selector is optional", func() {
+			ref := corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "prefect-auth"}, Key: "auth-string", Optional: new(true),
+			}
+			server := &PrefectServer{Spec: PrefectServerSpec{Ephemeral: &EphemeralConfiguration{}, Auth: &ServerAuth{SecretKeyRef: ref}}}
+
+			required := ref
+			required.Optional = nil
+			Expect(server.ToEnvVars()).To(ContainElement(corev1.EnvVar{
+				Name: "PREFECT_SERVER_API_AUTH_STRING", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &required},
+			}))
+			Expect(server.Spec.Auth.SecretKeyRef.Optional).To(HaveValue(BeTrue()), "the spec must not change")
+		})
+
 		It("should generate correct environment variables for PostgreSQL with direct values", func() {
 			server := &PrefectServer{
 				Spec: PrefectServerSpec{

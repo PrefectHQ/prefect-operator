@@ -50,9 +50,9 @@ type PrefectWorkPoolSpec struct {
 	// ExtraContainers defines additional containers to add to each worker in the Work Pool
 	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
-	// A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL or
-	// PREFECT_API_KEY, which come from Server.
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY']))",message="settings must not set PREFECT_API_URL or PREFECT_API_KEY; set them with spec.server"
+	// A list of environment variables to set on the Prefect Worker. It must not set PREFECT_API_URL,
+	// PREFECT_API_KEY or PREFECT_API_AUTH_STRING, which come from Server.
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['PREFECT_API_URL', 'PREFECT_API_KEY', 'PREFECT_API_AUTH_STRING']))",message="settings must not set PREFECT_API_URL, PREFECT_API_KEY or PREFECT_API_AUTH_STRING; set them with spec.server"
 	Settings []corev1.EnvVar `json:"settings,omitempty"`
 
 	// DeploymentLabels defines additional labels to add to the Prefect Server Deployment
@@ -218,17 +218,31 @@ func (s *PrefectWorkPool) ToEnvVars() []corev1.EnvVar {
 		})
 	}
 
+	if s.Spec.Server.Auth != nil {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:      EnvPrefectAPIAuthString,
+			ValueFrom: s.Spec.Server.Auth.envVarSource(),
+		})
+		if s.Spec.Type == WorkPoolTypeK8s {
+			ref := s.Spec.Server.Auth.SecretKeyRef
+			envVars = append(envVars,
+				corev1.EnvVar{Name: EnvPrefectKubernetesWorkerAuthSecretName, Value: ref.Name},
+				corev1.EnvVar{Name: EnvPrefectKubernetesWorkerAuthSecretKey, Value: ref.Key},
+			)
+		}
+	}
+
 	return envVars
 }
 
 // serverEnvVarNames are the worker environment variables that Spec.Server
 // sets.
-var serverEnvVarNames = []string{EnvPrefectAPIURL, EnvPrefectAPIKey}
+var serverEnvVarNames = []string{EnvPrefectAPIURL, EnvPrefectAPIKey, EnvPrefectAPIAuthString}
 
-// ValidateSettings returns an error if Spec.Settings sets PREFECT_API_URL or
-// PREFECT_API_KEY. Settings override the worker variables that ToEnvVars
-// returns, and the operator checks the API key's allowed URLs against
-// Spec.Server only. The CRD rejects such settings, but resources written
+// ValidateSettings returns an error if Spec.Settings sets PREFECT_API_URL,
+// PREFECT_API_KEY or PREFECT_API_AUTH_STRING. Settings override the worker
+// variables that ToEnvVars returns, and the operator checks the allowed URLs
+// of the API key and auth string against Spec.Server only. The CRD rejects such settings, but resources written
 // before that rule existed can still have them.
 func (s *PrefectWorkPool) ValidateSettings() error {
 	for _, setting := range s.Spec.Settings {
