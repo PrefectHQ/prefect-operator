@@ -3,6 +3,18 @@ name: Unit tests
 
 "on":
   workflow_call: {}
+  # There is no branches filter, so that pull requests in a stack, which target
+  # other branches than main, run the tests too.
+  pull_request:
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - .mise.toml
+      - Makefile
+      # The tests load the CRDs and admission policies from the chart.
+      - deploy/charts/**
+      - .github/workflows/tests.yaml
 
 permissions: {}
 
