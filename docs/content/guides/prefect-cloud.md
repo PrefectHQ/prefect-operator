@@ -51,7 +51,8 @@ didn't choose.
 
 An entry matches the resource's API URL when:
 
-- the scheme and host, including any port, are the same, and
+- the scheme and host, including any port, are the same, ignoring a dot at the
+  end of the host name, and
 - the entry's path is the API URL's path, or a parent of it.
 
 | Entry | Allows |
@@ -62,7 +63,11 @@ An entry matches the resource's API URL when:
 
 The resource's API URL is `remoteApiUrl` with `/api` appended if it's missing,
 followed by `/accounts/<accountId>/workspaces/<workspaceId>` when both are set.
-For an in-cluster `PrefectServer`, it's `http://<name>.<namespace>.svc:4200/api`.
+For an in-cluster `PrefectServer`, it's
+`http://<name>.<namespace>.svc.<cluster-domain>.:4200/api`. The cluster domain
+is usually `cluster.local`. The operator logs the one it uses when it starts,
+and the [`--cluster-domain` flag](../../reference/operator-configuration/) sets
+it.
 
 The operator checks the annotation each time it reads the key. Without a match,
 the resource's `Synced` condition is `False` with the reason

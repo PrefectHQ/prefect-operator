@@ -5240,14 +5240,16 @@ Server defines which Prefect Server to connect to
         <td><b>name</b></td>
         <td>string</td>
         <td>
-          Name is the name of the in-cluster Prefect Server in the given namespace<br/>
+          Name is the name of the in-cluster Prefect Server in the given namespace.
+It must be a DNS label: lower case letters, digits and hyphens.<br/>
         </td>
         <td>false</td>
       </tr><tr>
         <td><b>namespace</b></td>
         <td>string</td>
         <td>
-          Namespace is the namespace where the in-cluster Prefect Server is running<br/>
+          Namespace is the namespace where the in-cluster Prefect Server is running.
+It must be a DNS label: lower case letters, digits and hyphens.<br/>
         </td>
         <td>false</td>
       </tr><tr>

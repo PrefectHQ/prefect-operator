@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -47,6 +48,84 @@ var _ = Describe("Prefect HTTP Client", func() {
 			Expect(client.BaseURL).To(Equal("http://test.com"))
 			Expect(client.APIKey).To(Equal("test-key"))
 			Expect(client.HTTPClient.Timeout).To(Equal(30 * time.Second))
+		})
+	})
+
+	Describe("Link-local addresses", func() {
+		It("Should refuse to connect to an instance metadata address", func() {
+			for _, url := range []string{
+				"http://169.254.169.254/api",
+				"http://[::ffff:169.254.169.254]/api",
+				"http://[fe80::1]:4200/api",
+				"http://[fe80::1%25eth0]:4200/api",
+				"http://[fd00:ec2::254]/api",
+				"http://[fd20:ce::254]/api",
+			} {
+				client := NewClient(url, "", logger)
+				_, err := client.GetWorkPool(ctx, "pool")
+				Expect(err).To(MatchError(ContainSubstring("a link-local or instance metadata address")), url)
+			}
+		})
+
+		It("Should check the address that the dialer connects to", func() {
+			for _, address := range []string{
+				"169.254.169.254:80",
+				"[::ffff:169.254.169.254]:80",
+				"[fe80::1%eth0]:4200",
+				"[fd00:ec2::254]:80",
+				"[fd20:ce::254]:80",
+			} {
+				Expect(refuseLinkLocal("tcp", address, nil)).To(
+					MatchError(ContainSubstring("a link-local or instance metadata address")), address)
+			}
+		})
+
+		It("Should refuse an instance metadata address before it sends the request to a proxy", func() {
+			proxyFor := refuseLinkLocalHost(func(*http.Request) (*url.URL, error) {
+				return &url.URL{Scheme: "http", Host: "proxy.example.com:3128"}, nil
+			})
+
+			for target, refused := range map[string]bool{
+				"http://169.254.169.254/api":          true,
+				"http://[::ffff:169.254.169.254]/api": true,
+				"http://[fe80::1%25eth0]:4200/api":    true,
+				"http://[fd20:ce::254]/api":           true,
+				"http://10.0.0.1:4200/api":            false,
+				"https://api.prefect.cloud/api":       false,
+			} {
+				req, err := http.NewRequest(http.MethodGet, target, nil)
+				Expect(err).NotTo(HaveOccurred())
+				proxy, err := proxyFor(req)
+				if refused {
+					Expect(err).To(MatchError(ContainSubstring("a link-local or instance metadata address")), target)
+				} else {
+					Expect(err).NotTo(HaveOccurred(), target)
+					Expect(proxy.Host).To(Equal("proxy.example.com:3128"), target)
+				}
+			}
+		})
+
+		It("Should allow other addresses", func() {
+			for _, address := range []string{"127.0.0.1:4200", "10.0.0.1:443", "[::1]:4200", "[fd00::1]:80"} {
+				Expect(refuseLinkLocal("tcp", address, nil)).To(Succeed(), address)
+			}
+		})
+	})
+
+	Describe("Proxies", func() {
+		It("Should not use a proxy for an in-cluster server", func() {
+			proxy := &url.URL{Scheme: "http", Host: "proxy.example.com:3128"}
+			proxyFor := directInCluster(func(*http.Request) (*url.URL, error) { return proxy, nil })
+
+			for target, want := range map[string]*url.URL{
+				(&prefectiov1.PrefectServerReference{Name: "prefect"}).GetAPIURL("team-b"): nil,
+				"https://api.prefect.cloud/api":                                            proxy,
+				"http://prefect.team-b.svc.cluster.local.corp.example:4200/api":            proxy,
+			} {
+				req, err := http.NewRequest(http.MethodGet, target, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(proxyFor(req)).To(Equal(want), target)
+			}
 		})
 	})
 
@@ -882,8 +961,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 					urlWithDefault := serverRef.GetAPIURL("default")
 					urlWithCustom := serverRef.GetAPIURL("deployment-namespace")
 
-					Expect(urlWithDefault).To(Equal("http://prefect-server.default.svc:4200/api"))
-					Expect(urlWithCustom).To(Equal("http://prefect-server.deployment-namespace.svc:4200/api"))
+					Expect(urlWithDefault).To(Equal("http://prefect-server.default.svc.cluster.local.:4200/api"))
+					Expect(urlWithCustom).To(Equal("http://prefect-server.deployment-namespace.svc.cluster.local.:4200/api"))
 
 					// The bug: NewClientFromServerReference always uses "default" fallback
 					// instead of accepting the fallback namespace as a parameter
@@ -910,7 +989,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 					// Test the namespace behavior by checking what GetAPIURL would return
 					expectedURL := serverRef.GetAPIURL("fallback-namespace")
-					Expect(expectedURL).To(Equal("http://prefect-server.fallback-namespace.svc:4200/api"))
+					Expect(expectedURL).To(Equal("http://prefect-server.fallback-namespace.svc.cluster.local.:4200/api"))
 				})
 			})
 
@@ -943,6 +1022,15 @@ var _ = Describe("Prefect HTTP Client", func() {
 				})
 			})
 
+			It("should refuse an in-cluster name that isn't a DNS label", func() {
+				serverRef := &prefectiov1.PrefectServerReference{Name: "elsewhere.example.com/x?"}
+
+				client, err := NewClientFromServerReference(context.Background(), testKubectl, serverRef, "", "test-namespace", logger)
+
+				Expect(err).To(MatchError(ContainSubstring("is not a DNS label")))
+				Expect(client).To(BeNil())
+			})
+
 			Context("URL generation for different scenarios", func() {
 				It("should correctly generate in-cluster URLs when namespace is specified", func() {
 					serverRef := &prefectiov1.PrefectServerReference{
@@ -952,11 +1040,11 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 					// Test the URL generation directly without creating client (avoids port-forwarding issues)
 					expectedURL := serverRef.GetAPIURL("fallback-namespace")
-					Expect(expectedURL).To(Equal("http://prefect-server.prefect-system.svc:4200/api"))
+					Expect(expectedURL).To(Equal("http://prefect-server.prefect-system.svc.cluster.local.:4200/api"))
 
 					// Verify fallback namespace is ignored when server namespace is specified
 					fallbackURL := serverRef.GetAPIURL("different-namespace")
-					Expect(fallbackURL).To(Equal("http://prefect-server.prefect-system.svc:4200/api"))
+					Expect(fallbackURL).To(Equal("http://prefect-server.prefect-system.svc.cluster.local.:4200/api"))
 					Expect(expectedURL).To(Equal(fallbackURL))
 				})
 
@@ -970,8 +1058,8 @@ var _ = Describe("Prefect HTTP Client", func() {
 					url1 := serverRef.GetAPIURL("namespace-1")
 					url2 := serverRef.GetAPIURL("namespace-2")
 
-					Expect(url1).To(Equal("http://prefect-server.namespace-1.svc:4200/api"))
-					Expect(url2).To(Equal("http://prefect-server.namespace-2.svc:4200/api"))
+					Expect(url1).To(Equal("http://prefect-server.namespace-1.svc.cluster.local.:4200/api"))
+					Expect(url2).To(Equal("http://prefect-server.namespace-2.svc.cluster.local.:4200/api"))
 					Expect(url1).NotTo(Equal(url2))
 				})
 			})
@@ -996,12 +1084,12 @@ var _ = Describe("Prefect HTTP Client", func() {
 
 					// Direct test of GetAPIURL method shows what SHOULD happen
 					expectedURL := serverRef.GetAPIURL("deployment-namespace")
-					Expect(expectedURL).To(Equal("http://prefect-server.deployment-namespace.svc:4200/api"))
+					Expect(expectedURL).To(Equal("http://prefect-server.deployment-namespace.svc.cluster.local.:4200/api"))
 
 					// But the bug is in NewClientFromServerReference which ignores the fallback
 					// and hardcodes "default" instead of using the passed namespace
 					actualURL := serverRef.GetAPIURL("default") // This is what the buggy code does
-					Expect(actualURL).To(Equal("http://prefect-server.default.svc:4200/api"))
+					Expect(actualURL).To(Equal("http://prefect-server.default.svc.cluster.local.:4200/api"))
 
 					// These URLs should be the same but they're different due to the bug
 					Expect(expectedURL).NotTo(Equal(actualURL))
@@ -1026,7 +1114,7 @@ var _ = Describe("Prefect HTTP Client", func() {
 					}
 
 					expectedURL := inClusterRef.GetAPIURL("deployment-namespace")
-					Expect(expectedURL).To(Equal("http://prefect-server.deployment-namespace.svc:4200/api"))
+					Expect(expectedURL).To(Equal("http://prefect-server.deployment-namespace.svc.cluster.local.:4200/api"))
 				})
 			})
 

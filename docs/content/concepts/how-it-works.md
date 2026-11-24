@@ -70,12 +70,27 @@ server:
         key: api-key
 ```
 
-For an in-cluster server, the API URL is `http://<name>.<namespace>.svc:4200/api`.
+For an in-cluster server, the API URL is
+`http://<name>.<namespace>.svc.cluster.local.:4200/api`, or the same with your
+[cluster domain](../../reference/operator-configuration/) if it isn't
+`cluster.local`.
 For a remote one, it's `remoteApiUrl` with `/api` appended if it's missing,
 then `/accounts/<accountId>/workspaces/<workspaceId>` when both IDs are set.
 The operator and the workers use the same URL. A Secret or ConfigMap holding
 an API key must name that URL in an annotation. See
 [Connect to Prefect Cloud](../../guides/prefect-cloud/).
+
+The dot at the end of an in-cluster host makes a resolver look up that exact
+name, without the search domains in `/etc/resolv.conf`. The dot has two other
+effects:
+
+- `NO_PROXY` entries such as `.cluster.local` don't match the host. If a worker
+  or flow run pod has `HTTP_PROXY`, add `.svc.cluster.local.`, with the dot, to
+  its `NO_PROXY`. Without that entry, the pod sends its API requests to the
+  proxy in plain HTTP, with any credentials they have. The operator itself
+  doesn't use a proxy for an in-cluster server.
+- Istio sidecars before Istio 1.27 don't route the host to the Service. With
+  strict mutual TLS, requests from a worker or flow run pod with one fail.
 
 When the operator runs outside the cluster, as it does during development, it
 reaches an in-cluster server through `kubectl port-forward`.

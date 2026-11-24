@@ -9,15 +9,22 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PrefectServerReference defines how to connect to a Prefect server
 type PrefectServerReference struct {
-	// Namespace is the namespace where the in-cluster Prefect Server is running
+	// Namespace is the namespace where the in-cluster Prefect Server is running.
+	// It must be a DNS label: lower case letters, digits and hyphens.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Namespace string `json:"namespace,omitempty"`
 
-	// Name is the name of the in-cluster Prefect Server in the given namespace
+	// Name is the name of the in-cluster Prefect Server in the given namespace.
+	// It must be a DNS label: lower case letters, digits and hyphens.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Name string `json:"name,omitempty"`
 
 	// RemoteAPIURL is the API URL for the remote Prefect Server. Set if using with an external Prefect Server or Prefect Cloud.
@@ -51,6 +58,29 @@ type APIKeySpec struct {
 	ValueFrom *corev1.EnvVarSource `json:"valueFrom,omitempty"`
 }
 
+// DefaultClusterDomain is the DNS domain of a cluster that does not set another.
+const DefaultClusterDomain = "cluster.local"
+
+// ClusterDomain is the DNS domain of the cluster, without a trailing dot.
+// GetAPIURL puts it at the end of an in-cluster server's host. main sets it
+// before the manager starts, and nothing may change it after that.
+var ClusterDomain = DefaultClusterDomain
+
+// inClusterHostSuffix returns the end of the host in an in-cluster server's
+// URL, after the Service's name and namespace. Its trailing dot makes the host
+// absolute. A resolver adds each of its search domains to any other host with
+// fewer dots than its ndots option, which is 5 in a pod, before it looks up the
+// host itself. The first name that exists may not be the Service's.
+func inClusterHostSuffix() string {
+	return ".svc." + ClusterDomain + "."
+}
+
+// IsInClusterHost reports whether host, without a port, is the host that
+// GetAPIURL builds for an in-cluster server.
+func IsInClusterHost(host string) bool {
+	return strings.HasSuffix(strings.ToLower(host), inClusterHostSuffix())
+}
+
 // GetAPIURL returns the API URL for this server reference with optional namespace fallback
 func (s *PrefectServerReference) GetAPIURL(fallbackNamespace string) string {
 	if s.RemoteAPIURL != nil && *s.RemoteAPIURL != "" {
@@ -67,24 +97,42 @@ func (s *PrefectServerReference) GetAPIURL(fallbackNamespace string) string {
 
 	// For in-cluster servers, construct the service URL
 	if s.Name != "" {
-		return "http://" + s.Name + "." + s.ServerNamespace(fallbackNamespace) + ".svc:4200/api"
+		return "http://" + s.Name + "." + s.ServerNamespace(fallbackNamespace) + inClusterHostSuffix() + ":4200/api"
 	}
 
 	return ""
 }
 
-// ValidateRemoteAPIURL returns an error if s is remote and its API URL is not
-// an http or https URL with a host, or has user information, a query or a
-// fragment. The CRD rejects such a remoteApiUrl, but resources written before
-// that rule existed can still have one. In a query, the paths that the client
-// appends would not reach the server as paths.
-func (s *PrefectServerReference) ValidateRemoteAPIURL() error {
-	if !s.IsRemote() {
+// ValidateAPIURL returns an error if GetAPIURL would not build a URL the
+// operator may send requests to:
+//
+//   - s is remote, and its API URL is not an http or https URL with a host, or
+//     has user information, a query or a fragment.
+//   - s is in-cluster, and Name or Namespace is not a DNS label.
+//
+// The CRD rejects such references, but resources written before those rules
+// existed can still have one. GetAPIURL puts Name and Namespace into the URL's
+// host, so a Name such as "example.com/x?" would send requests to example.com.
+// In a query, the paths that the client appends would not reach the server as
+// paths.
+func (s *PrefectServerReference) ValidateAPIURL() error {
+	if s.IsRemote() {
+		if _, ok := parseAPIURL(s.GetAPIURL("")); !ok {
+			return fmt.Errorf("the API URL %q is not an http or https URL with a host, "+
+				"or has user information, a query or a fragment", s.GetAPIURL(""))
+		}
 		return nil
 	}
-	if _, ok := parseAPIURL(s.GetAPIURL("")); !ok {
-		return fmt.Errorf("the API URL %q is not an http or https URL with a host, "+
-			"or has user information, a query or a fragment", s.GetAPIURL(""))
+	if !s.IsInCluster() {
+		return nil
+	}
+	if errs := validation.IsDNS1123Label(s.Name); len(errs) > 0 {
+		return fmt.Errorf("spec.server.name %q is not a DNS label: %s", s.Name, strings.Join(errs, "; "))
+	}
+	if s.Namespace != "" {
+		if errs := validation.IsDNS1123Label(s.Namespace); len(errs) > 0 {
+			return fmt.Errorf("spec.server.namespace %q is not a DNS label: %s", s.Namespace, strings.Join(errs, "; "))
+		}
 	}
 	return nil
 }
@@ -208,7 +256,7 @@ func checkAllowedAPIURL(kind, name string, annotations map[string]string, apiURL
 // APIURLAllowed reports whether apiURL matches an entry in allowed, a
 // comma-separated list of URLs. An entry matches when its scheme and host,
 // including any port, equal apiURL's, and its path is apiURL's path or a parent
-// of it. Paths are compared after resolving "." and ".." segments, so
+// of it. A dot at the end of a host name is ignored. Paths are compared after resolving "." and ".." segments, so
 // "https://api.prefect.cloud/api/accounts/a" matches
 // "https://api.prefect.cloud/api/accounts/a/workspaces/w" but not
 // "https://api.prefect.cloud/api/accounts/ab" or
@@ -232,7 +280,7 @@ func APIURLAllowed(allowed, apiURL string) bool {
 }
 
 // parseAPIURL parses an absolute http or https URL, with its scheme and host in
-// lower case and its path cleaned. It returns false for any other URL, or one
+// lower case, its host name without a trailing dot, and its path cleaned. It returns false for any other URL, or one
 // without a host name, such as "http://:4200", or with user information, a
 // query or a fragment.
 func parseAPIURL(raw string) (*url.URL, bool) {
@@ -242,6 +290,9 @@ func parseAPIURL(raw string) (*url.URL, bool) {
 	}
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
+	if name := u.Hostname(); strings.HasSuffix(name, ".") {
+		u.Host = strings.Replace(u.Host, name, strings.TrimSuffix(name, "."), 1)
+	}
 	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return nil, false
 	}

@@ -276,12 +276,18 @@ spec:
                     - message: set apiKey.value or apiKey.valueFrom, not both
                       rule: '!(has(self.value) && has(self.valueFrom))'
                   name:
-                    description: Name is the name of the in-cluster Prefect Server
-                      in the given namespace
+                    description: |-
+                      Name is the name of the in-cluster Prefect Server in the given namespace.
+                      It must be a DNS label: lower case letters, digits and hyphens.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   namespace:
-                    description: Namespace is the namespace where the in-cluster Prefect
-                      Server is running
+                    description: |-
+                      Namespace is the namespace where the in-cluster Prefect Server is running.
+                      It must be a DNS label: lower case letters, digits and hyphens.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   remoteApiUrl:
                     description: |-

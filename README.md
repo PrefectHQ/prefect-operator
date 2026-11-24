@@ -153,10 +153,11 @@ stringData:
 ```
 
 An entry matches when its scheme and host, including any port, equal the API
-URL's, and its path is the API URL's path or a parent of it. For a remote server,
+URL's, and its path is the API URL's path or a parent of it. A dot at the end of
+a host name is ignored. For a remote server,
 the API URL is `remoteApiUrl` with `/api` appended if it's missing, followed by
 `/accounts/<accountId>/workspaces/<workspaceId>` when both are set. For an
-in-cluster server, it's `http://<name>.<namespace>.svc:4200/api`. The resource's
+in-cluster server, it's `http://<name>.<namespace>.svc.cluster.local.:4200/api`. The resource's
 `Synced` condition names the annotation when the operator refuses a key.
 
 Set either `apiKey.value` or `apiKey.valueFrom`, not both. The operator checks

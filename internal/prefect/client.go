@@ -5,7 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
+	"slices"
+	"syscall"
 	"time"
 
 	prefectiov1 "github.com/PrefectHQ/prefect-operator/api/v1"
@@ -30,7 +35,8 @@ type Client struct {
 
 // NewClient creates a new Prefect API client. Its HTTP client does not follow
 // redirects: Go would resend the API key to the redirect's URL, which the
-// key's allowed API URLs may not include.
+// key's allowed API URLs may not include. It also refuses to connect to
+// link-local addresses: see refuseLinkLocal.
 func NewClient(baseURL, apiKey string, log logr.Logger) *Client {
 	return &Client{
 		BaseURL: baseURL,
@@ -38,9 +44,82 @@ func NewClient(baseURL, apiKey string, log logr.Logger) *Client {
 		HTTPClient: &http.Client{
 			Timeout:       30 * time.Second,
 			CheckRedirect: refuseRedirect,
+			Transport:     transport,
 		},
 		log: log,
 	}
+}
+
+// transport is http.DefaultTransport without connections to the addresses that
+// checkAddress refuses, and without a proxy for in-cluster servers.
+var transport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = directInCluster(refuseLinkLocalHost(http.ProxyFromEnvironment))
+	t.DialContext = (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   refuseLinkLocal,
+	}).DialContext
+	return t
+}()
+
+// directInCluster returns an http.Transport Proxy function that returns no
+// proxy for in-cluster servers, and calls proxy for other requests. A NO_PROXY
+// entry such as ".cluster.local" does not match an in-cluster server's host,
+// which ends with a dot.
+func directInCluster(proxy func(*http.Request) (*url.URL, error)) func(*http.Request) (*url.URL, error) {
+	return func(req *http.Request) (*url.URL, error) {
+		if prefectiov1.IsInClusterHost(req.URL.Hostname()) {
+			return nil, nil
+		}
+		return proxy(req)
+	}
+}
+
+// refuseLinkLocalHost returns an http.Transport Proxy function that returns an
+// error for a request whose host is an IP address that checkAddress refuses,
+// and calls proxy for other requests. The dialer of a proxied request connects
+// to the proxy, so refuseLinkLocal does not check the request's host. Nothing
+// checks a host name in a proxied request, because the proxy resolves it.
+func refuseLinkLocalHost(proxy func(*http.Request) (*url.URL, error)) func(*http.Request) (*url.URL, error) {
+	return func(req *http.Request) (*url.URL, error) {
+		if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil {
+			if err := checkAddress(addr); err != nil {
+				return nil, err
+			}
+		}
+		return proxy(req)
+	}
+}
+
+// metadataAddresses are the IPv6 addresses of the AWS and Google Cloud
+// instance metadata services. Unlike 169.254.169.254, they are not link-local.
+var metadataAddresses = []netip.Addr{
+	netip.MustParseAddr("fd00:ec2::254"),
+	netip.MustParseAddr("fd20:ce::254"),
+}
+
+// checkAddress returns an error if addr is a link-local address, such as
+// 169.254.169.254, or one of metadataAddresses. Cloud providers serve instance
+// metadata, including credentials, at those addresses, and
+// spec.server.remoteApiUrl can name any host.
+func checkAddress(addr netip.Addr) error {
+	addr = addr.Unmap().WithZone("")
+	if addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || slices.Contains(metadataAddresses, addr) {
+		return fmt.Errorf("the client does not connect to %s, a link-local or instance metadata address", addr)
+	}
+	return nil
+}
+
+// refuseLinkLocal is a net.Dialer Control function that returns an error for
+// the addresses that checkAddress refuses. The dialer calls it with the
+// resolved address, so a host name that resolves to one of them is refused too.
+func refuseLinkLocal(_, address string, _ syscall.RawConn) error {
+	addrPort, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return err
+	}
+	return checkAddress(addrPort.Addr())
 }
 
 func refuseRedirect(req *http.Request, _ []*http.Request) error {
@@ -54,7 +133,7 @@ func refuseRedirect(req *http.Request, _ []*http.Request) error {
 // in-cluster server, it starts a port-forward to that server with kubectl,
 // which runs until ctx ends or the Client is closed.
 func NewClientFromServerReference(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, apiKey string, fallbackNamespace string, log logr.Logger) (*Client, error) {
-	if err := serverRef.ValidateRemoteAPIURL(); err != nil {
+	if err := serverRef.ValidateAPIURL(); err != nil {
 		return nil, err
 	}
 	// GetAPIURL prefers RemoteAPIURL over Name, and GetAPIKey checks the API
@@ -110,7 +189,7 @@ func (c *Client) checkPortForward() error {
 func NewClientFromK8s(ctx context.Context, kubectl portforward.Kubectl, serverRef *prefectiov1.PrefectServerReference, k8sClient client.Client, namespace string, log logr.Logger) (*Client, error) {
 	// Check the URL first, because GetAPIKey would otherwise report only that
 	// the key's annotation does not allow it.
-	if err := serverRef.ValidateRemoteAPIURL(); err != nil {
+	if err := serverRef.ValidateAPIURL(); err != nil {
 		return nil, err
 	}
 	apiKey, err := serverRef.GetAPIKey(ctx, k8sClient, namespace)
