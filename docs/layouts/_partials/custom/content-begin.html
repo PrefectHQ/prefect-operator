@@ -1,0 +1,58 @@
+{{- /*
+  A version menu, and a notice on docs that aren't for the newest release.
+  The docs workflow sets params.docsVersion to the directory it builds into,
+  such as v1.0 or dev. The list of versions is read from versions.json at
+  the site root when the page loads, so docs built for an older release also
+  list the releases after it. A local build has no docsVersion and shows
+  neither.
+*/ -}}
+{{- with site.Params.docsVersion -}}
+{{- /* The base URL ends in the version directory, so the root is its parent. */ -}}
+{{- $root := printf "%s/" (strings.TrimSuffix "/" (path.Dir (strings.TrimSuffix "/" (site.BaseURL | relURL)))) -}}
+<div id="docs-version" data-version="{{ . }}" data-root="{{ $root }}" hidden>
+  <label class="hx:mt-4 hx:flex hx:items-center hx:gap-2 hx:text-sm">
+    Version
+    <select class="hx:rounded-md hx:border hx:border-gray-200 hx:bg-white hx:px-2 hx:py-1 hx:dark:border-neutral-700 hx:dark:bg-neutral-900"></select>
+  </label>
+  <div data-notice hidden>
+    {{- partial "shortcodes/callout.html" (dict "content" (`<span data-message></span>` | safeHTML)) -}}
+  </div>
+</div>
+<script>
+  (() => {
+    const box = document.getElementById("docs-version");
+    const { version, root } = box.dataset;
+    // The page's path inside its version, so that switching versions opens
+    // the same page.
+    const page = location.pathname.slice((root + version + "/").length);
+    fetch(root + "versions.json", { cache: "no-cache" })
+      .then((response) => response.json())
+      .then((versions) => {
+        const select = box.querySelector("select");
+        for (const v of versions) {
+          select.add(new Option(v.version, v.path, false, v.version === version));
+        }
+        select.addEventListener("change", () => {
+          location.href = root + select.value + page;
+        });
+
+        const newest = versions[0];
+        if (newest.version !== version) {
+          const message = box.querySelector("[data-message]");
+          message.append(
+            version === "dev"
+              ? "These docs are built from main and may describe changes that aren't released yet. "
+              : `These docs are for ${version}, which isn't the newest release. `,
+          );
+          const link = document.createElement("a");
+          link.href = root + newest.path + page;
+          link.textContent = `Read the ${newest.version} docs`;
+          message.append(link, ".");
+          box.querySelector("[data-notice]").hidden = false;
+        }
+        box.hidden = false;
+      })
+      .catch(() => {});
+  })();
+</script>
+{{- end -}}

@@ -48,6 +48,19 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "PrefectHQ/prefect"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the Hugo version that the docs targets in the Makefile run",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "HUGO_VERSION \\?= (?<currentValue>\\S+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "gohugoio/hugo",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ]
 }

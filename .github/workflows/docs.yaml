@@ -1,0 +1,190 @@
+---
+name: Docs
+
+# GitHub Pages publishes the gh-pages branch at
+# https://prefecthq.github.io/prefect-operator/. helm-release.yaml writes the
+# Helm repository there: index.yaml and charts/. This workflow writes only
+# these paths:
+#
+# - dev/: the docs built from main.
+# - vX.Y/: the docs built from the newest vX.Y.Z tag that was published.
+# - versions.json: the docs directories, newest release first, then dev.
+#
+# index.html and 404.html at the root were committed to gh-pages by hand.
+# index.html redirects to the first entry in versions.json.
+
+"on":
+  push:
+    branches:
+      - main
+    # GitHub doesn't apply paths to tag pushes, so every vX.Y.Z tag publishes.
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+    paths:
+      - docs/**
+      - .github/workflows/docs.yaml
+      - Makefile
+  pull_request:
+    paths:
+      - docs/**
+      - .github/workflows/docs.yaml
+      - Makefile
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: main, or a vX.Y.Z tag to publish that version's docs again
+        type: string
+        required: true
+        default: main
+
+permissions: {}
+
+# Runs for the same ref publish one at a time, and a newer run replaces a
+# queued one, so dev/ ends up built from the newest commit on main.
+concurrency:
+  group: docs-${{ inputs.ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SITE_URL: https://prefecthq.github.io/prefect-operator
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      directory: ${{ steps.target.outputs.directory }}
+      commit: ${{ steps.commit.outputs.commit }}
+    steps:
+      - name: Choose the ref and directory
+        id: target
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          case "$EVENT" in
+            pull_request) ref="$GITHUB_SHA" ;;
+            workflow_dispatch) ref="$INPUT_REF" ;;
+            *) ref="$GITHUB_REF_NAME" ;;
+          esac
+          if [[ "$EVENT" == pull_request || "$ref" == main ]]; then
+            directory=dev
+          elif [[ "$ref" =~ ^(v[0-9]+\.[0-9]+)\.[0-9]+$ ]]; then
+            directory="${BASH_REMATCH[1]}"
+          else
+            echo "::error::Docs are published from main or a vX.Y.Z tag, not $ref."
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "directory=$directory" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.target.outputs.ref }}
+          persist-credentials: false
+
+      - name: Check for docs
+        id: commit
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+        run: |
+          if [[ ! -d docs ]]; then
+            echo "::error::$REF has no docs directory."
+            exit 1
+          fi
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Hugo needs Go for the theme, which is a Hugo module. make docs-build
+      # installs the Hugo version that the Makefile sets.
+      - name: Install Go
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          install_args: golang
+
+      - name: Build
+        env:
+          DIRECTORY: ${{ steps.target.outputs.directory }}
+          HUGO_PARAMS_DOCSVERSION: ${{ steps.target.outputs.directory }}
+        run: make docs-build HUGO_ARGS="--baseURL $SITE_URL/$DIRECTORY/ --destination $RUNNER_TEMP/site"
+
+      - name: Upload
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site
+          path: ${{ runner.temp }}/site
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish to gh-pages
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          persist-credentials: true
+
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: ${{ runner.temp }}/site
+
+      # helm-release.yaml can push to gh-pages between this job's checkout and
+      # its push. On a rejected push, the job starts again from the new
+      # gh-pages instead of rebasing, so versions.json is always generated
+      # from the directories that are on the branch.
+      - name: Commit and push
+        env:
+          DIRECTORY: ${{ needs.build.outputs.directory }}
+          SOURCE: ${{ inputs.ref || github.ref_name }}
+          COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # A function called in an if condition runs without set -e, so each
+          # step that can fail returns explicitly.
+          publish() {
+            rm -rf "$DIRECTORY"
+            cp -R "$RUNNER_TEMP/site" "$DIRECTORY" || return
+
+            {
+              find . -maxdepth 1 -type d -regextype posix-extended -regex '\./v[0-9]+\.[0-9]+' -printf '%f\n' | sort -rV
+              if [[ -d dev ]]; then echo dev; fi
+            } | jq -R . | jq -s 'map({version: ., path: (. + "/")})' > versions.json || return
+
+            git add -A -- "$DIRECTORY" versions.json
+            unexpected="$(git diff --cached --name-only | grep -v -e "^$DIRECTORY/" -e '^versions\.json$' || true)"
+            if [[ -n "$unexpected" ]]; then
+              echo "::error::The commit would change files outside $DIRECTORY/ and versions.json:"
+              echo "$unexpected"
+              exit 1
+            fi
+            if git diff --cached --quiet; then
+              echo "The published docs already match this build."
+              exit 0
+            fi
+            git commit -q -m "Docs $DIRECTORY from $SOURCE $COMMIT"
+            git push origin HEAD:gh-pages
+          }
+
+          for attempt in 1 2 3 4 5; do
+            if publish; then
+              exit 0
+            fi
+            echo "Push rejected, retrying on the new gh-pages."
+            sleep $((attempt * 5))
+            git fetch -q origin gh-pages
+            git reset -q --hard origin/gh-pages
+          done
+          exit 1
