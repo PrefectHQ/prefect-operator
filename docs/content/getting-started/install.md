@@ -62,6 +62,23 @@ The second command lists five CRDs: `prefectautomations`, `prefectdeployments`,
 - Without the admission policies, see [Permissions](../../guides/permissions/)
   for what anyone who can write the custom resources can do.
 
+## Downgrade
+
+Releases after v0.20.0 add the finalizer `prefect.io/server-cleanup` to each
+`PrefectServer`. Earlier releases don't remove it, so after a downgrade to one
+of them, a deleted server stays in `Terminating`, and so does a namespace that
+has one. After you downgrade, remove the finalizer from each server:
+
+```sh
+kubectl get prefectservers -A -o jsonpath='{range .items[*]}{.metadata.namespace} {.metadata.name}{"\n"}{end}' |
+  while read -r namespace name; do
+    kubectl -n "$namespace" patch prefectserver "$name" --type=merge -p '{"metadata":{"finalizers":null}}'
+  done
+```
+
+Do this after the downgrade, because a later release adds the finalizer back
+while it runs.
+
 ## Uninstall
 
 Delete the custom resources first, so the operator can delete the objects it
