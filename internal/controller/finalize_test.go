@@ -83,7 +83,7 @@ var _ = Describe("finalize", func() {
 		})
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+		Expect(result.RequeueAfter).To(BeAFirstRetry())
 		Expect(calls).To(Equal(1))
 		Expect(recorder.Events).To(Receive(And(
 			HavePrefix("Warning DeleteFailed Failed to delete from Prefect, retrying until "),
@@ -249,7 +249,7 @@ var _ = Describe("finalize", func() {
 			result, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+			Expect(result.RequeueAfter).To(BeAFirstRetry())
 			Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
 			Expect(queue.Finalizers).To(ConsistOf(finalizer))
 
@@ -265,7 +265,7 @@ var _ = Describe("finalize", func() {
 			result, err := finalize(ctx, k8sClient, recorder, queue, finalizer, failingDelete)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+			Expect(result.RequeueAfter).To(BeAFirstRetry())
 			Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
 			Expect(queue.Finalizers).To(ConsistOf(finalizer))
 
@@ -296,7 +296,7 @@ var _ = Describe("finalize", func() {
 		})
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(deleteRetryInterval))
+		Expect(result.RequeueAfter).To(BeAFirstRetry())
 		Expect(k8sClient.Get(ctx, name, queue)).To(Succeed())
 		Expect(queue.Finalizers).To(ConsistOf(finalizer))
 
@@ -304,3 +304,19 @@ var _ = Describe("finalize", func() {
 		Expect(k8sClient.Update(ctx, queue)).To(Succeed())
 	})
 })
+
+// BeAFirstRetry matches the RequeueAfter of a delete that failed just after
+// the object's deletion. Deletion timestamps have one-second precision, so the
+// delay can be a little over deleteRetryMinInterval.
+func BeAFirstRetry() OmegaMatcher {
+	return And(BeNumerically(">=", deleteRetryMinInterval), BeNumerically("<", 3*time.Second))
+}
+
+var _ = DescribeTable("deleteRetryDelay",
+	func(sinceDeletion, want time.Duration) {
+		Expect(deleteRetryDelay(sinceDeletion)).To(Equal(want))
+	},
+	Entry("waits the minimum right after the deletion", time.Duration(0), deleteRetryMinInterval),
+	Entry("waits as long as the deletion has been in progress", 4*time.Second, 4*time.Second),
+	Entry("waits at most deleteRetryInterval", 10*time.Minute, deleteRetryInterval),
+)
