@@ -35,6 +35,11 @@ func matchingRemoteAndDesired() (*Deployment, *DeploymentSpec) {
 	return remote, desired
 }
 
+func withConcurrencyOptions(remote *Deployment, desired *DeploymentSpec) {
+	remote.ConcurrencyOptions = &ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: intPtr(120)}
+	desired.ConcurrencyOptions = &ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: intPtr(120)}
+}
+
 func TestDeploymentUpToDate(t *testing.T) {
 	t.Run("matching spec is up to date", func(t *testing.T) {
 		remote, desired := matchingRemoteAndDesired()
@@ -69,6 +74,44 @@ func TestDeploymentUpToDate(t *testing.T) {
 			t.Fatal("expected up to date via global_concurrency_limit")
 		}
 	})
+
+	t.Run("matching concurrency options are up to date", func(t *testing.T) {
+		remote, desired := matchingRemoteAndDesired()
+		withConcurrencyOptions(remote, desired)
+		if !DeploymentUpToDate(remote, desired) {
+			t.Fatal("expected up to date")
+		}
+	})
+
+	t.Run("concurrency options the spec omits are ignored", func(t *testing.T) {
+		remote, desired := matchingRemoteAndDesired()
+		withConcurrencyOptions(remote, desired)
+		desired.ConcurrencyOptions = nil
+		if !DeploymentUpToDate(remote, desired) {
+			t.Fatal("expected up to date when desired omits concurrency options")
+		}
+	})
+
+	concurrencyOptionsMutations := map[string]func(remote *Deployment, desired *DeploymentSpec){
+		"remote strategy changed": func(r *Deployment, _ *DeploymentSpec) { r.ConcurrencyOptions.CollisionStrategy = "ENQUEUE" },
+		"desired strategy changed": func(_ *Deployment, d *DeploymentSpec) {
+			d.ConcurrencyOptions.CollisionStrategy = "ENQUEUE"
+		},
+		"remote grace period changed": func(r *Deployment, _ *DeploymentSpec) { r.ConcurrencyOptions.GracePeriodSeconds = intPtr(300) },
+		"remote grace period unset":   func(r *Deployment, _ *DeploymentSpec) { r.ConcurrencyOptions.GracePeriodSeconds = nil },
+		"desired grace period unset":  func(_ *Deployment, d *DeploymentSpec) { d.ConcurrencyOptions.GracePeriodSeconds = nil },
+		"options unset remotely":      func(r *Deployment, _ *DeploymentSpec) { r.ConcurrencyOptions = nil },
+	}
+	for name, mutate := range concurrencyOptionsMutations {
+		t.Run("concurrency options "+name+" needs update", func(t *testing.T) {
+			remote, desired := matchingRemoteAndDesired()
+			withConcurrencyOptions(remote, desired)
+			mutate(remote, desired)
+			if DeploymentUpToDate(remote, desired) {
+				t.Fatal("expected update needed")
+			}
+		})
+	}
 
 	mutations := map[string]func(remote *Deployment, desired *DeploymentSpec){
 		"name":                     func(_ *Deployment, d *DeploymentSpec) { d.Name = "other" },
@@ -107,4 +150,28 @@ func TestDeploymentUpToDate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeploymentClearsApplied(t *testing.T) {
+	t.Run("a pending options clear is applied once the remote has none", func(t *testing.T) {
+		remote, _ := matchingRemoteAndDesired()
+		if !DeploymentClearsApplied(remote, []string{DeploymentFieldConcurrencyOptions}) {
+			t.Fatal("expected clear applied")
+		}
+	})
+
+	t.Run("a pending options clear is not applied while the remote keeps them", func(t *testing.T) {
+		remote, _ := matchingRemoteAndDesired()
+		remote.ConcurrencyOptions = &ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW"}
+		if DeploymentClearsApplied(remote, []string{DeploymentFieldConcurrencyOptions}) {
+			t.Fatal("expected clear pending")
+		}
+	})
+
+	t.Run("an options clear ignores the concurrency limit", func(t *testing.T) {
+		remote, _ := matchingRemoteAndDesired()
+		if !DeploymentClearsApplied(remote, []string{DeploymentFieldConcurrencyOptions}) {
+			t.Fatal("expected clear applied with the limit still set")
+		}
+	})
 }

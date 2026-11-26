@@ -101,6 +101,7 @@ func newDeployment() object {
 		"status":                   "NOT_READY",
 		"schedules":                []any{},
 		"concurrency_limit":        nil,
+		"concurrency_options":      nil,
 		"global_concurrency_limit": nil,
 		"entrypoint":               nil,
 		"path":                     nil,

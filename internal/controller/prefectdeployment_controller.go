@@ -416,6 +416,9 @@ func declaredDeploymentFields(spec prefectiov1.PrefectDeploymentSpec) []string {
 	if spec.Deployment.ConcurrencyLimit != nil {
 		fields = append(fields, prefect.DeploymentFieldConcurrencyLimit)
 	}
+	if spec.Deployment.ConcurrencyOptions != nil {
+		fields = append(fields, prefect.DeploymentFieldConcurrencyOptions)
+	}
 	return fields
 }
 

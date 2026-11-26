@@ -62,6 +62,32 @@ spec:
                       ConcurrencyLimit limits concurrent runs of this deployment. Removing
                       the field after it has been applied removes the limit in Prefect.
                     type: integer
+                  concurrencyOptions:
+                    description: |-
+                      ConcurrencyOptions sets what happens to a run that starts while the
+                      deployment is at its concurrencyLimit. Requires concurrencyLimit. Removing
+                      the field after it has been applied clears it in Prefect, which then
+                      enqueues the run.
+                    properties:
+                      collisionStrategy:
+                        description: |-
+                          CollisionStrategy is what happens to a run that starts at the limit:
+                          ENQUEUE holds it until a slot frees, CANCEL_NEW cancels it.
+                        enum:
+                        - ENQUEUE
+                        - CANCEL_NEW
+                        type: string
+                      gracePeriodSeconds:
+                        description: |-
+                          GracePeriodSeconds is how long infrastructure has to start before the
+                          run's concurrency slot is revoked. Prefect uses its server setting when
+                          unset.
+                        maximum: 86400
+                        minimum: 60
+                        type: integer
+                    required:
+                    - collisionStrategy
+                    type: object
                   description:
                     description: Description is a human-readable description of the
                       deployment
@@ -220,6 +246,9 @@ spec:
                 - entrypoint
                 type: object
                 x-kubernetes-validations:
+                - message: concurrencyOptions requires concurrencyLimit; Prefect ignores
+                    concurrency options on a deployment without a limit
+                  rule: '!has(self.concurrencyOptions) || has(self.concurrencyLimit)'
                 - message: flow_name is immutable; delete and recreate the deployment
                     to change the flow
                   rule: '!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name
@@ -489,7 +518,7 @@ spec:
               appliedFields:
                 description: |-
                   AppliedFields records which clear-tracked spec fields the last sync
-                  declared, so a removed field (currently concurrencyLimit) is reset in
+                  declared, so a removed field (concurrencyLimit, concurrencyOptions) is reset in
                   Prefect instead of keeping its old value.
                 items:
                   type: string
