@@ -553,6 +553,34 @@ var _ = Describe("ConvertToDeploymentSpec", func() {
 		})
 	})
 
+	Context("Concurrency options handling", func() {
+		It("Should leave concurrency options unset when the spec has none", func() {
+			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(spec.ConcurrencyOptions).To(BeNil())
+		})
+
+		It("Should convert concurrency options", func() {
+			k8sDeployment.Spec.Deployment.ConcurrencyLimit = new(1)
+			k8sDeployment.Spec.Deployment.ConcurrencyOptions = &prefectiov1.PrefectConcurrencyOptions{
+				CollisionStrategy:  "CANCEL_NEW",
+				GracePeriodSeconds: new(120),
+			}
+
+			spec, err := ConvertToDeploymentSpec(k8sDeployment, flowID)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(spec.ConcurrencyOptions).To(Equal(&ConcurrencyOptions{
+				CollisionStrategy:  "CANCEL_NEW",
+				GracePeriodSeconds: new(120),
+			}))
+			payload, err := json.Marshal(spec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(payload).To(ContainSubstring(`"concurrency_options":{"collision_strategy":"CANCEL_NEW","grace_period_seconds":120}`))
+		})
+	})
+
 	Context("Global concurrency limit handling", func() {
 		It("Should handle nil global concurrency limit", func() {
 			k8sDeployment.Spec.Deployment.GlobalConcurrencyLimit = nil

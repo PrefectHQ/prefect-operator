@@ -89,7 +89,7 @@ PrefectDeploymentSpec defines the desired state of a PrefectDeployment
         <td>
           Deployment configuration defining the Prefect deployment<br/>
           <br/>
-            <i>Validations</i>:<li>!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name == oldSelf.flow_name: flow_name is immutable; delete and recreate the deployment to change the flow</li>
+            <i>Validations</i>:<li>!has(self.concurrencyOptions) || has(self.concurrencyLimit): concurrencyOptions requires concurrencyLimit; Prefect ignores concurrency options on a deployment without a limit</li><li>!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name == oldSelf.flow_name: flow_name is immutable; delete and recreate the deployment to change the flow</li>
         </td>
         <td>true</td>
       </tr><tr>
@@ -151,6 +151,16 @@ Deployment configuration defining the Prefect deployment
         <td>
           ConcurrencyLimit limits concurrent runs of this deployment. Removing
 the field after it has been applied removes the limit in Prefect.<br/>
+        </td>
+        <td>false</td>
+      </tr><tr>
+        <td><b><a href="#prefectdeploymentspecdeploymentconcurrencyoptions">concurrencyOptions</a></b></td>
+        <td>object</td>
+        <td>
+          ConcurrencyOptions sets what happens to a run that starts while the
+deployment is at its concurrencyLimit. Requires concurrencyLimit. Removing
+the field after it has been applied clears it in Prefect, which then
+enqueues the run.<br/>
         </td>
         <td>false</td>
       </tr><tr>
@@ -250,6 +260,51 @@ value is used instead of the function name after ":" in the entrypoint.<br/>
         <td>object</td>
         <td>
           VersionInfo describes the deployment version<br/>
+        </td>
+        <td>false</td>
+      </tr></tbody>
+</table>
+
+
+### PrefectDeployment.spec.deployment.concurrencyOptions
+<sup><sup>[↩ Parent](#prefectdeploymentspecdeployment)</sup></sup>
+
+
+
+ConcurrencyOptions sets what happens to a run that starts while the
+deployment is at its concurrencyLimit. Requires concurrencyLimit. Removing
+the field after it has been applied clears it in Prefect, which then
+enqueues the run.
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Required</th>
+        </tr>
+    </thead>
+    <tbody><tr>
+        <td><b>collisionStrategy</b></td>
+        <td>enum</td>
+        <td>
+          CollisionStrategy is what happens to a run that starts at the limit:
+ENQUEUE holds it until a slot frees, CANCEL_NEW cancels it.<br/>
+          <br/>
+            <i>Enum</i>: ENQUEUE, CANCEL_NEW<br/>
+        </td>
+        <td>true</td>
+      </tr><tr>
+        <td><b>gracePeriodSeconds</b></td>
+        <td>integer</td>
+        <td>
+          GracePeriodSeconds is how long infrastructure has to start before the
+run's concurrency slot is revoked. Prefect uses its server setting when
+unset.<br/>
+          <br/>
+            <i>Minimum</i>: 60<br/>
+            <i>Maximum</i>: 86400<br/>
         </td>
         <td>false</td>
       </tr></tbody>
@@ -1015,7 +1070,7 @@ PrefectDeploymentStatus defines the observed state of PrefectDeployment
         <td>[]string</td>
         <td>
           AppliedFields records which clear-tracked spec fields the last sync
-declared, so a removed field (currently concurrencyLimit) is reset in
+declared, so a removed field (concurrencyLimit, concurrencyOptions) is reset in
 Prefect instead of keeping its old value.<br/>
         </td>
         <td>false</td>

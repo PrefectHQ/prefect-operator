@@ -25,6 +25,12 @@ func ConvertToDeploymentSpec(k8sDeployment *prefectiov1.PrefectDeployment, flowI
 	spec.Tags = deployment.Tags
 	spec.Paused = deployment.Paused
 	spec.ConcurrencyLimit = deployment.ConcurrencyLimit
+	if options := deployment.ConcurrencyOptions; options != nil {
+		spec.ConcurrencyOptions = &ConcurrencyOptions{
+			CollisionStrategy:  options.CollisionStrategy,
+			GracePeriodSeconds: options.GracePeriodSeconds,
+		}
+	}
 	spec.Entrypoint = &deployment.Entrypoint
 	spec.Path = deployment.Path
 

@@ -379,6 +379,20 @@ var _ = Describe("PrefectDeployment type", func() {
 			Expect(deploymentConfig.GlobalConcurrencyLimit.SlotDecayPerSecond).To(Equal(new("0.1")))
 		})
 
+		It("should support deployment with concurrency options", func() {
+			deploymentConfig := PrefectDeploymentConfiguration{
+				Entrypoint:       "flows.py:my_flow",
+				ConcurrencyLimit: new(1),
+				ConcurrencyOptions: &PrefectConcurrencyOptions{
+					CollisionStrategy:  "CANCEL_NEW",
+					GracePeriodSeconds: new(120),
+				},
+			}
+
+			Expect(deploymentConfig.ConcurrencyOptions.CollisionStrategy).To(Equal("CANCEL_NEW"))
+			Expect(deploymentConfig.ConcurrencyOptions.GracePeriodSeconds).To(Equal(new(120)))
+		})
+
 		It("should support deployment with version info", func() {
 			deploymentConfig := PrefectDeploymentConfiguration{
 				Entrypoint: "flows.py:my_flow",

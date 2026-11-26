@@ -258,6 +258,7 @@ type DeploymentSpec struct {
 	Paused                  *bool                `json:"paused,omitempty"`
 	Schedules               []DeploymentSchedule `json:"schedules,omitempty"`
 	ConcurrencyLimit        *int                 `json:"concurrency_limit,omitempty"`
+	ConcurrencyOptions      *ConcurrencyOptions  `json:"concurrency_options,omitempty"`
 	GlobalConcurrencyLimits []string             `json:"global_concurrency_limits,omitempty"`
 	Entrypoint              *string              `json:"entrypoint,omitempty"`
 	Path                    *string              `json:"path,omitempty"`
@@ -284,6 +285,7 @@ type Deployment struct {
 	Status                  string                  `json:"status"`
 	Schedules               []DeploymentSchedule    `json:"schedules"`
 	ConcurrencyLimit        *int                    `json:"concurrency_limit"`
+	ConcurrencyOptions      *ConcurrencyOptions     `json:"concurrency_options"`
 	GlobalConcurrencyLimit  *GlobalConcurrencyLimit `json:"global_concurrency_limit,omitempty"`
 	GlobalConcurrencyLimits []string                `json:"global_concurrency_limits"`
 	Entrypoint              *string                 `json:"entrypoint"`
@@ -291,6 +293,11 @@ type Deployment struct {
 	PullSteps               []map[string]any        `json:"pull_steps"`
 	ParameterOpenAPISchema  map[string]any          `json:"parameter_openapi_schema"`
 	EnforceParameterSchema  bool                    `json:"enforce_parameter_schema"`
+}
+
+type ConcurrencyOptions struct {
+	CollisionStrategy  string `json:"collision_strategy"`
+	GracePeriodSeconds *int   `json:"grace_period_seconds,omitempty"`
 }
 
 // GlobalConcurrencyLimit carries the deployment's live concurrency limit;
@@ -420,6 +427,10 @@ func (c *Client) GetDeploymentByName(ctx context.Context, name, flowID string) (
 // limit, used in clearFields and status.appliedFields.
 const DeploymentFieldConcurrencyLimit = "concurrencyLimit"
 
+// DeploymentFieldConcurrencyOptions is the CRD JSON name of the concurrency
+// options, used in clearFields and status.appliedFields.
+const DeploymentFieldConcurrencyOptions = "concurrencyOptions"
+
 // UpdateDeployment updates an existing deployment. Updates apply with
 // exclude_unset semantics, so clearing a field needs its explicit null —
 // clearFields names the fields to reset.
@@ -435,8 +446,11 @@ func (c *Client) UpdateDeployment(ctx context.Context, id string, deployment *De
 	delete(updateBody, "name")
 	delete(updateBody, "flow_id")
 	for _, f := range clearFields {
-		if f == DeploymentFieldConcurrencyLimit {
+		switch f {
+		case DeploymentFieldConcurrencyLimit:
 			updateBody["concurrency_limit"] = nil
+		case DeploymentFieldConcurrencyOptions:
+			updateBody["concurrency_options"] = nil
 		}
 	}
 

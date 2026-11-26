@@ -39,6 +39,7 @@ type PrefectWorkPoolReference struct {
 }
 
 // PrefectDeploymentConfiguration defines the deployment specification
+// +kubebuilder:validation:XValidation:rule="!has(self.concurrencyOptions) || has(self.concurrencyLimit)",message="concurrencyOptions requires concurrencyLimit; Prefect ignores concurrency options on a deployment without a limit"
 // +kubebuilder:validation:XValidation:rule="!has(self.flow_name) || !has(oldSelf.flow_name) || self.flow_name == oldSelf.flow_name",message="flow_name is immutable; delete and recreate the deployment to change the flow"
 type PrefectDeploymentConfiguration struct {
 	// Description is a human-readable description of the deployment
@@ -101,6 +102,13 @@ type PrefectDeploymentConfiguration struct {
 	// the field after it has been applied removes the limit in Prefect.
 	// +optional
 	ConcurrencyLimit *int `json:"concurrencyLimit,omitempty"`
+
+	// ConcurrencyOptions sets what happens to a run that starts while the
+	// deployment is at its concurrencyLimit. Requires concurrencyLimit. Removing
+	// the field after it has been applied clears it in Prefect, which then
+	// enqueues the run.
+	// +optional
+	ConcurrencyOptions *PrefectConcurrencyOptions `json:"concurrencyOptions,omitempty"`
 
 	// GlobalConcurrencyLimit references a global concurrency limit
 	// +optional
@@ -188,6 +196,22 @@ type PrefectSchedule struct {
 	Parameters *runtime.RawExtension `json:"parameters,omitempty"`
 }
 
+// PrefectConcurrencyOptions matches Prefect's ConcurrencyOptions.
+type PrefectConcurrencyOptions struct {
+	// CollisionStrategy is what happens to a run that starts at the limit:
+	// ENQUEUE holds it until a slot frees, CANCEL_NEW cancels it.
+	// +kubebuilder:validation:Enum=ENQUEUE;CANCEL_NEW
+	CollisionStrategy string `json:"collisionStrategy"`
+
+	// GracePeriodSeconds is how long infrastructure has to start before the
+	// run's concurrency slot is revoked. Prefect uses its server setting when
+	// unset.
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=86400
+	// +optional
+	GracePeriodSeconds *int `json:"gracePeriodSeconds,omitempty"`
+}
+
 // PrefectGlobalConcurrencyLimit defines global concurrency limit configuration
 type PrefectGlobalConcurrencyLimit struct {
 	// Active indicates if the limit is active
@@ -227,7 +251,7 @@ type PrefectDeploymentStatus struct {
 	SpecHash string `json:"specHash,omitempty"`
 
 	// AppliedFields records which clear-tracked spec fields the last sync
-	// declared, so a removed field (currently concurrencyLimit) is reset in
+	// declared, so a removed field (concurrencyLimit, concurrencyOptions) is reset in
 	// Prefect instead of keeping its old value.
 	// +optional
 	AppliedFields []string `json:"appliedFields,omitempty"`

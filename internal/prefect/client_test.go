@@ -754,6 +754,54 @@ var _ = Describe("Prefect HTTP Client", func() {
 				[]string{DeploymentFieldConcurrencyLimit})
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("Should send concurrency options and omit them when unset", func() {
+			var body map[string]any
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				body = nil
+				Expect(json.NewDecoder(r.Body).Decode(&body)).To(Succeed())
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(Deployment{ID: testDeploymentID})
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			_, err := client.UpdateDeployment(ctx, testDeploymentID, &DeploymentSpec{
+				ConcurrencyOptions: &ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: new(90)},
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(body).To(HaveKeyWithValue("concurrency_options",
+				map[string]any{"collision_strategy": "CANCEL_NEW", "grace_period_seconds": float64(90)}))
+
+			_, err = client.UpdateDeployment(ctx, testDeploymentID, &DeploymentSpec{Paused: new(true)}, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(body).NotTo(HaveKey("concurrency_options"))
+
+			_, err = client.CreateOrUpdateDeployment(ctx, &DeploymentSpec{
+				Name: "created", FlowID: "flow-1",
+				ConcurrencyOptions: &ConcurrencyOptions{CollisionStrategy: "ENQUEUE"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(body).To(HaveKeyWithValue("concurrency_options",
+				map[string]any{"collision_strategy": "ENQUEUE"}))
+		})
+
+		It("Should send an explicit null when clearing the concurrency options", func() {
+			mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				var body map[string]any
+				Expect(json.NewDecoder(r.Body).Decode(&body)).To(Succeed())
+				Expect(body).To(HaveKeyWithValue("concurrency_options", BeNil()))
+				Expect(body).NotTo(HaveKey("concurrency_limit"))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(Deployment{ID: testDeploymentID})
+			}))
+			client = NewClient(mockServer.URL, "test-api-key", logger)
+
+			_, err := client.UpdateDeployment(ctx, testDeploymentID, &DeploymentSpec{},
+				[]string{DeploymentFieldConcurrencyOptions})
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 
 	Describe("DeleteDeployment", func() {

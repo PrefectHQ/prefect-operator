@@ -40,6 +40,9 @@ func DeploymentUpToDate(remote *Deployment, desired *DeploymentSpec) bool {
 	if !concurrencyLimitMatches(remote, desired.ConcurrencyLimit) {
 		return false
 	}
+	if !concurrencyOptionsMatch(remote.ConcurrencyOptions, desired.ConcurrencyOptions) {
+		return false
+	}
 	if len(desired.Tags) > 0 && !sameStringSet(desired.Tags, remote.Tags) {
 		return false
 	}
@@ -78,13 +81,26 @@ func concurrencyLimitMatches(remote *Deployment, desired *int) bool {
 	return remote.ConcurrencyLimit != nil && *remote.ConcurrencyLimit == *desired
 }
 
+func concurrencyOptionsMatch(remote, desired *ConcurrencyOptions) bool {
+	if desired == nil {
+		return true
+	}
+	return remote != nil && remote.CollisionStrategy == desired.CollisionStrategy &&
+		reflect.DeepEqual(remote.GracePeriodSeconds, desired.GracePeriodSeconds)
+}
+
 // DeploymentClearsApplied reports whether every field pending a clear is
 // already at its default remotely; DeploymentUpToDate ignores unset fields,
 // so this keeps a pending clear from being skipped as "up to date".
 func DeploymentClearsApplied(remote *Deployment, clearFields []string) bool {
 	for _, f := range clearFields {
-		if f == DeploymentFieldConcurrencyLimit {
+		switch f {
+		case DeploymentFieldConcurrencyLimit:
 			if remote.GlobalConcurrencyLimit != nil || remote.ConcurrencyLimit != nil {
+				return false
+			}
+		case DeploymentFieldConcurrencyOptions:
+			if remote.ConcurrencyOptions != nil {
 				return false
 			}
 		}

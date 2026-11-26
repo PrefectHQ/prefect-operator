@@ -129,6 +129,25 @@ var _ = Describe("Fake Prefect API", func() {
 			Expect(updated.GlobalConcurrencyLimit).To(BeNil())
 		})
 
+		It("stores concurrency options and clears them on an explicit null", func() {
+			created := createDeployment(&prefect.DeploymentSpec{
+				Name: "daily", FlowID: flow.ID, ConcurrencyLimit: new(1),
+				ConcurrencyOptions: &prefect.ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: new(60)},
+			})
+			Expect(created.ConcurrencyOptions).To(Equal(
+				&prefect.ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: new(60)}))
+
+			untouched, err := client.UpdateDeployment(ctx, created.ID, &prefect.DeploymentSpec{Version: new("2")}, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(untouched.ConcurrencyOptions).NotTo(BeNil())
+
+			cleared, err := client.UpdateDeployment(ctx, created.ID, &prefect.DeploymentSpec{},
+				[]string{prefect.DeploymentFieldConcurrencyOptions})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cleared.ConcurrencyOptions).To(BeNil())
+			Expect(cleared.GlobalConcurrencyLimit).To(HaveField("Limit", 1))
+		})
+
 		It("rejects an update that sets the name", func() {
 			created := createDeployment(&prefect.DeploymentSpec{Name: "daily", FlowID: flow.ID})
 			req, err := http.NewRequest(http.MethodPatch, server.APIURL+"/deployments/"+created.ID,

@@ -345,6 +345,77 @@ var _ = Describe("PrefectDeployment controller", func() {
 			Expect(prefectDeployment.Status.Ready).To(BeTrue())
 		})
 
+		It("Should keep the concurrency options in line with the spec", func() {
+			options := &prefectiov1.PrefectConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: new(120)}
+			wantRemote := &prefect.ConcurrencyOptions{CollisionStrategy: "CANCEL_NEW", GracePeriodSeconds: new(120)}
+
+			By("Applying a concurrency limit with options")
+			prefectDeployment.Spec.Deployment.ConcurrencyLimit = new(1)
+			prefectDeployment.Spec.Deployment.ConcurrencyOptions = options
+			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.AppliedFields).To(ConsistOf("concurrencyLimit", "concurrencyOptions"))
+			id := *prefectDeployment.Status.Id
+			remote, err := prefectClient.GetDeployment(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote.ConcurrencyOptions).To(Equal(wantRemote))
+
+			By("Editing the options in Prefect")
+			_, err = prefectClient.UpdateDeployment(ctx, id, &prefect.DeploymentSpec{
+				ConcurrencyOptions: &prefect.ConcurrencyOptions{CollisionStrategy: "ENQUEUE"},
+			}, nil)
+			Expect(err).NotTo(HaveOccurred())
+			prefectDeployment.Status.LastSyncTime = &metav1.Time{Time: time.Now().Add(-2 * testResyncInterval)}
+			Expect(k8sClient.Status().Update(ctx, prefectDeployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("The edit is reverted")
+			remote, err = prefectClient.GetDeployment(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote.ConcurrencyOptions).To(Equal(wantRemote))
+
+			By("Removing only the options from the spec")
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			prefectDeployment.Spec.Deployment.ConcurrencyOptions = nil
+			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("The options are cleared in Prefect and the limit is kept")
+			remote, err = prefectClient.GetDeployment(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote.ConcurrencyOptions).To(BeNil())
+			Expect(remote.GlobalConcurrencyLimit).To(HaveField("Limit", 1))
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.AppliedFields).To(ConsistOf("concurrencyLimit"))
+		})
+
+		It("Should clear concurrency options removed together with the limit", func() {
+			prefectDeployment.Spec.Deployment.ConcurrencyLimit = new(1)
+			prefectDeployment.Spec.Deployment.ConcurrencyOptions = &prefectiov1.PrefectConcurrencyOptions{CollisionStrategy: "CANCEL_NEW"}
+			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			prefectDeployment.Spec.Deployment.ConcurrencyLimit = nil
+			prefectDeployment.Spec.Deployment.ConcurrencyOptions = nil
+			Expect(k8sClient.Update(ctx, prefectDeployment)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: name})
+			Expect(err).NotTo(HaveOccurred())
+
+			remote, err := prefectClient.GetDeployment(ctx, *prefectDeployment.Status.Id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remote.ConcurrencyOptions).To(BeNil())
+			Expect(remote.GlobalConcurrencyLimit).To(BeNil())
+			Expect(k8sClient.Get(ctx, name, prefectDeployment)).To(Succeed())
+			Expect(prefectDeployment.Status.AppliedFields).To(BeEmpty())
+		})
+
 		It("Should not sync if no changes are detected", func() {
 			By("Getting the initial state")
 			initialSpecHash := prefectDeployment.Status.SpecHash
@@ -427,6 +498,39 @@ var _ = Describe("PrefectDeployment controller", func() {
 				Expect(remote).NotTo(BeNil())
 				Expect(remote.Description).To(HaveValue(Equal("Test deployment")))
 			})
+		})
+	})
+
+	Context("When validating concurrency options", func() {
+		invalid := func(limit *int, options *prefectiov1.PrefectConcurrencyOptions, message string) {
+			prefectDeployment.Spec.Deployment.ConcurrencyLimit = limit
+			prefectDeployment.Spec.Deployment.ConcurrencyOptions = options
+			err := k8sClient.Create(ctx, prefectDeployment)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(message))
+		}
+
+		It("Should accept options with a limit", func() {
+			prefectDeployment.Spec.Deployment.ConcurrencyLimit = new(1)
+			prefectDeployment.Spec.Deployment.ConcurrencyOptions = &prefectiov1.PrefectConcurrencyOptions{
+				CollisionStrategy: "ENQUEUE", GracePeriodSeconds: new(86400),
+			}
+			Expect(k8sClient.Create(ctx, prefectDeployment)).To(Succeed())
+		})
+
+		It("Should reject options without a limit", func() {
+			invalid(nil, &prefectiov1.PrefectConcurrencyOptions{CollisionStrategy: "CANCEL_NEW"},
+				"concurrencyOptions requires concurrencyLimit")
+		})
+
+		It("Should reject an unknown collision strategy", func() {
+			invalid(new(1), &prefectiov1.PrefectConcurrencyOptions{CollisionStrategy: "DROP"}, "collisionStrategy")
+		})
+
+		It("Should reject a grace period outside Prefect's bounds", func() {
+			invalid(new(1), &prefectiov1.PrefectConcurrencyOptions{CollisionStrategy: "ENQUEUE", GracePeriodSeconds: new(59)}, "gracePeriodSeconds")
+			prefectDeployment.ResourceVersion = ""
+			invalid(new(1), &prefectiov1.PrefectConcurrencyOptions{CollisionStrategy: "ENQUEUE", GracePeriodSeconds: new(86401)}, "gracePeriodSeconds")
 		})
 	})
 
